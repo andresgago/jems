@@ -62,6 +62,13 @@ psql_db() {
     -d "${DB_NAME}" -v ON_ERROR_STOP=1 -q -c "$1" 2>/dev/null
 }
 
+drop_test_db() {
+  PGPASSWORD="${DB_PASS}" dropdb -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
+    --if-exists --force "${DB_NAME}" 2>/dev/null || \
+  PGPASSWORD="${DB_PASS}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
+    -q -c "DROP DATABASE IF EXISTS ${DB_NAME};" 2>/dev/null || true
+}
+
 assert_status() {
   local label="$1" expected="$2" actual="$3" resp="${4:-}"
   if [[ "${actual}" != "${expected}" ]]; then
@@ -169,8 +176,7 @@ cleanup() {
   fi
   echo
   echo "==> Cleaning up test DB ${DB_NAME}"
-  PGPASSWORD="${DB_PASS}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
-    -q -c "DROP DATABASE IF EXISTS ${DB_NAME};" 2>/dev/null || true
+  drop_test_db
   echo "==> Cleaning up uploaded media files"
   rm -rf "${BACKEND_DIR}/media/documents" "${BACKEND_DIR}/media/trucks" \
          "${BACKEND_DIR}/media/trailers" "${BACKEND_DIR}/media/drivers" \
@@ -196,6 +202,10 @@ if ! command -v psql >/dev/null 2>&1; then
   echo "ERROR: psql client not found."
   exit 1
 fi
+if ! command -v dropdb >/dev/null 2>&1 || ! command -v createdb >/dev/null 2>&1; then
+  echo "ERROR: PostgreSQL dropdb/createdb clients not found."
+  exit 1
+fi
 if ! command -v uv >/dev/null 2>&1; then
   echo "ERROR: uv not found."
   exit 1
@@ -207,9 +217,9 @@ TOKEN=""
 # ── Database setup ────────────────────────────────────────────────────────────
 step "Reset test database"
 PGPASSWORD="${DB_PASS}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
-  -q -c "DROP DATABASE IF EXISTS ${DB_NAME};" 2>/dev/null || true
-PGPASSWORD="${DB_PASS}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
-  -q -c "CREATE DATABASE ${DB_NAME};" 2>/dev/null
+  -q -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='${DB_NAME}' AND pid <> pg_backend_pid();" 2>/dev/null || true
+drop_test_db
+PGPASSWORD="${DB_PASS}" createdb -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" "${DB_NAME}"
 PGPASSWORD="${DB_PASS}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
   -d "${DB_NAME}" -q -c "CREATE EXTENSION IF NOT EXISTS postgis;" 2>/dev/null
 pass "Database ${DB_NAME} ready"
@@ -252,6 +262,23 @@ STATE_ID="$(PGPASSWORD="${DB_PASS}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${D
 CITY_ID="$(PGPASSWORD="${DB_PASS}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
   -d "${DB_NAME}" -q -t -c "SELECT id FROM cities WHERE name='Houston' LIMIT 1;" | tr -d ' ')"
 pass "State TX id=${STATE_ID}, City Houston id=${CITY_ID}"
+
+step "Seed legacy accounting catalogs"
+DATABASE_URL="postgis://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}" \
+  uv run python manage.py shell -c "
+from apps.accounting.models import Account
+from apps.drivers.models import DriverType
+
+DriverType.objects.get_or_create(id=4, defaults={'name': 'Solo Driver', 'is_active': True})
+for code, name in {
+    '90010': 'Income by Rate',
+    '90011': 'Income by Detention',
+    '10040': '% Factor dispatch by load',
+    '80011': 'Expenses By Detention',
+}.items():
+    Account.objects.get_or_create(code=code, defaults={'name': name})
+"
+pass "Legacy driver/accounting catalogs ready"
 
 step "Start Django dev server on port ${SERVER_PORT}"
 free_port
@@ -637,7 +664,7 @@ assert_status "driver type list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "driver type listed" "$(body "$resp")" "Company Driver"
 
 step "Drivers: create"
-resp="$(post "/api/v1/drivers/" "{\"first_name\":\"Juan\",\"last_name\":\"Perez\",\"driver_type\":${DRIVER_TYPE_ID},\"status\":1,\"phone\":\"5559876543\",\"email\":\"juan@example.com\"}")"
+resp="$(post "/api/v1/drivers/" "{\"first_name\":\"Juan\",\"last_name\":\"Perez\",\"driver_type\":4,\"status\":1,\"phone\":\"5559876543\",\"email\":\"juan@example.com\",\"factor\":25}")"
 assert_status "driver create" "201" "$(code "$resp")" "$(body "$resp")"
 DRIVER_ID="$(body "$resp" | json_get_num id)"
 

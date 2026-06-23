@@ -5,6 +5,8 @@ from django.utils import timezone
 import pytest
 from django.core.exceptions import ValidationError
 
+from apps.accounting.models import Account, Record
+from apps.drivers.models import DriverType
 from apps.loads.exceptions import InvalidStatusTransition
 from apps.loads.models import Load, LoadStop
 from apps.loads.services import (
@@ -27,6 +29,27 @@ from apps.loads.tests.factories import (
     LoadStopFactory,
     TruckFactory,
 )
+
+
+@pytest.fixture
+def load_accounting_accounts(db):
+    codes = {
+        "90010": "Income by Rate",
+        "90011": "Income by Detention",
+        "10040": "% Factor dispatch by load",
+        "80011": "Expenses By Detention",
+    }
+    return {
+        code: Account.objects.get_or_create(code=code, defaults={"name": name})[0]
+        for code, name in codes.items()
+    }
+
+
+@pytest.fixture
+def solo_driver_type(db):
+    return DriverType.objects.get_or_create(
+        id=4, defaults={"name": "Solo Driver", "is_active": True}
+    )[0]
 
 
 class TestAccountingDayMapping:
@@ -145,6 +168,27 @@ class TestUpdateLoad:
         updated = update_load(load=load, payment=999.0)
         assert updated.accounting_day == 4  # Friday
 
+    def test_recreates_accounting_records_when_invoiced_load_detention_changes(
+        self, load_accounting_accounts, solo_driver_type
+    ):
+        driver = DriverFactory(driver_type=solo_driver_type, factor=25.0)
+        load = LoadFactory(
+            driver=driver, payment=2000.0, detention=200.0, invoiced=False
+        )
+        set_invoiced(load=load)
+
+        updated = update_load(load=load, detention=300.0)
+
+        assert updated.invoiced is True
+        records = Record.objects.filter(load=load, is_automatic=True)
+        assert records.count() == 4
+        assert sorted(records.values_list("account__code", "amount")) == [
+            ("10040", 75.0),
+            ("10040", 500.0),
+            ("90010", 2000.0),
+            ("90011", 300.0),
+        ]
+
 
 @pytest.mark.django_db
 class TestAssignLoad:
@@ -190,6 +234,64 @@ class TestSetInvoiced:
         assert updated.invoiced is True
         updated = set_invoiced(load=updated)
         assert updated.invoiced is False
+
+    def test_creates_accounting_records_when_marking_invoiced(
+        self, load_accounting_accounts, solo_driver_type
+    ):
+        driver = DriverFactory(driver_type=solo_driver_type, factor=25.0)
+        load = LoadFactory(
+            driver=driver, payment=2000.0, detention=200.0, invoiced=False
+        )
+
+        updated = set_invoiced(load=load)
+
+        assert updated.invoiced is True
+        records = Record.objects.filter(load=load, is_automatic=True)
+        assert records.count() == 4
+        assert sorted(records.values_list("account__code", "amount")) == [
+            ("10040", 50.0),
+            ("10040", 500.0),
+            ("90010", 2000.0),
+            ("90011", 200.0),
+        ]
+
+    def test_removes_only_automatic_records_when_unmarking_invoiced(
+        self, load_accounting_accounts, solo_driver_type
+    ):
+        driver = DriverFactory(driver_type=solo_driver_type, factor=25.0)
+        load = LoadFactory(
+            driver=driver, payment=1500.0, detention=100.0, invoiced=False
+        )
+        set_invoiced(load=load)
+        manual_account = Account.objects.create(code="99991", name="Manual")
+        Record.objects.create(
+            date=datetime.date.today(),
+            account=manual_account,
+            amount=999.0,
+            load=load,
+            is_automatic=False,
+        )
+
+        updated = set_invoiced(load=load)
+
+        assert updated.invoiced is False
+        remaining = Record.objects.filter(load=load)
+        assert remaining.count() == 1
+        assert remaining.get().is_automatic is False
+
+    def test_does_not_mark_invoiced_when_accounting_records_cannot_be_created(
+        self, load_accounting_accounts
+    ):
+        unknown_type = DriverType.objects.create(name="Unknown", is_active=True)
+        driver = DriverFactory(driver_type=unknown_type, factor=25.0)
+        load = LoadFactory(driver=driver, payment=1500.0, detention=100.0)
+
+        with pytest.raises(ValueError, match="Unsupported driver type"):
+            set_invoiced(load=load)
+
+        load.refresh_from_db()
+        assert load.invoiced is False
+        assert not Record.objects.filter(load=load, is_automatic=True).exists()
 
 
 @pytest.mark.django_db

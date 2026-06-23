@@ -4,6 +4,11 @@ from django.core.exceptions import ValidationError
 
 from .models import Account, Category, DriverInvoice, OwnerInvoice, Record
 
+# Seeded driver type IDs — must match apps/locations/management/commands/seed.py DRIVER_TYPES
+_DRIVER_TYPE_OWNER_OP = 3  # Owner Operator
+_DRIVER_TYPE_SOLO = 4  # Solo Driver
+_DRIVER_TYPE_TEAM = 5  # Team Driver
+
 # ── Accounts ──────────────────────────────────────────────────────────────────
 
 
@@ -162,3 +167,181 @@ def open_owner_invoice(
 
 def delete_owner_invoice(*, invoice: OwnerInvoice) -> None:
     invoice.delete()
+
+
+# ── Load Accounting Records ────────────────────────────────────────────────────
+
+
+def _account(code: str) -> Account:
+    """Fetch account by code; raises ValueError if seed was not run."""
+    try:
+        return Account.objects.get(code=code)
+    except Account.DoesNotExist:
+        raise ValueError(f"Account '{code}' not found. Run manage.py seed.")
+
+
+def _auto_record(
+    *,
+    load: Any,
+    account: Account,
+    amount: float,
+    driver: Any = None,
+    team_driver: Any = None,
+) -> Record:
+    """Persist one automatic accounting record linked to a load."""
+    date = (
+        load.dropoff_date.date()
+        if hasattr(load.dropoff_date, "date")
+        else load.dropoff_date
+    )
+    record_type = (
+        Record.RecordType.INCOME
+        if account.code.startswith("9")
+        else Record.RecordType.EXPENSE
+    )
+    record = Record(
+        date=date,
+        account=account,
+        amount=amount,
+        load=load,
+        truck=load.truck,
+        trailer=load.trailer,
+        driver=driver,
+        team_driver=team_driver,
+        is_automatic=True,
+        record_type=record_type,
+    )
+    record.save()
+    return record
+
+
+def create_load_accounting_records(*, load: Any) -> None:
+    """Auto-create accounting records when a load is marked as invoiced.
+
+    Mirrors TMS Load::invoiceDriver() logic exactly, preserving the same account
+    codes, amounts, and sign conventions per driver type:
+
+      Solo Driver (id=4):
+        90010  Income by Rate        = payment
+        90011  Income by Detention   = detention            (if detention > 0)
+        10040  % Factor dispatch     = detention * factor%  (if detention > 0)
+        10040  % Factor dispatch     = payment  * factor%
+
+      Owner Operator (id=3):
+        90010  Income by Rate        = payment
+        10040  % Factor dispatch     = payment  * factor%
+        90011  Income by Detention   = -(detention * factor%)  (if detention > 0)
+        80011  Expenses by Detention = -(detention - driver portion)  (if detention > 0)
+
+      Team Driver (id=5):
+        90010  Income by Rate                      = payment           (main driver)
+        90011  Income by Detention × 2             = detention each    (if detention > 0)
+        10040  % Factor dispatch det × 2           = det * factor%     (if detention > 0)
+        10040  % Factor dispatch rate × 2          = payment * factor% (each driver)
+    """
+    driver = load.driver
+    if driver is None:
+        return
+
+    driver_type_id = driver.driver_type_id
+    factor = driver.factor or 0.0
+    payment = float(load.payment)
+    detention = float(load.detention)
+
+    acct_90010 = _account("90010")
+    acct_10040 = _account("10040")
+
+    if driver_type_id == _DRIVER_TYPE_SOLO:
+        delete_load_accounting_records(load=load)
+        _auto_record(load=load, account=acct_90010, amount=payment, driver=driver)
+        if detention > 0:
+            acct_90011 = _account("90011")
+            _auto_record(load=load, account=acct_90011, amount=detention, driver=driver)
+            _auto_record(
+                load=load,
+                account=acct_10040,
+                amount=round(detention * factor / 100, 2),
+                driver=driver,
+            )
+        _auto_record(
+            load=load,
+            account=acct_10040,
+            amount=round(payment * factor / 100, 2),
+            driver=driver,
+        )
+
+    elif driver_type_id == _DRIVER_TYPE_OWNER_OP:
+        if detention > 0:
+            acct_90011 = _account("90011")
+            acct_80011 = _account("80011")
+        delete_load_accounting_records(load=load)
+        _auto_record(load=load, account=acct_90010, amount=payment, driver=driver)
+        _auto_record(
+            load=load,
+            account=acct_10040,
+            amount=round(payment * factor / 100, 2),
+            driver=driver,
+        )
+        if detention > 0:
+            owner_cut = round(detention * factor / 100, 2)
+            _auto_record(
+                load=load, account=acct_90011, amount=-owner_cut, driver=driver
+            )
+            _auto_record(
+                load=load,
+                account=acct_80011,
+                amount=-(detention - (-owner_cut)),
+                driver=driver,
+            )
+
+    elif driver_type_id == _DRIVER_TYPE_TEAM:
+        team_driver = load.team_driver
+        delete_load_accounting_records(load=load)
+        _auto_record(load=load, account=acct_90010, amount=payment, driver=driver)
+        if detention > 0:
+            acct_90011 = _account("90011")
+            _auto_record(load=load, account=acct_90011, amount=detention, driver=driver)
+            _auto_record(
+                load=load,
+                account=acct_10040,
+                amount=round(detention * factor / 100, 2),
+                driver=driver,
+            )
+            if team_driver is not None:
+                team_factor = team_driver.factor or 0.0
+                _auto_record(
+                    load=load,
+                    account=acct_90011,
+                    amount=detention,
+                    team_driver=team_driver,
+                )
+                _auto_record(
+                    load=load,
+                    account=acct_10040,
+                    amount=round(detention * team_factor / 100, 2),
+                    team_driver=team_driver,
+                )
+        _auto_record(
+            load=load,
+            account=acct_10040,
+            amount=round(payment * factor / 100, 2),
+            driver=driver,
+        )
+        if team_driver is not None:
+            team_factor = team_driver.factor or 0.0
+            _auto_record(
+                load=load,
+                account=acct_10040,
+                amount=round(payment * team_factor / 100, 2),
+                team_driver=team_driver,
+            )
+
+    else:
+        raise ValueError(
+            f"Unsupported driver type for load accounting: {driver_type_id}"
+        )
+
+
+def delete_load_accounting_records(*, load: Any) -> None:
+    """Delete all auto-created accounting records for a load (called on un-invoice)."""
+    Record.objects.filter(load=load, is_automatic=True).delete()

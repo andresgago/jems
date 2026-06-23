@@ -163,7 +163,10 @@ class LoadViewSet(ViewSet):
             load = Load.objects.get(pk=pk)
         except Load.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        load = set_invoiced(load=load)
+        try:
+            load = set_invoiced(load=load)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(LoadSerializer(load).data)
 
     @action(detail=True, methods=["post"], url_path="set-paid")

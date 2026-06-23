@@ -3,6 +3,7 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 
 from .exceptions import InvalidStatusTransition
 from .models import Load, LoadStop
@@ -49,11 +50,23 @@ def create_load(
 
 
 def update_load(*, load: Load, **kwargs: Any) -> Load:
+    was_invoiced = load.invoiced
     for field, value in kwargs.items():
         setattr(load, field, value)
     load.accounting_day = _accounting_day_from(load.dropoff_date)
     load.full_clean()
-    load.save()
+    with transaction.atomic():
+        load.save()
+        if was_invoiced or load.invoiced:
+            from apps.accounting.services import (
+                create_load_accounting_records,
+                delete_load_accounting_records,
+            )
+
+            if load.invoiced:
+                create_load_accounting_records(load=load)
+            else:
+                delete_load_accounting_records(load=load)
     return load
 
 
@@ -102,6 +115,15 @@ def set_load_status(
 
 
 def set_invoiced(*, load: Load) -> Load:
+    from apps.accounting.services import (
+        create_load_accounting_records,
+        delete_load_accounting_records,
+    )
+
+    if load.invoiced:
+        delete_load_accounting_records(load=load)
+    else:
+        create_load_accounting_records(load=load)
     load.invoiced = not load.invoiced
     load.save(update_fields=["invoiced"])
     return load

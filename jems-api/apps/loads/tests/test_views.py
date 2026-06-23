@@ -7,9 +7,12 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.accounting.models import Account
+from apps.drivers.models import DriverType
 from apps.loads.models import Load
 from apps.loads.tests.factories import (
     CityFactory,
+    DriverFactory,
     LoadFactory,
     LoadStopFactory,
     UserFactory,
@@ -26,6 +29,27 @@ def auth_client(api_client):
     user = UserFactory()
     api_client.force_authenticate(user=user)
     return api_client, user
+
+
+@pytest.fixture
+def load_accounting_accounts(db):
+    codes = {
+        "90010": "Income by Rate",
+        "90011": "Income by Detention",
+        "10040": "% Factor dispatch by load",
+        "80011": "Expenses By Detention",
+    }
+    return {
+        code: Account.objects.get_or_create(code=code, defaults={"name": name})[0]
+        for code, name in codes.items()
+    }
+
+
+@pytest.fixture
+def solo_driver_type(db):
+    return DriverType.objects.get_or_create(
+        id=4, defaults={"name": "Solo Driver", "is_active": True}
+    )[0]
 
 
 @pytest.mark.django_db
@@ -219,12 +243,30 @@ class TestLoadSetStatus:
 
 @pytest.mark.django_db
 class TestLoadInvoiced:
-    def test_toggle_invoiced(self, auth_client):
+    def test_toggle_invoiced(
+        self, auth_client, load_accounting_accounts, solo_driver_type
+    ):
         client, _ = auth_client
-        load = LoadFactory(invoiced=False)
+        driver = DriverFactory(driver_type=solo_driver_type, factor=25.0)
+        load = LoadFactory(invoiced=False, driver=driver)
         response = client.post(reverse("load-set-invoiced", kwargs={"pk": load.pk}))
         assert response.status_code == status.HTTP_200_OK
         assert response.data["invoiced"] is True
+
+    def test_toggle_invoiced_with_unsupported_driver_type_returns_400(
+        self, auth_client, load_accounting_accounts
+    ):
+        client, _ = auth_client
+        driver_type = DriverType.objects.create(
+            id=99, name="Company Driver", is_active=True
+        )
+        driver = DriverFactory(driver_type=driver_type)
+        load = LoadFactory(invoiced=False, driver=driver)
+
+        response = client.post(reverse("load-set-invoiced", kwargs={"pk": load.pk}))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Unsupported driver type" in response.data["error"]
 
 
 @pytest.mark.django_db
