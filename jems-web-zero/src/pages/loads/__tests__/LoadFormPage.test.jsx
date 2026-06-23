@@ -79,6 +79,8 @@ function renderEditForm(id = '42') {
 const getWeightInput = () => screen.getByDisplayValue('42000')
 const getTrailerTypeSelect = () =>
   screen.getByRole('option', { name: /van \(v\)/i }).closest('select')
+const getDetentionInput = () =>
+  screen.getByText(/detention \(\$\)/i, { selector: 'label' }).nextElementSibling
 
 // ── New load ──────────────────────────────────────────────────────────────────
 
@@ -167,6 +169,20 @@ describe('LoadFormPage — new load', () => {
   it('submit button is enabled initially', () => {
     renderNewForm()
     expect(screen.getByRole('button', { name: /create load/i })).toBeEnabled()
+  })
+
+  it('sends detention amount in the create payload', async () => {
+    loadsService.create.mockResolvedValueOnce({ data: { id: 123 } })
+
+    renderNewForm()
+    fireEvent.change(getDetentionInput(), { target: { value: '125.50' } })
+    fireEvent.submit(screen.getByRole('button', { name: /create load/i }).closest('form'))
+
+    await waitFor(() =>
+      expect(loadsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ detention: 125.5 })
+      )
+    )
   })
 })
 
