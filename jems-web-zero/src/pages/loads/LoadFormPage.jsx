@@ -271,12 +271,9 @@ export default function LoadFormPage() {
   const dropoffAddressRef = useRef(null);
   const pickupLatLng = useRef(null);
   const dropoffLatLng = useRef(null);
-  const autocompleteReady = useRef(false);
 
   useEffect(() => {
     if (loadingData) return;
-    if (autocompleteReady.current) return;
-    autocompleteReady.current = true;
 
     let cancelled = false;
 

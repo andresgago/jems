@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import LoadFormPage from '../LoadFormPage'
 
@@ -21,9 +22,16 @@ vi.mock('../../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn() },
 }))
 
+vi.mock('../../../services/googleMaps', () => ({
+  loadGoogleMaps: vi.fn(),
+  parsePlaceComponents: vi.fn(),
+  calculateMiles: vi.fn(),
+}))
+
 import { useOptions } from '../../../hooks/useOptions'
 import { loadsService } from '../../../services/loads'
 import api from '../../../services/api'
+import { loadGoogleMaps, parsePlaceComponents, calculateMiles } from '../../../services/googleMaps'
 
 const TRAILER_TYPES = [
   { id: 1, name: 'Van', short_name: 'V', is_active: true },
@@ -74,6 +82,7 @@ describe('LoadFormPage — new load', () => {
       if (url.includes('carriers')) return CARRIERS
       return []
     })
+    loadGoogleMaps.mockReturnValue(new Promise(() => {}))
   })
 
   it('renders the new load heading', () => {
@@ -145,6 +154,7 @@ describe('LoadFormPage — edit load', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.HTMLElement.prototype.scrollIntoView = vi.fn()
+    loadGoogleMaps.mockReturnValue(new Promise(() => {}))
     useOptions.mockImplementation((url) => {
       if (url.includes('trailer-types')) return TRAILER_TYPES
       if (url.includes('carriers')) return CARRIERS
@@ -310,5 +320,128 @@ describe('LoadFormPage — edit load', () => {
     await screen.findByRole('checkbox', { name: /new contact \(new@example.com\)/i })
 
     expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' })
+  })
+})
+
+// ── Address autocomplete ───────────────────────────────────────────────────────
+//
+// Each test sets up window.google with a fake Autocomplete constructor so we can
+// capture instances and fire place_changed events manually.
+//
+// Regression guard: the StrictMode test would fail if the autocompleteReady.current
+// guard (removed) were re-introduced, because it blocks the second (real) mount.
+
+describe('LoadFormPage — address autocomplete', () => {
+  let acInstances
+
+  function setupGoogleMock() {
+    acInstances = []
+    window.google = {
+      maps: {
+        places: {
+          // Must use `function`, not arrow, to be compatible as a `new` target
+          Autocomplete: vi.fn(function(inputEl) {
+            const listeners = {}
+            const inst = {
+              _input: inputEl,
+              getPlace: vi.fn(() => ({
+                geometry: { location: {} },
+                address_components: [],
+              })),
+              addListener: vi.fn(function(event, cb) { listeners[event] = cb }),
+              _fire: function() { listeners['place_changed']?.() },
+            }
+            acInstances.push(inst)
+            return inst
+          }),
+        },
+      },
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useOptions.mockImplementation((url) => {
+      if (url.includes('trailer-types')) return TRAILER_TYPES
+      if (url.includes('carriers')) return CARRIERS
+      return []
+    })
+    setupGoogleMock()
+    loadGoogleMaps.mockResolvedValue(undefined)
+    parsePlaceComponents.mockReturnValue({ street: '', zip: '', cityName: '', state: '' })
+    calculateMiles.mockResolvedValue(null)
+    api.get.mockResolvedValue({ data: [] })
+    window.HTMLElement.prototype.scrollIntoView = vi.fn()
+  })
+
+  afterEach(() => {
+    delete window.google
+  })
+
+  // Regression: the removed autocompleteReady.current guard would cause this to fail
+  // because StrictMode's cleanup sets cancelled=true on mount-1, and mount-2 would
+  // see autocompleteReady=true and return early — resulting in 0 Autocomplete calls.
+  it('initializes autocomplete on both inputs even under StrictMode', async () => {
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={['/loads/new']}>
+          <Routes>
+            <Route path="/loads/new" element={<LoadFormPage />} />
+            <Route path="/loads" element={<div>list</div>} />
+          </Routes>
+        </MemoryRouter>
+      </StrictMode>
+    )
+    await waitFor(() =>
+      expect(window.google.maps.places.Autocomplete).toHaveBeenCalledTimes(2)
+    )
+  })
+
+  it('fills pickup address when a place is selected', async () => {
+    parsePlaceComponents.mockReturnValue({
+      street: '123 Main St', zip: '10001', cityName: 'New York', state: 'NY',
+    })
+    api.get.mockResolvedValue({ data: [{ id: 5, name: 'New York', state: 'NY' }] })
+
+    renderNewForm()
+    await waitFor(() => expect(acInstances).toHaveLength(2))
+
+    act(() => acInstances[0]._fire()) // pickup is always index 0
+
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('123 Main St')).toBeInTheDocument()
+    )
+  })
+
+  it('fills dropoff address when a place is selected', async () => {
+    parsePlaceComponents.mockReturnValue({
+      street: '456 Oak Ave', zip: '60601', cityName: 'Chicago', state: 'IL',
+    })
+    api.get.mockResolvedValue({ data: [{ id: 8, name: 'Chicago', state: 'IL' }] })
+
+    renderNewForm()
+    await waitFor(() => expect(acInstances).toHaveLength(2))
+
+    act(() => acInstances[1]._fire()) // dropoff is always index 1
+
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('456 Oak Ave')).toBeInTheDocument()
+    )
+  })
+
+  it('calls calculateMiles after both pickup and dropoff places are selected', async () => {
+    calculateMiles.mockResolvedValue(350)
+    parsePlaceComponents
+      .mockReturnValueOnce({ street: '123 Main St', zip: '10001', cityName: 'New York', state: 'NY' })
+      .mockReturnValueOnce({ street: '456 Oak Ave', zip: '90210', cityName: 'Beverly Hills', state: 'CA' })
+
+    renderNewForm()
+    await waitFor(() => expect(acInstances).toHaveLength(2))
+
+    act(() => acInstances[0]._fire()) // pickup — sets pickupLatLng; dropoffLatLng is null, no miles yet
+    await waitFor(() => expect(screen.getByDisplayValue('123 Main St')).toBeInTheDocument())
+
+    act(() => acInstances[1]._fire()) // dropoff — both latlng refs now set, miles are calculated
+    await waitFor(() => expect(calculateMiles).toHaveBeenCalledTimes(1))
   })
 })
