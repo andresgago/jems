@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap');
+
+* {
+  font-family: 'Lato', sans-serif;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Navbar ── */
+.navbar-custom {
+  background: linear-gradient(to bottom, #46627f 0%, #34495e 100%);
+  border-bottom: 1px solid #46627f;
+}
+
+.navbar-custom .navbar-brand {
+  color: white;
+}
+
+.navbar-custom .nav-link,
+.navbar-custom .navbar-nav > li > a {
+  color: #f5f5f5 !important;
+}
+
+.navbar-custom .nav-link:hover,
+.navbar-custom .nav-link:focus {
+  color: #fff !important;
+  background-color: transparent;
+}
+
+.navbar-custom .navbar-toggler {
+  border-color: white;
+}
+
+/* Logo in navbar — matches TMS .logo-main */
+.logo-main {
+  background-color: white;
+  padding: 4px 8px;
+  border: 1px solid lightsteelblue;
+  border-radius: 4px;
+}
+
+/* ── Layout ── */
+.main-content {
+  padding-top: 70px;
+  min-height: calc(100vh - 56px);
+}
+
+.site-footer {
+  height: 60px;
+  background-color: #f5f5f5;
+  border-top: 1px solid #ddd;
+  padding-top: 20px;
+}
+
+/* ── Table row states (matching TMS) ── */
+.row-detention td {
+  color: #f00 !important;
+}
+
+.row-success td {
+  background-color: #dff0d8 !important;
+}
+
+.row-desactivada td {
+  opacity: 0.4;
+}
+
+/* ── Forms (Bootstrap 3 parity) ── */
+.control-label {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.load-form .row {
+  margin-bottom: 0;
+}
+
+/* ── Login ── */
+.login-card {
+  border: 1px solid lightsteelblue;
+  padding: 25px;
+  background-color: white;
+}
