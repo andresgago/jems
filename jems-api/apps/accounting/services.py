@@ -226,18 +226,23 @@ def create_load_accounting_records(*, load: Any) -> None:
         90011  Income by Detention   = detention            (if detention > 0)
         10040  % Factor dispatch     = detention * factor%  (if detention > 0)
         10040  % Factor dispatch     = payment  * factor%
+        90014  Income by Drop Trailer = drop_trailer         (if drop_trailer > 0)
+        10041  % Factor dispatch Drop = drop_trailer * factor% (if drop_trailer > 0)
 
       Owner Operator (id=3):
         90010  Income by Rate        = payment
         10040  % Factor dispatch     = payment  * factor%
         90011  Income by Detention   = -(detention * factor%)  (if detention > 0)
         80011  Expenses by Detention = -(detention - driver portion)  (if detention > 0)
+        90014  Income by Drop Trailer = drop_trailer           (if drop_trailer > 0)
+        10041  % Factor dispatch Drop = drop_trailer * factor% (if drop_trailer > 0)
 
       Team Driver (id=5):
         90010  Income by Rate                      = payment           (main driver)
         90011  Income by Detention × 2             = detention each    (if detention > 0)
         10040  % Factor dispatch det × 2           = det * factor%     (if detention > 0)
         10040  % Factor dispatch rate × 2          = payment * factor% (each driver)
+        Drop Trailer auto-records are not created; the legacy TMS block is commented out.
     """
     driver = load.driver
     if driver is None:
@@ -247,6 +252,7 @@ def create_load_accounting_records(*, load: Any) -> None:
     factor = driver.factor or 0.0
     payment = float(load.payment)
     detention = float(load.detention)
+    drop_trailer = float(load.drop_trailer)
 
     acct_90010 = _account("90010")
     acct_10040 = _account("10040")
@@ -269,6 +275,18 @@ def create_load_accounting_records(*, load: Any) -> None:
             amount=round(payment * factor / 100, 2),
             driver=driver,
         )
+        if drop_trailer > 0:
+            acct_90014 = _account("90014")
+            acct_10041 = _account("10041")
+            _auto_record(
+                load=load, account=acct_90014, amount=drop_trailer, driver=driver
+            )
+            _auto_record(
+                load=load,
+                account=acct_10041,
+                amount=round(drop_trailer * factor / 100, 2),
+                driver=driver,
+            )
 
     elif driver_type_id == _DRIVER_TYPE_OWNER_OP:
         if detention > 0:
@@ -291,6 +309,18 @@ def create_load_accounting_records(*, load: Any) -> None:
                 load=load,
                 account=acct_80011,
                 amount=-(detention - (-owner_cut)),
+                driver=driver,
+            )
+        if drop_trailer > 0:
+            acct_90014 = _account("90014")
+            acct_10041 = _account("10041")
+            _auto_record(
+                load=load, account=acct_90014, amount=drop_trailer, driver=driver
+            )
+            _auto_record(
+                load=load,
+                account=acct_10041,
+                amount=round(drop_trailer * factor / 100, 2),
                 driver=driver,
             )
 

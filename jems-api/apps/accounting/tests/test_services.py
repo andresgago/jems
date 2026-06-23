@@ -40,12 +40,14 @@ from apps.loads.tests.factories import LoadFactory
 
 @pytest.fixture
 def load_accounts(db):
-    """Seed the four account codes used by create_load_accounting_records."""
+    """Seed the account codes used by create_load_accounting_records."""
     codes = {
         "90010": "Income by Rate",
         "90011": "Income by Detention",
         "10040": "% Factor dispatch by load",
         "80011": "Expenses By Detention",
+        "90014": "Income by Drop Trailer",
+        "10041": "% Factor dispatch by Drop Trailer",
     }
     return {
         code: Account.objects.get_or_create(code=code, defaults={"name": name})[0]
@@ -237,6 +239,27 @@ class TestCreateLoadAccountingRecords:
         )
         assert cuts == [50.0, 500.0]
 
+    def test_solo_with_drop_trailer_creates_income_and_dispatch(
+        self, load_accounts, solo_driver_type
+    ):
+        driver = self._make_driver(solo_driver_type, factor=25.0)
+        load = LoadFactory(
+            driver=driver, payment=2000.0, detention=0.0, drop_trailer=300.0
+        )
+
+        create_load_accounting_records(load=load)
+
+        assert sorted(
+            Record.objects.filter(load=load, is_automatic=True).values_list(
+                "account__code", "amount"
+            )
+        ) == [
+            ("10040", 500.0),
+            ("10041", 75.0),
+            ("90010", 2000.0),
+            ("90014", 300.0),
+        ]
+
     def test_recreating_records_does_not_duplicate_existing_automatic_records(
         self, load_accounts, solo_driver_type
     ):
@@ -298,6 +321,27 @@ class TestCreateLoadAccountingRecords:
         assert det_income.amount == -140.0  # negative: passes through to owner
         assert det_expense.amount == -340.0
 
+    def test_owner_op_with_drop_trailer_creates_income_and_dispatch(
+        self, load_accounts, owner_op_driver_type
+    ):
+        driver = self._make_driver(owner_op_driver_type, factor=70.0)
+        load = LoadFactory(
+            driver=driver, payment=3000.0, detention=0.0, drop_trailer=400.0
+        )
+
+        create_load_accounting_records(load=load)
+
+        assert sorted(
+            Record.objects.filter(load=load, is_automatic=True).values_list(
+                "account__code", "amount"
+            )
+        ) == [
+            ("10040", 2100.0),
+            ("10041", 280.0),
+            ("90010", 3000.0),
+            ("90014", 400.0),
+        ]
+
     # ── Team Driver ───────────────────────────────────────────────────────────
 
     def test_team_driver_no_detention(self, load_accounts, team_driver_type):
@@ -312,6 +356,25 @@ class TestCreateLoadAccountingRecords:
         records = Record.objects.filter(load=load, is_automatic=True)
         # 90010 (main) + 10040 (main rate) + 10040 (team rate) = 3
         assert records.count() == 3
+
+    def test_team_driver_drop_trailer_does_not_create_drop_records(
+        self, load_accounts, team_driver_type
+    ):
+        driver = self._make_driver(team_driver_type, factor=20.0)
+        team = self._make_driver(team_driver_type, factor=20.0)
+        load = LoadFactory(
+            driver=driver,
+            team_driver=team,
+            payment=2000.0,
+            detention=0.0,
+            drop_trailer=300.0,
+        )
+
+        create_load_accounting_records(load=load)
+
+        records = Record.objects.filter(load=load, is_automatic=True)
+        assert records.count() == 3
+        assert not records.filter(account__code__in=["90014", "10041"]).exists()
 
     def test_team_driver_with_detention(self, load_accounts, team_driver_type):
         # detention $100, factor 20% each
