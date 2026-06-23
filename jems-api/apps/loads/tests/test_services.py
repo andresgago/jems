@@ -86,7 +86,9 @@ class TestCreateLoad:
         city = CityFactory()
         broker = BrokerFactory()
         # Tuesday dropoff → accounting_day = 1
-        dropoff = datetime.datetime(2024, 1, 9, 10, 0, tzinfo=ZoneInfo("America/New_York"))
+        dropoff = datetime.datetime(
+            2024, 1, 9, 10, 0, tzinfo=ZoneInfo("America/New_York")
+        )
         load = create_load(
             number="LD-ACC-01",
             pickup_date=dropoff - datetime.timedelta(days=1),

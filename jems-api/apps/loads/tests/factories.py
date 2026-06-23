@@ -103,7 +103,9 @@ class LoadFactory(DjangoModelFactory):
     dropoff_date = factory.LazyFunction(
         lambda: timezone.now() + datetime.timedelta(days=2)
     )
-    accounting_day = factory.LazyAttribute(lambda o: _accounting_day_from(o.dropoff_date))
+    accounting_day = factory.LazyAttribute(
+        lambda o: _accounting_day_from(o.dropoff_date)
+    )
     pickup_city = factory.SubFactory(CityFactory)
     dropoff_city = factory.SubFactory(CityFactory)
     pickup_address = "123 Main St"
