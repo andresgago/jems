@@ -290,7 +290,7 @@ const EMPTY = {
   broker: null, broker_contacts: '',
   trailer_type: null, carrier: null,
   shipper: null, receiver: null,
-  details: '',
+  details: 'Must be on time.',
 };
 
 const EMPTY_DISPLAY = {
@@ -420,7 +420,7 @@ export default function LoadFormPage() {
         broker: data.broker || null, broker_contacts: data.broker_contacts || '',
         trailer_type: data.trailer_type || null, carrier: data.carrier || null,
         shipper: data.shipper || null, receiver: data.receiver || null,
-        details: data.details || '',
+        details: data.details || 'Must be on time.',
       });
       setDisplay({
         broker: data.broker_name || '',
@@ -760,9 +760,16 @@ export default function LoadFormPage() {
         {/* Row 8: Details */}
         <div className="row mb-4">
           <div className="col-md-12">
-            <label className="control-label">Details / Notes</label>
-            <textarea className="form-control form-control-sm" rows={3}
-              value={form.details} onChange={e => set('details', e.target.value)} />
+            <label className="control-label">Details</label>
+            <textarea
+              className={`form-control form-control-sm ${errors.details ? 'is-invalid' : ''}`}
+              rows={2}
+              maxLength={800}
+              required
+              value={form.details}
+              onChange={e => set('details', e.target.value)}
+            />
+            {err('details')}
           </div>
         </div>
 

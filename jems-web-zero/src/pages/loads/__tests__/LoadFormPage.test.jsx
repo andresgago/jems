@@ -83,6 +83,8 @@ const getDetentionInput = () =>
   screen.getByText(/detention \(\$\)/i, { selector: 'label' }).nextElementSibling
 const getLumperInput = () =>
   screen.getByText(/lumper \(\$\)/i, { selector: 'label' }).nextElementSibling
+const getDetailsInput = () =>
+  screen.getByText(/^details/i, { selector: 'label' }).nextElementSibling
 
 // ── New load ──────────────────────────────────────────────────────────────────
 
@@ -171,6 +173,14 @@ describe('LoadFormPage — new load', () => {
   it('submit button is enabled initially', () => {
     renderNewForm()
     expect(screen.getByRole('button', { name: /create load/i })).toBeEnabled()
+  })
+
+  it('details defaults to the legacy note and is required', () => {
+    renderNewForm()
+    const details = getDetailsInput()
+    expect(details).toHaveValue('Must be on time.')
+    expect(details).toBeRequired()
+    expect(details).toHaveAttribute('maxLength', '800')
   })
 
   it('sends detention amount in the create payload', async () => {

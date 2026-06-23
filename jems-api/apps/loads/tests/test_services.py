@@ -102,6 +102,41 @@ class TestCreateLoad:
         )
         assert load.pk is not None
         assert load.status == Load.Status.REGISTERED
+        assert load.details == "Must be on time."
+
+    def test_details_is_required(self):
+        city = CityFactory()
+        broker = BrokerFactory()
+        with pytest.raises(ValidationError):
+            create_load(
+                number="LD-NO-DETAILS",
+                pickup_date=timezone.now(),
+                dropoff_date=timezone.now() + datetime.timedelta(days=1),
+                pickup_city=city,
+                dropoff_city=city,
+                pickup_address="123 Main",
+                dropoff_address="456 Oak",
+                payment=1000.0,
+                broker=broker,
+                details="",
+            )
+
+    def test_details_max_length_is_800(self):
+        city = CityFactory()
+        broker = BrokerFactory()
+        with pytest.raises(ValidationError):
+            create_load(
+                number="LD-LONG-DETAILS",
+                pickup_date=timezone.now(),
+                dropoff_date=timezone.now() + datetime.timedelta(days=1),
+                pickup_city=city,
+                dropoff_city=city,
+                pickup_address="123 Main",
+                dropoff_address="456 Oak",
+                payment=1000.0,
+                broker=broker,
+                details="x" * 801,
+            )
 
     def test_sets_accounting_day_from_dropoff(self):
         from zoneinfo import ZoneInfo

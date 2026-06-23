@@ -167,7 +167,7 @@ class Load(models.Model):
     lon = models.FloatField(null=True, blank=True)
     eta = models.IntegerField(null=True, blank=True)
     accounting_day = models.IntegerField(null=True, blank=True)
-    details = models.TextField(blank=True, default="")
+    details = models.CharField(max_length=800, default="Must be on time.")
     # Audit
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

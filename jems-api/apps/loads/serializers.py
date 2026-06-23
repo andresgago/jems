@@ -140,6 +140,12 @@ class LoadSerializer(serializers.ModelSerializer):
         ]
 
     miles = serializers.FloatField(required=True, min_value=0)
+    details = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        max_length=800,
+        default="Must be on time.",
+    )
 
     shipper = serializers.PrimaryKeyRelatedField(
         queryset=Business.objects.all(),
@@ -154,6 +160,11 @@ class LoadSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs: dict) -> dict:
         instance = getattr(self, "instance", None)
+        if "details" in self.initial_data and self.initial_data.get("details") == "":
+            raise serializers.ValidationError(
+                {"details": "This field may not be blank."}
+            )
+
         lumper = attrs.get("lumper", instance.lumper if instance else 0)
         lumper_paid_by = attrs.get(
             "lumper_paid_by", instance.lumper_paid_by if instance else ""

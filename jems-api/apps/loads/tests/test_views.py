@@ -109,6 +109,69 @@ class TestLoadCreate:
         response = client.post(reverse("load-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["number"] == "LD-99999"
+        assert response.data["details"] == "Must be on time."
+
+    def test_details_blank_rejected(self, auth_client):
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
+
+        client, _ = auth_client
+        city = CityFactory()
+        payload = {
+            "number": "LD-NO-DETAILS",
+            "pickup_date": timezone.now().strftime("%Y-%m-%d %H:%M"),
+            "dropoff_date": (timezone.now() + datetime.timedelta(days=2)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "miles": 350,
+            "payment": 2000.00,
+            "details": "",
+            "broker": BrokerFactory().pk,
+            "carrier": CarrierFactory().pk,
+            "shipper": BusinessFactory().pk,
+            "receiver": BusinessFactory().pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "details" in response.data
+
+    def test_details_max_length_rejected(self, auth_client):
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
+
+        client, _ = auth_client
+        city = CityFactory()
+        payload = {
+            "number": "LD-LONG-DETAILS",
+            "pickup_date": timezone.now().strftime("%Y-%m-%d %H:%M"),
+            "dropoff_date": (timezone.now() + datetime.timedelta(days=2)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "miles": 350,
+            "payment": 2000.00,
+            "details": "x" * 801,
+            "broker": BrokerFactory().pk,
+            "carrier": CarrierFactory().pk,
+            "shipper": BusinessFactory().pk,
+            "receiver": BusinessFactory().pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "details" in response.data
 
     def test_lumper_paid_by_required_when_lumper_is_positive(self, auth_client):
         from apps.loads.tests.factories import (
@@ -263,6 +326,65 @@ class TestLoadCreate:
         response = client.post(reverse("load-list"), payload)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "miles" in response.data
+
+
+@pytest.mark.django_db
+class TestLoadUpdate:
+    def test_patch_without_details_preserves_existing_value(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(details="Keep this note")
+
+        response = client.patch(
+            reverse("load-detail", kwargs={"pk": load.pk}),
+            {"payment": 1750.00},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["details"] == "Keep this note"
+        load.refresh_from_db()
+        assert load.details == "Keep this note"
+
+    def test_patch_blank_details_rejected(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(details="Keep this note")
+
+        response = client.patch(
+            reverse("load-detail", kwargs={"pk": load.pk}),
+            {"details": ""},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "details" in response.data
+        load.refresh_from_db()
+        assert load.details == "Keep this note"
+
+    def test_patch_details_max_length_rejected(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(details="Keep this note")
+
+        response = client.patch(
+            reverse("load-detail", kwargs={"pk": load.pk}),
+            {"details": "x" * 801},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "details" in response.data
+        load.refresh_from_db()
+        assert load.details == "Keep this note"
+
+    def test_patch_details_accepts_valid_value(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(details="Old note")
+
+        response = client.patch(
+            reverse("load-detail", kwargs={"pk": load.pk}),
+            {"details": "Call before arrival."},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["details"] == "Call before arrival."
+        load.refresh_from_db()
+        assert load.details == "Call before arrival."
 
 
 @pytest.mark.django_db
