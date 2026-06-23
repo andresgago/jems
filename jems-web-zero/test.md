@@ -22,18 +22,18 @@ npm run test:watch
 
 ### Run a specific test file
 ```bash
-npx vitest run src/pages/loads/__tests__/LoadFormPage.test.jsx
+npm run test -- src/pages/loads/__tests__/LoadFormPage.test.jsx
 ```
 
 ### Run tests matching a name pattern
 ```bash
-npx vitest run -t "weight"
-npx vitest run -t "trailer type"
+npm run test -- -t "weight"
+npm run test -- -t "trailer type"
 ```
 
 ### Run with coverage report
 ```bash
-npx vitest run --coverage
+npm run test -- --coverage
 ```
 
 ## E2E tests (Playwright)
@@ -59,7 +59,8 @@ Hits the real Django backend. Run locally before merging.
 Prereqs:
 - Backend running: `cd jems/jems-api && uv run python manage.py runserver`
 - Seed data applied: `uv run python manage.py seed`
-- A valid admin user exists
+- Legacy dump data imported: `uv run python manage.py seed_from_tms_dump`
+- A valid admin user exists. Default real E2E credentials are `admin` / `admin1234`.
 
 ```bash
 npm run test:e2e:real
@@ -70,6 +71,12 @@ Custom credentials or backend URL:
 ```bash
 E2E_USERNAME=myuser E2E_PASSWORD=mypass npm run test:e2e:real
 VITE_API_URL=http://localhost:8000/api/v1 npm run test:e2e:real
+```
+
+Reuse a frontend dev server already running on port 5173:
+
+```bash
+E2E_REUSE_SERVER=true npm run test:e2e:real
 ```
 
 ### Run a specific E2E spec

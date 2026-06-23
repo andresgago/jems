@@ -8,7 +8,7 @@ import { expect, test } from '@playwright/test'
 
 const API_BASE = process.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 const ADMIN_USER = process.env.E2E_USERNAME || 'admin'
-const ADMIN_PASS = process.env.E2E_PASSWORD || 'admin'
+const ADMIN_PASS = process.env.E2E_PASSWORD || 'admin1234'
 
 // Critical routes that must be reachable after login
 const CRITICAL_ROUTES = [
@@ -19,11 +19,36 @@ const CRITICAL_ROUTES = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function loginAsAdmin(page) {
+  await assertRealApiLoginWorks(page)
   await page.goto('/login')
-  await page.getByRole('textbox', { name: /username/i }).fill(ADMIN_USER)
-  await page.getByRole('textbox', { name: /password/i }).fill(ADMIN_PASS)
+  await page.locator('input[type="text"]').fill(ADMIN_USER)
+  await page.locator('input[type="password"]').fill(ADMIN_PASS)
   await page.getByRole('button', { name: /login/i }).click()
   await expect(page).not.toHaveURL(/\/login/, { timeout: 10_000 })
+}
+
+async function assertRealApiLoginWorks(page) {
+  let res
+  try {
+    res = await page.request.post(`${API_BASE}/auth/login/`, {
+      data: { username: ADMIN_USER, password: ADMIN_PASS },
+      timeout: 5_000,
+    })
+  } catch (error) {
+    throw new Error(
+      `Real E2E backend is not reachable at ${API_BASE}. ` +
+        'Start the Django backend before running npm run test:e2e:real. ' +
+        `Original error: ${error.message}`
+    )
+  }
+
+  if (!res.ok()) {
+    const body = await res.text()
+    throw new Error(
+      `Real E2E login failed for ${ADMIN_USER}. ` +
+        `Expected a valid admin user/password. HTTP ${res.status()}: ${body}`
+    )
+  }
 }
 
 async function getAccessToken(page) {
@@ -34,6 +59,15 @@ async function getAccessToken(page) {
 async function apiGet(page, token, path) {
   const res = await page.request.get(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(res.ok()).toBeTruthy()
+  return res.json()
+}
+
+async function apiPost(page, token, path, data) {
+  const res = await page.request.post(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data,
   })
   expect(res.ok()).toBeTruthy()
   return res.json()
@@ -97,9 +131,9 @@ test('new load form renders trailer types with short_name (real)', async ({ page
   await page.goto('/loads/create')
 
   // Wait for the trailer type select to be populated (API call completes)
-  await expect(page.locator('option', { hasText: 'Van (V)' })).toBeVisible({ timeout: 10_000 })
-  await expect(page.locator('option', { hasText: 'Reefer (R)' })).toBeVisible()
-  await expect(page.locator('option', { hasText: 'Flatbed (F)' })).toBeVisible()
+  await expect(page.locator('option', { hasText: 'Van (V)' })).toHaveCount(1, { timeout: 10_000 })
+  await expect(page.locator('option', { hasText: 'Reefer (R)' })).toHaveCount(1)
+  await expect(page.locator('option', { hasText: 'Flatbed (F)' })).toHaveCount(1)
 })
 
 test('new load form weight defaults to 42000 (real)', async ({ page }) => {
@@ -125,17 +159,33 @@ test('can create and delete a load via API (real)', async ({ page }) => {
   expect(trailerTypeId).toBeTruthy()
   expect(carrierId).toBeTruthy()
 
-  // We need cities and a broker — use the API to get a real broker and city if available
-  // Otherwise skip the round-trip (broker/city are required fields)
-  const brokersResp = await page.request.get(`${API_BASE}/brokers/search/?q=a`, {
-    headers: { Authorization: `Bearer ${token}` },
+  const brokers = await apiGet(page, token, '/brokers/search/?q=axle')
+  const cities = await apiGet(page, token, '/loads/cities/search/?q=Charlotte')
+  const brokerId = brokers[0]?.id
+  const cityId = cities[0]?.id
+
+  expect(brokerId).toBeTruthy()
+  expect(cityId).toBeTruthy()
+
+  const number = `E2E-${Date.now()}`
+  const created = await apiPost(page, token, '/loads/', {
+    number,
+    pickup_date: '2026-06-23',
+    pickup_city: cityId,
+    pickup_address: 'E2E pickup address',
+    dropoff_date: '2026-06-24',
+    dropoff_city: cityId,
+    dropoff_address: 'E2E dropoff address',
+    payment: 1200,
+    weight: 42000,
+    trailer_type: trailerTypeId,
+    carrier: carrierId,
+    broker: brokerId,
+    broker_contacts: 'E2E contact',
   })
-  const brokers = await brokersResp.json()
 
-  if (!brokers?.length) {
-    test.skip('No brokers seeded — skipping load round-trip test')
-    return
-  }
+  expect(created.id).toBeTruthy()
+  expect(created.number).toBe(number)
 
-  test.skip('Load create round-trip requires cities and brokers — run after full seed')
+  await apiDelete(page, token, `/loads/${created.id}/`)
 })
