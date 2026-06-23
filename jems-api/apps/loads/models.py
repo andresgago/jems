@@ -27,7 +27,7 @@ class Load(models.Model):
         related_name="loads",
     )
     # Pickup
-    pickup_date = models.DateField()
+    pickup_date = models.DateTimeField()
     pickup_city = models.ForeignKey(
         "locations.City",
         on_delete=models.SET_NULL,
@@ -37,7 +37,7 @@ class Load(models.Model):
     )
     pickup_address = models.CharField(max_length=500)
     # Dropoff
-    dropoff_date = models.DateField()
+    dropoff_date = models.DateTimeField()
     dropoff_city = models.ForeignKey(
         "locations.City",
         on_delete=models.SET_NULL,

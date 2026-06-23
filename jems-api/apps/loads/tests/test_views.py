@@ -1,5 +1,7 @@
 import datetime
 
+from django.utils import timezone
+
 import pytest
 from django.urls import reverse
 from rest_framework import status
@@ -59,8 +61,10 @@ class TestLoadCreate:
         carrier = CarrierFactory()
         payload = {
             "number": "LD-99999",
-            "pickup_date": str(datetime.date.today()),
-            "dropoff_date": str(datetime.date.today() + datetime.timedelta(days=2)),
+            "pickup_date": timezone.now().strftime("%Y-%m-%d %H:%M"),
+            "dropoff_date": (timezone.now() + datetime.timedelta(days=2)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
             "pickup_city": city.pk,
             "dropoff_city": city.pk,
             "pickup_address": "123 Start Ave",
@@ -199,15 +203,115 @@ class TestLoadStops:
 
 @pytest.mark.django_db
 class TestCitySearch:
-    def test_search_returns_matches(self, auth_client):
+    def test_search_by_name(self, auth_client):
         client, _ = auth_client
         CityFactory(name="Nashville")
         response = client.get(reverse("city-search") + "?q=Nash")
         assert response.status_code == status.HTTP_200_OK
         assert any("Nashville" in c["name"] for c in response.data)
 
+    def test_search_by_zip(self, auth_client):
+        client, _ = auth_client
+        CityFactory(name="Denver", zip="80201")
+        response = client.get(reverse("city-search") + "?q=80201")
+        assert response.status_code == status.HTTP_200_OK
+        assert any(c["zip"] == "80201" for c in response.data)
+
+    def test_search_by_partial_zip(self, auth_client):
+        client, _ = auth_client
+        CityFactory(name="Los Angeles", zip="90001")
+        response = client.get(reverse("city-search") + "?q=9000")
+        assert response.status_code == status.HTTP_200_OK
+        assert any(c["name"] == "Los Angeles" for c in response.data)
+
     def test_empty_query_returns_empty(self, auth_client):
         client, _ = auth_client
         response = client.get(reverse("city-search"))
         assert response.status_code == status.HTTP_200_OK
         assert response.data == []
+
+    def test_response_includes_state_and_zip(self, auth_client):
+        client, _ = auth_client
+        CityFactory(name="Austin", zip="78701")
+        response = client.get(reverse("city-search") + "?q=Austin")
+        assert response.status_code == status.HTTP_200_OK
+        city = next(c for c in response.data if c["name"] == "Austin")
+        assert "state" in city
+        assert city["zip"] == "78701"
+
+
+@pytest.mark.django_db
+class TestLoadDateValidation:
+    def test_dropoff_before_pickup_rejected(self, auth_client):
+        from apps.loads.tests.factories import BrokerFactory, CarrierFactory
+
+        client, _ = auth_client
+        city = CityFactory()
+        broker = BrokerFactory()
+        carrier = CarrierFactory()
+        now = timezone.now()
+        payload = {
+            "number": "LD-DATE-01",
+            "pickup_date": (now + datetime.timedelta(days=2)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "dropoff_date": now.strftime("%Y-%m-%d %H:%M"),
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "payment": 1500.00,
+            "broker": broker.pk,
+            "carrier": carrier.pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "dropoff_date" in response.data
+
+    def test_dropoff_same_as_pickup_allowed(self, auth_client):
+        from apps.loads.tests.factories import BrokerFactory, CarrierFactory
+
+        client, _ = auth_client
+        city = CityFactory()
+        broker = BrokerFactory()
+        carrier = CarrierFactory()
+        now = timezone.now().strftime("%Y-%m-%d %H:%M")
+        payload = {
+            "number": "LD-DATE-02",
+            "pickup_date": now,
+            "dropoff_date": now,
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "payment": 1500.00,
+            "broker": broker.pk,
+            "carrier": carrier.pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_dropoff_after_pickup_allowed(self, auth_client):
+        from apps.loads.tests.factories import BrokerFactory, CarrierFactory
+
+        client, _ = auth_client
+        city = CityFactory()
+        broker = BrokerFactory()
+        carrier = CarrierFactory()
+        now = timezone.now()
+        payload = {
+            "number": "LD-DATE-03",
+            "pickup_date": now.strftime("%Y-%m-%d %H:%M"),
+            "dropoff_date": (now + datetime.timedelta(days=3)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "payment": 1500.00,
+            "broker": broker.pk,
+            "carrier": carrier.pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_201_CREATED

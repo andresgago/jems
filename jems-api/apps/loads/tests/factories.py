@@ -1,5 +1,7 @@
 import datetime
 
+from django.utils import timezone
+
 import factory
 from factory.django import DjangoModelFactory
 
@@ -96,9 +98,9 @@ class LoadFactory(DjangoModelFactory):
         model = Load
 
     number = factory.Sequence(lambda n: f"LD-{n:05d}")
-    pickup_date = factory.LazyFunction(lambda: datetime.date.today())
+    pickup_date = factory.LazyFunction(lambda: timezone.now())
     dropoff_date = factory.LazyFunction(
-        lambda: datetime.date.today() + datetime.timedelta(days=2)
+        lambda: timezone.now() + datetime.timedelta(days=2)
     )
     pickup_city = factory.SubFactory(CityFactory)
     dropoff_city = factory.SubFactory(CityFactory)

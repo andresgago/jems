@@ -254,9 +254,11 @@ class CitySearchView(ViewSet):
         q = request.query_params.get("q", "").strip()
         if not q:
             return Response([])
-        cities = City.objects.filter(active=True, name__icontains=q).select_related(
-            "state"
-        )[:20]
+        from django.db.models import Q
+
+        cities = City.objects.filter(
+            Q(active=True) & (Q(name__icontains=q) | Q(zip__icontains=q))
+        ).select_related("state")[:20]
         data = [
             {
                 "id": c.pk,

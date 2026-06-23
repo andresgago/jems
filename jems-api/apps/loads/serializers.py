@@ -138,6 +138,21 @@ class LoadSerializer(serializers.ModelSerializer):
             "stops",
         ]
 
+    def validate(self, attrs: dict) -> dict:
+        pickup = attrs.get(
+            "pickup_date",
+            getattr(self.instance, "pickup_date", None),
+        )
+        dropoff = attrs.get(
+            "dropoff_date",
+            getattr(self.instance, "dropoff_date", None),
+        )
+        if pickup and dropoff and dropoff < pickup:
+            raise serializers.ValidationError(
+                {"dropoff_date": "Dropoff date must be on or after pickup date."}
+            )
+        return attrs
+
 
 class LoadListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views."""

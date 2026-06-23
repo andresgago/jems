@@ -1,5 +1,7 @@
 import datetime
 
+from django.utils import timezone
+
 import pytest
 from django.core.exceptions import ValidationError
 
@@ -33,8 +35,8 @@ class TestCreateLoad:
         broker = BrokerFactory()
         load = create_load(
             number="LD-001",
-            pickup_date=datetime.date.today(),
-            dropoff_date=datetime.date.today() + datetime.timedelta(days=1),
+            pickup_date=timezone.now(),
+            dropoff_date=timezone.now() + datetime.timedelta(days=1),
             pickup_city=city,
             dropoff_city=city,
             pickup_address="123 Main",
@@ -50,8 +52,8 @@ class TestCreateLoad:
         with pytest.raises(ValidationError):
             create_load(
                 number="LD-DUP",
-                pickup_date=datetime.date.today(),
-                dropoff_date=datetime.date.today(),
+                pickup_date=timezone.now(),
+                dropoff_date=timezone.now(),
                 pickup_address="x",
                 dropoff_address="x",
             )
