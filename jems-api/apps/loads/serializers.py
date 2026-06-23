@@ -38,6 +38,10 @@ class LoadStopSerializer(serializers.ModelSerializer):
 class LoadSerializer(serializers.ModelSerializer):
     stops = LoadStopSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    broker_name = serializers.CharField(source="broker.name", read_only=True)
+    carrier_name = serializers.CharField(source="carrier.name", read_only=True)
+    shipper_name = serializers.CharField(source="shipper.name", read_only=True)
+    receiver_name = serializers.CharField(source="receiver.name", read_only=True)
     pickup_city_display = serializers.CharField(
         source="pickup_city.__str__", read_only=True
     )
@@ -68,15 +72,19 @@ class LoadSerializer(serializers.ModelSerializer):
             "lumper_paid_by",
             "drop_trailer",
             "broker",
+            "broker_name",
             "broker_contacts",
             "dispatcher",
             "carrier",
+            "carrier_name",
             "truck",
             "trailer",
             "driver",
             "team_driver",
             "shipper",
+            "shipper_name",
             "receiver",
+            "receiver_name",
             "shipper_rating",
             "receiver_rating",
             "rate_file",
@@ -121,6 +129,10 @@ class LoadSerializer(serializers.ModelSerializer):
             "updated_by",
             "executed_by",
             "status_display",
+            "broker_name",
+            "carrier_name",
+            "shipper_name",
+            "receiver_name",
             "pickup_city_display",
             "dropoff_city_display",
             "stops",
