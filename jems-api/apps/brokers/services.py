@@ -3,7 +3,7 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 
-from .models import Broker, BrokerContact
+from .models import Broker, BrokerContact, Business
 
 
 def create_broker(*, mc: str, name: str, **kwargs: Any) -> Broker:
@@ -63,3 +63,18 @@ def update_broker_contact(*, contact: BrokerContact, **kwargs: Any) -> BrokerCon
 
 def delete_broker_contact(*, contact: BrokerContact) -> None:
     contact.delete()
+
+
+def create_business(*, name: str, **kwargs: Any) -> Business:
+    business = Business(name=name, **kwargs)
+    business.full_clean()
+    business.save()
+    return business
+
+
+def update_business(*, business: Business, **kwargs: Any) -> Business:
+    for field, value in kwargs.items():
+        setattr(business, field, value)
+    business.full_clean()
+    business.save()
+    return business

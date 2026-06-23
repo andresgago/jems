@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.brokers.models import Business
 from .models import Load, LoadStop
 
 
@@ -137,6 +138,17 @@ class LoadSerializer(serializers.ModelSerializer):
             "dropoff_city_display",
             "stops",
         ]
+
+    shipper = serializers.PrimaryKeyRelatedField(
+        queryset=Business.objects.all(),
+        required=True,
+        allow_null=False,
+    )
+    receiver = serializers.PrimaryKeyRelatedField(
+        queryset=Business.objects.all(),
+        required=True,
+        allow_null=False,
+    )
 
     def validate(self, attrs: dict) -> dict:
         pickup = attrs.get(

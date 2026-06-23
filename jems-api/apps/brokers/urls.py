@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import BrokerContactViewSet, BrokerViewSet
+from .views import BrokerContactViewSet, BrokerViewSet, BusinessViewSet
 
 # Brokers
 broker_list = BrokerViewSet.as_view({"get": "list", "post": "create"})
@@ -16,7 +16,15 @@ contact_detail = BrokerContactViewSet.as_view(
     {"get": "retrieve", "put": "update", "delete": "destroy"}
 )
 
+# Business
+business_list = BusinessViewSet.as_view({"post": "create"})
+business_detail = BusinessViewSet.as_view({"get": "retrieve", "put": "update"})
+business_search = BusinessViewSet.as_view({"get": "search"})
+
 urlpatterns = [
+    path("business/", business_list, name="business-list"),
+    path("business/search/", business_search, name="business-search"),
+    path("business/<int:pk>/", business_detail, name="business-detail"),
     path("", broker_list, name="broker-list"),
     path("search/", broker_search, name="broker-search"),
     path("options/", broker_options, name="broker-options"),

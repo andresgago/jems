@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Broker, BrokerContact
+from .models import Broker, BrokerContact, Business
 
 
 class BrokerContactSerializer(serializers.ModelSerializer):
@@ -56,6 +56,18 @@ class BrokerSerializer(serializers.ModelSerializer):
             "updated_by",
             "contacts",
         ]
+
+
+class BusinessSerializer(serializers.ModelSerializer):
+    city_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Business
+        fields = ["id", "name", "address", "city", "city_display", "status", "rating"]
+        read_only_fields = ["id", "rating", "city_display"]
+
+    def get_city_display(self, obj: Business) -> str:
+        return str(obj.city) if obj.city else ""
 
 
 class BrokerListSerializer(serializers.ModelSerializer):

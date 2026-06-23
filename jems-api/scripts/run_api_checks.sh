@@ -844,12 +844,56 @@ if [[ -z "${DISPATCHER_USER_ID}" ]]; then
   DISPATCHER_USER_ID="$(body "$resp2" | json_get_num id)"
 fi
 
+# ── Business (Shippers / Receivers) ───────────────────────────────────────────
+step "Business: create shipper"
+resp="$(post "/api/v1/brokers/business/" '{"name":"Acme Warehouse"}')"
+assert_status "business create shipper" "201" "$(code "$resp")" "$(body "$resp")"
+SHIPPER_ID="$(body "$resp" | json_get_num id)"
+assert_contains "shipper name" "$(body "$resp")" "Acme Warehouse"
+
+step "Business: create receiver"
+resp="$(post "/api/v1/brokers/business/" '{"name":"Beta Distribution Center"}')"
+assert_status "business create receiver" "201" "$(code "$resp")" "$(body "$resp")"
+RECEIVER_ID="$(body "$resp" | json_get_num id)"
+
+step "Business: retrieve"
+resp="$(get "/api/v1/brokers/business/${SHIPPER_ID}/")"
+assert_status "business retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "business name" "$(body "$resp")" "Acme Warehouse"
+
+step "Business: update"
+resp="$(put "/api/v1/brokers/business/${SHIPPER_ID}/" '{"name":"Acme Warehouse LLC"}')"
+assert_status "business update" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "business updated" "$(body "$resp")" "LLC"
+
+step "Business: search by name"
+resp="$(get "/api/v1/brokers/business/search/?q=Acme")"
+assert_status "business search" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "business found" "$(body "$resp")" "Acme"
+assert_contains "business has city_display" "$(body "$resp")" "city_display"
+
+step "Business: search empty query returns empty"
+resp="$(get "/api/v1/brokers/business/search/")"
+assert_status "business search empty" "200" "$(code "$resp")"
+
+step "Business: name required on create"
+resp="$(post "/api/v1/brokers/business/" '{}')"
+assert_status "business no name" "400" "$(code "$resp")"
+
 # ── Loads ─────────────────────────────────────────────────────────────────────
 step "Loads: create"
-resp="$(post "/api/v1/loads/" "{\"number\":\"L-0001\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"123 Warehouse Rd\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"456 Dock St\",\"payment\":\"2500.00\",\"miles\":800,\"miles_empty\":50,\"broker\":${BROKER_ID},\"dispatcher\":${DISPATCHER_USER_ID},\"truck\":${TRUCK_ID},\"trailer\":${TRAILER_ID},\"driver\":${DRIVER_ID},\"carrier\":${CARRIER_ID},\"status\":1}")"
+resp="$(post "/api/v1/loads/" "{\"number\":\"L-0001\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"123 Warehouse Rd\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"456 Dock St\",\"payment\":\"2500.00\",\"miles\":800,\"miles_empty\":50,\"broker\":${BROKER_ID},\"dispatcher\":${DISPATCHER_USER_ID},\"truck\":${TRUCK_ID},\"trailer\":${TRAILER_ID},\"driver\":${DRIVER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"status\":1}")"
 assert_status "load create" "201" "$(code "$resp")" "$(body "$resp")"
 LOAD_ID="$(body "$resp" | json_get_num id)"
 LOAD_NUMBER="$(body "$resp" | json_get_num number)"
+
+step "Loads: create without shipper rejected"
+resp="$(post "/api/v1/loads/" "{\"number\":\"L-NOSHP\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"payment\":\"1000.00\",\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"receiver\":${RECEIVER_ID}}")"
+assert_status "load no shipper" "400" "$(code "$resp")"
+
+step "Loads: create without receiver rejected"
+resp="$(post "/api/v1/loads/" "{\"number\":\"L-NORCV\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"payment\":\"1000.00\",\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID}}")"
+assert_status "load no receiver" "400" "$(code "$resp")"
 
 step "Loads: retrieve"
 resp="$(get "/api/v1/loads/${LOAD_ID}/")"

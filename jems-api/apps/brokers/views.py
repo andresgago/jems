@@ -4,16 +4,23 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
-from .models import Broker, BrokerContact
-from .serializers import BrokerContactSerializer, BrokerListSerializer, BrokerSerializer
+from .models import Broker, BrokerContact, Business
+from .serializers import (
+    BrokerContactSerializer,
+    BrokerListSerializer,
+    BrokerSerializer,
+    BusinessSerializer,
+)
 from .services import (
     create_broker,
     create_broker_contact,
+    create_business,
     delete_broker,
     delete_broker_contact,
     toggle_broker_status,
     update_broker,
     update_broker_contact,
+    update_business,
 )
 
 
@@ -112,6 +119,47 @@ class BrokerViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         contacts = broker.contacts.order_by("email")
         return Response(BrokerContactSerializer(contacts, many=True).data)
+
+
+class BusinessViewSet(ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request):
+        serializer = BusinessSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        business = create_business(**serializer.validated_data)
+        return Response(
+            BusinessSerializer(business).data, status=status.HTTP_201_CREATED
+        )
+
+    def retrieve(self, request, pk=None):
+        try:
+            business = Business.objects.select_related("city__state").get(pk=pk)
+        except Business.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(BusinessSerializer(business).data)
+
+    def update(self, request, pk=None):
+        try:
+            business = Business.objects.get(pk=pk)
+        except Business.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = BusinessSerializer(business, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        business = update_business(business=business, **serializer.validated_data)
+        return Response(BusinessSerializer(business).data)
+
+    @action(detail=False, methods=["get"], url_path="search")
+    def search(self, request):
+        q = request.query_params.get("q", "").strip()
+        if not q:
+            return Response([])
+        businesses = (
+            Business.objects.select_related("city__state")
+            .filter(status=Business.Status.ACTIVE, name__icontains=q)
+            .order_by("name")[:20]
+        )
+        return Response(BusinessSerializer(businesses, many=True).data)
 
 
 class BrokerContactViewSet(ViewSet):

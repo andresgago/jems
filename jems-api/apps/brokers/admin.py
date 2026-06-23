@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Broker, BrokerContact
+from .models import Broker, BrokerContact, Business
 
 
 class BrokerContactInline(admin.TabularInline):
@@ -21,3 +21,10 @@ class BrokerAdmin(admin.ModelAdmin):
 class BrokerContactAdmin(admin.ModelAdmin):
     list_display = ["name", "email", "phone", "broker", "team"]
     search_fields = ["name", "email"]
+
+
+@admin.register(Business)
+class BusinessAdmin(admin.ModelAdmin):
+    list_display = ["name", "city", "status", "rating"]
+    list_filter = ["status"]
+    search_fields = ["name"]

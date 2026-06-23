@@ -53,12 +53,18 @@ class TestLoadList:
 @pytest.mark.django_db
 class TestLoadCreate:
     def test_create_load(self, auth_client):
-        from apps.loads.tests.factories import BrokerFactory, CarrierFactory
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
 
         client, _ = auth_client
         city = CityFactory()
         broker = BrokerFactory()
         carrier = CarrierFactory()
+        shipper = BusinessFactory()
+        receiver = BusinessFactory()
         payload = {
             "number": "LD-99999",
             "pickup_date": timezone.now().strftime("%Y-%m-%d %H:%M"),
@@ -72,6 +78,8 @@ class TestLoadCreate:
             "payment": 2000.00,
             "broker": broker.pk,
             "carrier": carrier.pk,
+            "shipper": shipper.pk,
+            "receiver": receiver.pk,
         }
         response = client.post(reverse("load-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
@@ -82,6 +90,62 @@ class TestLoadCreate:
         LoadFactory(number="LD-DUP99")
         response = client.post(reverse("load-list"), {"number": "LD-DUP99"})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_shipper_required(self, auth_client):
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
+
+        client, _ = auth_client
+        city = CityFactory()
+        payload = {
+            "number": "LD-NOSHP",
+            "pickup_date": timezone.now().strftime("%Y-%m-%d %H:%M"),
+            "dropoff_date": (timezone.now() + datetime.timedelta(days=2)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "payment": 1500.00,
+            "broker": BrokerFactory().pk,
+            "carrier": CarrierFactory().pk,
+            "receiver": BusinessFactory().pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "shipper" in response.data
+
+    def test_receiver_required(self, auth_client):
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
+
+        client, _ = auth_client
+        city = CityFactory()
+        payload = {
+            "number": "LD-NORCV",
+            "pickup_date": timezone.now().strftime("%Y-%m-%d %H:%M"),
+            "dropoff_date": (timezone.now() + datetime.timedelta(days=2)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "payment": 1500.00,
+            "broker": BrokerFactory().pk,
+            "carrier": CarrierFactory().pk,
+            "shipper": BusinessFactory().pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "receiver" in response.data
 
 
 @pytest.mark.django_db
@@ -243,12 +307,18 @@ class TestCitySearch:
 @pytest.mark.django_db
 class TestLoadDateValidation:
     def test_dropoff_before_pickup_rejected(self, auth_client):
-        from apps.loads.tests.factories import BrokerFactory, CarrierFactory
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
 
         client, _ = auth_client
         city = CityFactory()
         broker = BrokerFactory()
         carrier = CarrierFactory()
+        shipper = BusinessFactory()
+        receiver = BusinessFactory()
         now = timezone.now()
         payload = {
             "number": "LD-DATE-01",
@@ -263,18 +333,26 @@ class TestLoadDateValidation:
             "payment": 1500.00,
             "broker": broker.pk,
             "carrier": carrier.pk,
+            "shipper": shipper.pk,
+            "receiver": receiver.pk,
         }
         response = client.post(reverse("load-list"), payload)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "dropoff_date" in response.data
 
     def test_dropoff_same_as_pickup_allowed(self, auth_client):
-        from apps.loads.tests.factories import BrokerFactory, CarrierFactory
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
 
         client, _ = auth_client
         city = CityFactory()
         broker = BrokerFactory()
         carrier = CarrierFactory()
+        shipper = BusinessFactory()
+        receiver = BusinessFactory()
         now = timezone.now().strftime("%Y-%m-%d %H:%M")
         payload = {
             "number": "LD-DATE-02",
@@ -287,17 +365,25 @@ class TestLoadDateValidation:
             "payment": 1500.00,
             "broker": broker.pk,
             "carrier": carrier.pk,
+            "shipper": shipper.pk,
+            "receiver": receiver.pk,
         }
         response = client.post(reverse("load-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
 
     def test_dropoff_after_pickup_allowed(self, auth_client):
-        from apps.loads.tests.factories import BrokerFactory, CarrierFactory
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
 
         client, _ = auth_client
         city = CityFactory()
         broker = BrokerFactory()
         carrier = CarrierFactory()
+        shipper = BusinessFactory()
+        receiver = BusinessFactory()
         now = timezone.now()
         payload = {
             "number": "LD-DATE-03",
@@ -312,6 +398,8 @@ class TestLoadDateValidation:
             "payment": 1500.00,
             "broker": broker.pk,
             "carrier": carrier.pk,
+            "shipper": shipper.pk,
+            "receiver": receiver.pk,
         }
         response = client.post(reverse("load-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
