@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import LoadFormPage from '../LoadFormPage'
 
@@ -338,6 +338,134 @@ describe('LoadFormPage — edit load', () => {
     await screen.findByRole('checkbox', { name: /new contact \(new@example.com\)/i })
 
     expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' })
+  })
+})
+
+// ── Shipper / Receiver fields ─────────────────────────────────────────────────
+
+describe('LoadFormPage — shipper and receiver fields', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useOptions.mockImplementation((url) => {
+      if (url.includes('trailer-types')) return TRAILER_TYPES
+      if (url.includes('carriers')) return CARRIERS
+      return []
+    })
+    loadGoogleMaps.mockReturnValue(new Promise(() => {}))
+    api.get.mockResolvedValue({ data: [] })
+  })
+
+  it('Shipper label shows required asterisk', () => {
+    renderNewForm()
+    const label = screen.getByText(/shipper/i, { selector: 'label' })
+    expect(label).toHaveTextContent('*')
+  })
+
+  it('Receiver label shows required asterisk', () => {
+    renderNewForm()
+    const label = screen.getByText(/receiver/i, { selector: 'label' })
+    expect(label).toHaveTextContent('*')
+  })
+
+  it('Shipper label has a "+" button', () => {
+    renderNewForm()
+    const label = screen.getByText(/shipper/i, { selector: 'label' })
+    expect(label.querySelector('button[title="New business"]')).toBeInTheDocument()
+  })
+
+  it('Receiver label has a "+" button', () => {
+    renderNewForm()
+    const label = screen.getByText(/receiver/i, { selector: 'label' })
+    expect(label.querySelector('button[title="New business"]')).toBeInTheDocument()
+  })
+
+  it('clicking "+" on Shipper shows the inline create form', () => {
+    renderNewForm()
+    const label = screen.getByText(/shipper/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New business"]'))
+    expect(screen.getByPlaceholderText('Business name')).toBeInTheDocument()
+  })
+
+  it('clicking "+" on Receiver shows its own inline create form', () => {
+    renderNewForm()
+    const label = screen.getByText(/receiver/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New business"]'))
+    expect(screen.getByPlaceholderText('Business name')).toBeInTheDocument()
+  })
+
+  it('Cancel button hides the inline create form', () => {
+    renderNewForm()
+    const label = screen.getByText(/shipper/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New business"]'))
+    // Use within to avoid ambiguity with the main form's Cancel button
+    const inlineForm = screen.getByPlaceholderText('Business name').closest('.border')
+    fireEvent.click(within(inlineForm).getByRole('button', { name: /cancel/i }))
+    expect(screen.queryByPlaceholderText('Business name')).not.toBeInTheDocument()
+  })
+
+  it('creating a business via inline form auto-selects it as Shipper', async () => {
+    api.post.mockResolvedValueOnce({ data: { id: 77, name: 'New Warehouse LLC' } })
+
+    renderNewForm()
+    const label = screen.getByText(/shipper/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New business"]'))
+
+    fireEvent.change(screen.getByPlaceholderText('Business name'), {
+      target: { value: 'New Warehouse LLC' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/brokers/business/', { name: 'New Warehouse LLC' })
+    )
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('New Warehouse LLC')).toBeInTheDocument()
+    )
+    expect(screen.queryByPlaceholderText('Business name')).not.toBeInTheDocument()
+  })
+
+  it('inline create form Save button is disabled when name is empty', () => {
+    renderNewForm()
+    const label = screen.getByText(/shipper/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New business"]'))
+    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled()
+  })
+
+  it('searchBusiness passes city_display as sublabel to results', async () => {
+    api.get.mockResolvedValueOnce({
+      data: [{ id: 1, name: 'Acme Warehouse', city_display: 'Houston, TX' }],
+    })
+
+    renderNewForm()
+    const shipperInput = screen.getByPlaceholderText('Type to search shipper...')
+    fireEvent.change(shipperInput, { target: { value: 'Ac' } })
+
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith(
+        '/brokers/business/search/',
+        expect.objectContaining({ params: { q: 'Ac' } })
+      )
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText('Acme Warehouse')).toBeInTheDocument()
+    )
+    expect(screen.getByText('Houston, TX')).toBeInTheDocument()
+  })
+
+  it('shows server error under Shipper when API returns validation error', async () => {
+    loadsService.create.mockRejectedValueOnce({
+      response: { data: { shipper: ['This field is required.'] } },
+    })
+
+    renderNewForm()
+    // Use fireEvent.submit on the form to bypass jsdom HTML5 constraint validation
+    const form = screen.getByRole('button', { name: /create load/i }).closest('form')
+    fireEvent.submit(form)
+
+    await waitFor(() =>
+      expect(screen.getByText('This field is required.')).toBeInTheDocument()
+    )
   })
 })
 

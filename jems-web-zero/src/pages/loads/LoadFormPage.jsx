@@ -15,7 +15,47 @@ const LUMPER_PAID_BY = [
 ];
 
 /* ── Generic async search input (mirrors TMS Select2 AJAX) ── */
-function AsyncSearch({ label, placeholder = 'Type to search...', value, displayValue, onSearch, onSelect, onClear }) {
+function BusinessCreateRow({ onSave, onCancel }) {
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      const { data } = await api.post('/brokers/business/', { name: name.trim() });
+      onSave(data);
+    } catch (e) {
+      setError(e.response?.data?.name?.[0] || 'Could not create business.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border rounded p-2 mt-1 bg-light">
+      <div className="input-group input-group-sm">
+        <input
+          autoFocus
+          className="form-control"
+          placeholder="Business name"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSave()}
+        />
+        <button className="btn btn-primary" type="button" onClick={handleSave} disabled={saving || !name.trim()}>
+          {saving ? '…' : 'Save'}
+        </button>
+        <button className="btn btn-outline-secondary" type="button" onClick={onCancel}>Cancel</button>
+      </div>
+      {error && <div className="text-danger small mt-1">{error}</div>}
+    </div>
+  );
+}
+
+function AsyncSearch({ label, placeholder = 'Type to search...', value, displayValue, onSearch, onSelect, onClear, required = false, isInvalid = false, labelAddon = null }) {
   const [query, setQuery] = useState(displayValue || '');
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -50,12 +90,17 @@ function AsyncSearch({ label, placeholder = 'Type to search...', value, displayV
 
   return (
     <div>
-      {label && <label className="control-label">{label}</label>}
+      {label && (
+        <label className="control-label d-flex align-items-center gap-1">
+          {label}{required && <span className="text-danger">*</span>}
+          {labelAddon}
+        </label>
+      )}
       <div className="position-relative">
         <div className="input-group input-group-sm">
           <input
             type="text"
-            className="form-control"
+            className={`form-control${isInvalid ? ' is-invalid' : ''}`}
             placeholder={placeholder}
             value={query}
             onChange={handleChange}
@@ -264,6 +309,8 @@ export default function LoadFormPage() {
   const [loadingBrokerContacts, setLoadingBrokerContacts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingData, setLoadingData] = useState(isEdit);
+  const [showNewShipper, setShowNewShipper] = useState(false);
+  const [showNewReceiver, setShowNewReceiver] = useState(false);
 
   const trailerTypes = useOptions('/fleet/trailer-types/');
   const carriers = useOptions('/carriers/');
@@ -424,7 +471,7 @@ export default function LoadFormPage() {
 
   const searchBusiness = async (q) => {
     const { data } = await api.get('/brokers/business/search/', { params: { q } }).catch(() => ({ data: [] }));
-    return data.map(b => ({ id: b.id, label: b.name }));
+    return data.map(b => ({ id: b.id, label: b.name, sublabel: b.city_display || '' }));
   };
 
   const handleSubmit = async (e) => {
@@ -627,7 +674,22 @@ export default function LoadFormPage() {
               onSearch={searchBusiness}
               onSelect={item => { set('shipper', item.id); setDisp('shipper', item.label); }}
               onClear={() => { set('shipper', null); setDisp('shipper', ''); }}
+              required
+              isInvalid={!!errors.shipper}
+              labelAddon={
+                <button type="button" className="btn btn-default btn-xs border py-0 px-1"
+                  title="New business" onClick={() => setShowNewShipper(v => !v)}>
+                  <i className="bi bi-plus" />
+                </button>
+              }
             />
+            {showNewShipper && (
+              <BusinessCreateRow
+                onSave={biz => { set('shipper', biz.id); setDisp('shipper', biz.name); setShowNewShipper(false); }}
+                onCancel={() => setShowNewShipper(false)}
+              />
+            )}
+            {err('shipper')}
           </div>
           <div className="col-md-6">
             <AsyncSearch
@@ -638,7 +700,22 @@ export default function LoadFormPage() {
               onSearch={searchBusiness}
               onSelect={item => { set('receiver', item.id); setDisp('receiver', item.label); }}
               onClear={() => { set('receiver', null); setDisp('receiver', ''); }}
+              required
+              isInvalid={!!errors.receiver}
+              labelAddon={
+                <button type="button" className="btn btn-default btn-xs border py-0 px-1"
+                  title="New business" onClick={() => setShowNewReceiver(v => !v)}>
+                  <i className="bi bi-plus" />
+                </button>
+              }
             />
+            {showNewReceiver && (
+              <BusinessCreateRow
+                onSave={biz => { set('receiver', biz.id); setDisp('receiver', biz.name); setShowNewReceiver(false); }}
+                onCancel={() => setShowNewReceiver(false)}
+              />
+            )}
+            {err('receiver')}
           </div>
         </div>
 
