@@ -1,9 +1,24 @@
+from datetime import datetime as _Datetime
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError
 
 from .exceptions import InvalidStatusTransition
 from .models import Load, LoadStop
+
+# Maps PHP date('w') weekday (0=Sun…6=Sat) to TMS accounting_day (Tue=1…Mon=7, Sun=6).
+_ACCOUNTING_DAYS: dict[int, int] = {0: 6, 1: 7, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5}
+_ET = ZoneInfo("America/New_York")
+
+
+def _accounting_day_from(dropoff: Any) -> int:
+    """Return the TMS accounting_day for the given dropoff datetime."""
+    if isinstance(dropoff, _Datetime) and dropoff.tzinfo is not None:
+        dropoff = dropoff.astimezone(_ET)
+    weekday = int(dropoff.strftime("%w"))  # 0=Sun … 6=Sat
+    return _ACCOUNTING_DAYS[weekday]
+
 
 # Valid status transitions: current -> allowed next statuses
 _ALLOWED_TRANSITIONS: dict[int, set[int]] = {
@@ -27,6 +42,7 @@ def create_load(
     load = Load(
         number=number, pickup_date=pickup_date, dropoff_date=dropoff_date, **kwargs
     )
+    load.accounting_day = _accounting_day_from(dropoff_date)
     load.full_clean()
     load.save()
     return load
@@ -35,6 +51,7 @@ def create_load(
 def update_load(*, load: Load, **kwargs: Any) -> Load:
     for field, value in kwargs.items():
         setattr(load, field, value)
+    load.accounting_day = _accounting_day_from(load.dropoff_date)
     load.full_clean()
     load.save()
     return load

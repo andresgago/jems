@@ -10,6 +10,7 @@ from apps.carriers.models import Carrier
 from apps.drivers.models import Driver
 from apps.fleet.models import Trailer, TrailerType, Truck
 from apps.loads.models import Load, LoadStop
+from apps.loads.services import _accounting_day_from
 from apps.locations.models import City, State
 from apps.users.tests.factories import UserFactory  # noqa: F401
 
@@ -102,6 +103,7 @@ class LoadFactory(DjangoModelFactory):
     dropoff_date = factory.LazyFunction(
         lambda: timezone.now() + datetime.timedelta(days=2)
     )
+    accounting_day = factory.LazyAttribute(lambda o: _accounting_day_from(o.dropoff_date))
     pickup_city = factory.SubFactory(CityFactory)
     dropoff_city = factory.SubFactory(CityFactory)
     pickup_address = "123 Main St"
