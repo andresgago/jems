@@ -8,5 +8,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.js'],
     pool: 'forks',
+    exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**'],
   },
 })

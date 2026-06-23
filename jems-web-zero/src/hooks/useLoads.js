@@ -11,7 +11,7 @@ export function useLoads(filters) {
     setError(null);
     try {
       const { data } = await loadsService.list(filters);
-      setLoads(data);
+      setLoads(Array.isArray(data) ? data : data.results || []);
     } catch (e) {
       setError(e);
     } finally {
