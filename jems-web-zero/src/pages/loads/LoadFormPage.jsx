@@ -458,6 +458,10 @@ export default function LoadFormPage() {
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
   const setDisp = (field, value) => setDisplay(d => ({ ...d, [field]: value }));
+  const setLumper = (value) => {
+    const lumper = parseFloat(value) || 0;
+    setForm(f => ({ ...f, lumper, lumper_paid_by: lumper > 0 ? f.lumper_paid_by : '' }));
+  };
 
   const searchCities = async (q) => {
     const { data } = await api.get('/loads/cities/search/', { params: { q } });
@@ -739,15 +743,18 @@ export default function LoadFormPage() {
           <div className="col-md-2">
             <label className="control-label">Lumper ($)</label>
             <input type="number" step="0.01" className="form-control form-control-sm" value={form.lumper}
-              onChange={e => set('lumper', parseFloat(e.target.value) || 0)} />
+              onChange={e => setLumper(e.target.value)} />
           </div>
-          <div className="col-md-2">
-            <label className="control-label">Lumper Paid By</label>
-            <select className="form-select form-select-sm" value={form.lumper_paid_by}
-              onChange={e => set('lumper_paid_by', e.target.value)}>
-              {LUMPER_PAID_BY.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
+          {form.lumper > 0 && (
+            <div className="col-md-2">
+              <label className="control-label">Lumper Paid By</label>
+              <select className="form-select form-select-sm" value={form.lumper_paid_by}
+                onChange={e => set('lumper_paid_by', e.target.value)}>
+                {LUMPER_PAID_BY.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              {err('lumper_paid_by')}
+            </div>
+          )}
           <div className="col-md-2">
             <label className="control-label">Drop Trailer ($)</label>
             <input type="number" step="0.01" className="form-control form-control-sm" value={form.drop_trailer}

@@ -81,6 +81,8 @@ const getTrailerTypeSelect = () =>
   screen.getByRole('option', { name: /van \(v\)/i }).closest('select')
 const getDetentionInput = () =>
   screen.getByText(/detention \(\$\)/i, { selector: 'label' }).nextElementSibling
+const getLumperInput = () =>
+  screen.getByText(/lumper \(\$\)/i, { selector: 'label' }).nextElementSibling
 
 // ── New load ──────────────────────────────────────────────────────────────────
 
@@ -181,6 +183,35 @@ describe('LoadFormPage — new load', () => {
     await waitFor(() =>
       expect(loadsService.create).toHaveBeenCalledWith(
         expect.objectContaining({ detention: 125.5 })
+      )
+    )
+  })
+
+  it('shows Lumper Paid By only when lumper is greater than zero', () => {
+    renderNewForm()
+    expect(screen.queryByText(/lumper paid by/i, { selector: 'label' })).not.toBeInTheDocument()
+
+    fireEvent.change(getLumperInput(), { target: { value: '75' } })
+    expect(screen.getByText(/lumper paid by/i, { selector: 'label' })).toBeInTheDocument()
+
+    fireEvent.change(getLumperInput(), { target: { value: '0' } })
+    expect(screen.queryByText(/lumper paid by/i, { selector: 'label' })).not.toBeInTheDocument()
+  })
+
+  it('clears Lumper Paid By when lumper returns to zero', async () => {
+    loadsService.create.mockResolvedValueOnce({ data: { id: 123 } })
+
+    renderNewForm()
+    fireEvent.change(getLumperInput(), { target: { value: '75' } })
+    fireEvent.change(screen.getByText(/lumper paid by/i, { selector: 'label' }).nextElementSibling, {
+      target: { value: 'driver' },
+    })
+    fireEvent.change(getLumperInput(), { target: { value: '0' } })
+    fireEvent.submit(screen.getByRole('button', { name: /create load/i }).closest('form'))
+
+    await waitFor(() =>
+      expect(loadsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ lumper: 0, lumper_paid_by: '' })
       )
     )
   })
