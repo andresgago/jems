@@ -64,6 +64,11 @@ uv run mypy .
 
 ## Database
 
+### Load base catalog data (states, trailer types, truck types, etc.)
+```bash
+uv run python manage.py seed
+```
+
 ### Apply migrations
 ```bash
 uv run python manage.py migrate
