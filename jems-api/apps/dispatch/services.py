@@ -12,7 +12,11 @@ from .exceptions import (
     InvoiceAlreadyOpenError,
     WorkAlreadyFinishedError,
 )
-from .models import DispatcherWork, DispatcherWorkInvoiceByHour, DispatcherWorkInvoiceByPercent
+from .models import (
+    DispatcherWork,
+    DispatcherWorkInvoiceByHour,
+    DispatcherWorkInvoiceByPercent,
+)
 
 User = get_user_model()
 
@@ -113,7 +117,8 @@ def update_invoice_by_percent(
 
 
 def close_invoice_by_percent(
-    *, invoice: DispatcherWorkInvoiceByPercent,
+    *,
+    invoice: DispatcherWorkInvoiceByPercent,
 ) -> DispatcherWorkInvoiceByPercent:
     if invoice.status == DispatcherWorkInvoiceByPercent.Status.CLOSED:
         raise InvoiceAlreadyClosedError("Invoice is already closed.")
@@ -123,7 +128,8 @@ def close_invoice_by_percent(
 
 
 def open_invoice_by_percent(
-    *, invoice: DispatcherWorkInvoiceByPercent,
+    *,
+    invoice: DispatcherWorkInvoiceByPercent,
 ) -> DispatcherWorkInvoiceByPercent:
     if invoice.status == DispatcherWorkInvoiceByPercent.Status.OPEN:
         raise InvoiceAlreadyOpenError("Invoice is already open.")
@@ -191,7 +197,8 @@ def update_invoice_by_hour(
 
 
 def close_invoice_by_hour(
-    *, invoice: DispatcherWorkInvoiceByHour,
+    *,
+    invoice: DispatcherWorkInvoiceByHour,
 ) -> DispatcherWorkInvoiceByHour:
     if invoice.status == DispatcherWorkInvoiceByHour.Status.CLOSED:
         raise InvoiceAlreadyClosedError("Invoice is already closed.")
@@ -201,7 +208,8 @@ def close_invoice_by_hour(
 
 
 def open_invoice_by_hour(
-    *, invoice: DispatcherWorkInvoiceByHour,
+    *,
+    invoice: DispatcherWorkInvoiceByHour,
 ) -> DispatcherWorkInvoiceByHour:
     if invoice.status == DispatcherWorkInvoiceByHour.Status.OPEN:
         raise InvoiceAlreadyOpenError("Invoice is already open.")

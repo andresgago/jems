@@ -11,7 +11,16 @@ class LoadStopInline(admin.TabularInline):
 
 @admin.register(Load)
 class LoadAdmin(admin.ModelAdmin):
-    list_display = ["number", "status", "pickup_date", "dropoff_date", "broker", "driver", "invoiced", "paid"]
+    list_display = [
+        "number",
+        "status",
+        "pickup_date",
+        "dropoff_date",
+        "broker",
+        "driver",
+        "invoiced",
+        "paid",
+    ]
     list_filter = ["status", "invoiced", "paid"]
     search_fields = ["number"]
     inlines = [LoadStopInline]

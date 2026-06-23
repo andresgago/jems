@@ -1,4 +1,10 @@
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from typing import cast
+
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    BaseUserManager,
+    PermissionsMixin,
+)
 from django.db import models
 
 
@@ -7,12 +13,14 @@ class UserManager(BaseUserManager):
         if not username:
             raise ValueError("Username is required")
         email = self.normalize_email(email)
-        user = self.model(username=username, email=email, **extra_fields)
+        user = cast("User", self.model(username=username, email=email, **extra_fields))
         user.set_password(password)
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, username: str, email: str, password: str, **extra_fields):
+    def create_superuser(
+        self, username: str, email: str, password: str, **extra_fields
+    ):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         return self.create_user(username, email, password, **extra_fields)
@@ -35,7 +43,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=30, blank=True, default="")
     status = models.IntegerField(choices=Status.choices, default=Status.ACTIVE)
     is_dispatcher = models.BooleanField(default=False)
-    dispatcher_type = models.IntegerField(choices=DispatcherType.choices, default=DispatcherType.NONE)
+    dispatcher_type = models.IntegerField(
+        choices=DispatcherType.choices, default=DispatcherType.NONE
+    )
     is_main_dispatcher = models.BooleanField(default=False)
     percent = models.FloatField(default=0)
     hours = models.FloatField(default=0)
@@ -49,7 +59,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="created_users"
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_users",
     )
 
     objects = UserManager()
@@ -65,7 +79,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         return f"{self.first_name} {self.last_name}"
 
     @property
-    def is_active(self) -> bool:
+    def is_active(self) -> bool:  # type: ignore[override]  # AbstractBaseUser defines this as a field; we derive it from status
         return self.status == self.Status.ACTIVE
 
     def __str__(self) -> str:

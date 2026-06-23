@@ -37,8 +37,12 @@ class Carrier(models.Model):
     noa_file = models.FileField(upload_to="carriers/noa/", blank=True, null=True)
     coi_file = models.FileField(upload_to="carriers/coi/", blank=True, null=True)
     mcc_file = models.FileField(upload_to="carriers/mcc/", blank=True, null=True)
-    safety_letter_file = models.FileField(upload_to="carriers/safety/", blank=True, null=True)
-    last_inspection_file = models.FileField(upload_to="carriers/inspection/", blank=True, null=True)
+    safety_letter_file = models.FileField(
+        upload_to="carriers/safety/", blank=True, null=True
+    )
+    last_inspection_file = models.FileField(
+        upload_to="carriers/inspection/", blank=True, null=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

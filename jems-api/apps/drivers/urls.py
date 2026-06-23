@@ -1,11 +1,20 @@
 from django.urls import path
 
-from .views import DriverDocumentViewSet, DriverTypeViewSet, DriverVacationViewSet, DriverViewSet
+from .views import (
+    DriverDocumentViewSet,
+    DriverTypeViewSet,
+    DriverVacationViewSet,
+    DriverViewSet,
+)
 
 driver_list = DriverViewSet.as_view({"get": "list", "post": "create"})
-driver_detail = DriverViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"})
+driver_detail = DriverViewSet.as_view(
+    {"get": "retrieve", "put": "update", "delete": "destroy"}
+)
 driver_toggle_status = DriverViewSet.as_view({"post": "toggle_status"})
-driver_documents = DriverViewSet.as_view({"get": "list_documents", "post": "upload_document"})
+driver_documents = DriverViewSet.as_view(
+    {"get": "list_documents", "post": "upload_document"}
+)
 document_detail = DriverDocumentViewSet.as_view({"delete": "destroy"})
 type_list = DriverTypeViewSet.as_view({"get": "list", "post": "create"})
 vacation_list = DriverVacationViewSet.as_view({"get": "list", "post": "create"})
@@ -18,6 +27,10 @@ urlpatterns = [
     path("<int:pk>/documents/", driver_documents, name="driver-documents"),
     path("documents/<int:pk>/", document_detail, name="driver-document-detail"),
     path("<int:driver_pk>/vacations/", vacation_list, name="driver-vacation-list"),
-    path("<int:driver_pk>/vacations/<int:pk>/", vacation_detail, name="driver-vacation-detail"),
+    path(
+        "<int:driver_pk>/vacations/<int:pk>/",
+        vacation_detail,
+        name="driver-vacation-detail",
+    ),
     path("types/", type_list, name="driver-type-list"),
 ]

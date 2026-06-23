@@ -8,10 +8,14 @@ from apps.fleet.services import (
     toggle_trailer_status,
     toggle_truck_owner_status,
     toggle_truck_status,
-    update_trailer,
     update_truck,
 )
-from apps.fleet.tests.factories import TrailerFactory, TrailerTypeFactory, TruckFactory, TruckTypeFactory
+from apps.fleet.tests.factories import (
+    TrailerFactory,
+    TrailerTypeFactory,
+    TruckFactory,
+    TruckTypeFactory,
+)
 
 
 @pytest.mark.django_db
@@ -83,17 +87,26 @@ class TestTruckOwner:
 
 # ── Accident ──────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestCreateAccident:
     def test_creates_accident(self):
-        from apps.fleet.tests.factories import AccidentFactory, TruckFactory, TrailerFactory, DriverFactory
+        from apps.fleet.tests.factories import (
+            TruckFactory,
+            TrailerFactory,
+            DriverFactory,
+        )
         from apps.fleet.services import create_accident
-        import datetime, zoneinfo
+        import datetime
+        import zoneinfo
+
         truck = TruckFactory()
         trailer = TrailerFactory()
         driver = DriverFactory()
         accident = create_accident(
-            date=datetime.datetime(2024, 3, 15, 14, 30, tzinfo=zoneinfo.ZoneInfo("UTC")),
+            date=datetime.datetime(
+                2024, 3, 15, 14, 30, tzinfo=zoneinfo.ZoneInfo("UTC")
+            ),
             truck=truck,
             trailer=trailer,
             driver=driver,
@@ -107,6 +120,7 @@ class TestCreateAccident:
     def test_update_accident(self):
         from apps.fleet.tests.factories import AccidentFactory
         from apps.fleet.services import update_accident
+
         accident = AccidentFactory(crash_number="OLD-001")
         updated = update_accident(accident=accident, crash_number="NEW-002")
         assert updated.crash_number == "NEW-002"
@@ -115,6 +129,7 @@ class TestCreateAccident:
         from apps.fleet.tests.factories import AccidentFactory
         from apps.fleet.services import delete_accident
         from apps.fleet.models import Accident
+
         accident = AccidentFactory()
         pk = accident.pk
         delete_accident(accident=accident)
@@ -124,8 +139,13 @@ class TestCreateAccident:
         from apps.fleet.tests.factories import AccidentFactory
         from apps.fleet.services import add_accident_picture
         from django.core.files.uploadedfile import SimpleUploadedFile
+
         accident = AccidentFactory()
-        img = SimpleUploadedFile("photo.jpg", b"fake-image-data", content_type="image/jpeg")
-        picture = add_accident_picture(accident=accident, file=img, description="Scene photo")
+        img = SimpleUploadedFile(
+            "photo.jpg", b"fake-image-data", content_type="image/jpeg"
+        )
+        picture = add_accident_picture(
+            accident=accident, file=img, description="Scene photo"
+        )
         assert picture.pk is not None
         assert picture.accident == accident

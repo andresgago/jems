@@ -41,7 +41,7 @@ class TestLoadList:
         LoadFactory(status=Load.Status.REGISTERED)
         response = client.get(reverse("load-list") + f"?status={Load.Status.STARTED}")
         assert response.status_code == status.HTTP_200_OK
-        assert all(l["status"] == Load.Status.STARTED for l in response.data)
+        assert all(load["status"] == Load.Status.STARTED for load in response.data)
 
     def test_unauthenticated_blocked(self, api_client):
         response = api_client.get(reverse("load-list"))
@@ -190,7 +190,9 @@ class TestLoadStops:
     def test_delete_stop(self, auth_client):
         client, _ = auth_client
         stop = LoadStopFactory()
-        url = reverse("load-stop-detail", kwargs={"load_pk": stop.load.pk, "pk": stop.pk})
+        url = reverse(
+            "load-stop-detail", kwargs={"load_pk": stop.load.pk, "pk": stop.pk}
+        )
         response = client.delete(url)
         assert response.status_code == status.HTTP_204_NO_CONTENT
 

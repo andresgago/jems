@@ -63,6 +63,7 @@ class TestToggleUserStatus:
 
     def test_protected_users_are_not_toggled(self):
         from apps.users.services import PROTECTED_USER_IDS
+
         user = UserFactory(status=User.Status.ACTIVE)
         # Simulate a protected ID without touching the DB
         original_pk = user.pk

@@ -10,11 +10,20 @@ class DriverTypeSerializer(serializers.ModelSerializer):
 
 
 class DriverDocumentSerializer(serializers.ModelSerializer):
-    document_type_display = serializers.CharField(source="get_document_type_display", read_only=True)
+    document_type_display = serializers.CharField(
+        source="get_document_type_display", read_only=True
+    )
 
     class Meta:
         model = DriverDocument
-        fields = ["id", "document_type", "document_type_display", "file", "expiration_date", "created_at"]
+        fields = [
+            "id",
+            "document_type",
+            "document_type_display",
+            "file",
+            "expiration_date",
+            "created_at",
+        ]
         read_only_fields = ["created_at"]
 
 
@@ -26,19 +35,46 @@ class DriverSerializer(serializers.ModelSerializer):
     class Meta:
         model = Driver
         fields = [
-            "id", "first_name", "last_name", "full_name",
-            "driver_type", "driver_type_name", "status",
-            "phone", "email", "address",
-            "birth_date", "hire_date", "termination_date",
-            "license_number", "license_state", "license_expiration",
-            "medical_card_expiration", "mvr_expiration",
-            "contract", "miles_empty", "miles_full", "percent",
-            "insurance", "eld", "worker_comp", "factor", "factor_fee",
-            "fuel_card", "team_driver", "carrier",
-            "carrier_start_date", "carrier_end_date", "carrier_end_reason",
-            "endorsements", "restrictions", "on_vacation",
-            "photo", "documents",
-            "created_at", "updated_at",
+            "id",
+            "first_name",
+            "last_name",
+            "full_name",
+            "driver_type",
+            "driver_type_name",
+            "status",
+            "phone",
+            "email",
+            "address",
+            "birth_date",
+            "hire_date",
+            "termination_date",
+            "license_number",
+            "license_state",
+            "license_expiration",
+            "medical_card_expiration",
+            "mvr_expiration",
+            "contract",
+            "miles_empty",
+            "miles_full",
+            "percent",
+            "insurance",
+            "eld",
+            "worker_comp",
+            "factor",
+            "factor_fee",
+            "fuel_card",
+            "team_driver",
+            "carrier",
+            "carrier_start_date",
+            "carrier_end_date",
+            "carrier_end_reason",
+            "endorsements",
+            "restrictions",
+            "on_vacation",
+            "photo",
+            "documents",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at"]
 
@@ -50,11 +86,19 @@ class DriverListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Driver
         fields = [
-            "id", "first_name", "last_name", "full_name",
-            "driver_type", "driver_type_name", "status",
-            "phone", "email",
-            "license_expiration", "medical_card_expiration",
-            "on_vacation", "carrier",
+            "id",
+            "first_name",
+            "last_name",
+            "full_name",
+            "driver_type",
+            "driver_type_name",
+            "status",
+            "phone",
+            "email",
+            "license_expiration",
+            "medical_card_expiration",
+            "on_vacation",
+            "carrier",
         ]
 
 
@@ -62,16 +106,39 @@ class DriverCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Driver
         fields = [
-            "first_name", "last_name", "driver_type", "status",
-            "phone", "email", "address",
-            "birth_date", "hire_date", "termination_date",
-            "license_number", "license_state",
-            "license_expiration", "medical_card_expiration", "mvr_expiration",
-            "contract", "miles_empty", "miles_full", "percent",
-            "insurance", "eld", "worker_comp", "factor", "factor_fee",
-            "fuel_card", "team_driver", "carrier",
-            "carrier_start_date", "carrier_end_date", "carrier_end_reason",
-            "endorsements", "restrictions", "on_vacation",
+            "first_name",
+            "last_name",
+            "driver_type",
+            "status",
+            "phone",
+            "email",
+            "address",
+            "birth_date",
+            "hire_date",
+            "termination_date",
+            "license_number",
+            "license_state",
+            "license_expiration",
+            "medical_card_expiration",
+            "mvr_expiration",
+            "contract",
+            "miles_empty",
+            "miles_full",
+            "percent",
+            "insurance",
+            "eld",
+            "worker_comp",
+            "factor",
+            "factor_fee",
+            "fuel_card",
+            "team_driver",
+            "carrier",
+            "carrier_start_date",
+            "carrier_end_date",
+            "carrier_end_reason",
+            "endorsements",
+            "restrictions",
+            "on_vacation",
             "social_security_number",
         ]
 

@@ -1,5 +1,3 @@
-import datetime
-
 import pytest
 from django.urls import reverse
 from rest_framework import status
@@ -31,6 +29,7 @@ def auth_client(api_client):
 
 # ── DriverFile ────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestDriverFileViews:
     def test_list(self, auth_client):
@@ -51,6 +50,7 @@ class TestDriverFileViews:
     def test_create(self, auth_client):
         driver = DriverFactory()
         from django.core.files.base import ContentFile
+
         response = auth_client.post(
             reverse("driver-file-list"),
             {
@@ -66,7 +66,9 @@ class TestDriverFileViews:
 
     def test_delete(self, auth_client):
         doc = DriverFileFactory()
-        response = auth_client.delete(reverse("driver-file-detail", kwargs={"pk": doc.pk}))
+        response = auth_client.delete(
+            reverse("driver-file-detail", kwargs={"pk": doc.pk})
+        )
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not DriverFile.objects.filter(pk=doc.pk).exists()
 
@@ -76,6 +78,7 @@ class TestDriverFileViews:
 
 
 # ── TruckFile ─────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestTruckFileViews:
@@ -97,6 +100,7 @@ class TestTruckFileViews:
     def test_create(self, auth_client):
         truck = TruckFactory()
         from django.core.files.base import ContentFile
+
         response = auth_client.post(
             reverse("truck-file-list"),
             {
@@ -112,7 +116,9 @@ class TestTruckFileViews:
 
     def test_delete(self, auth_client):
         doc = TruckFileFactory()
-        response = auth_client.delete(reverse("truck-file-detail", kwargs={"pk": doc.pk}))
+        response = auth_client.delete(
+            reverse("truck-file-detail", kwargs={"pk": doc.pk})
+        )
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
     def test_unauthenticated_blocked(self, api_client):
@@ -121,6 +127,7 @@ class TestTruckFileViews:
 
 
 # ── TrailerFile ───────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestTrailerFileViews:
@@ -142,6 +149,7 @@ class TestTrailerFileViews:
     def test_create(self, auth_client):
         trailer = TrailerFactory()
         from django.core.files.base import ContentFile
+
         response = auth_client.post(
             reverse("trailer-file-list"),
             {
@@ -157,7 +165,9 @@ class TestTrailerFileViews:
 
     def test_delete(self, auth_client):
         doc = TrailerFileFactory()
-        response = auth_client.delete(reverse("trailer-file-detail", kwargs={"pk": doc.pk}))
+        response = auth_client.delete(
+            reverse("trailer-file-detail", kwargs={"pk": doc.pk})
+        )
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
     def test_unauthenticated_blocked(self, api_client):
@@ -166,6 +176,7 @@ class TestTrailerFileViews:
 
 
 # ── ImportRecordFile ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestImportRecordFileViews:

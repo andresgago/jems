@@ -1,7 +1,7 @@
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.brokers.models import Broker, BrokerContact
+from apps.brokers.models import Broker
 from apps.brokers.services import (
     create_broker,
     create_broker_contact,
@@ -51,7 +51,9 @@ class TestUpdateBroker:
 class TestCreateBrokerContact:
     def test_creates_contact_under_broker(self):
         broker = BrokerFactory()
-        contact = create_broker_contact(broker=broker, name="Jane Doe", email="jane@example.com")
+        contact = create_broker_contact(
+            broker=broker, name="Jane Doe", email="jane@example.com"
+        )
         assert contact.pk is not None
         assert contact.broker == broker
 
@@ -59,7 +61,9 @@ class TestCreateBrokerContact:
         broker = BrokerFactory()
         BrokerContactFactory(email="dup@example.com")
         with pytest.raises(ValidationError):
-            create_broker_contact(broker=broker, name="Someone", email="dup@example.com")
+            create_broker_contact(
+                broker=broker, name="Someone", email="dup@example.com"
+            )
 
 
 @pytest.mark.django_db

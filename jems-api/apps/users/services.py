@@ -41,7 +41,9 @@ def toggle_user_status(*, user: User) -> User:
     if user.pk in PROTECTED_USER_IDS:
         return user
     user.status = (
-        User.Status.INACTIVE if user.status == User.Status.ACTIVE else User.Status.ACTIVE
+        User.Status.INACTIVE
+        if user.status == User.Status.ACTIVE
+        else User.Status.ACTIVE
     )
     user.save(update_fields=["status", "updated_at"])
     return user

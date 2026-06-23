@@ -87,7 +87,9 @@ class TestDriverToggleStatus:
     def test_toggle_active_to_inactive(self, auth_client):
         client, _ = auth_client
         driver = DriverFactory(status=Driver.Status.ACTIVE)
-        response = client.post(reverse("driver-toggle-status", kwargs={"pk": driver.pk}))
+        response = client.post(
+            reverse("driver-toggle-status", kwargs={"pk": driver.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == Driver.Status.INACTIVE
 

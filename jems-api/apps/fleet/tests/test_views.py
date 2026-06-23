@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.fleet.models import Trailer, Truck
+from apps.fleet.models import Truck
 from apps.fleet.tests.factories import (
     TrailerFactory,
     TrailerTypeFactory,
@@ -93,7 +93,9 @@ class TestTruckMaintenance:
             "odometer_start": 100000,
             "odometer_current": 100000,
         }
-        response = client.post(reverse("truck-maintenance", kwargs={"pk": truck.pk}), payload)
+        response = client.post(
+            reverse("truck-maintenance", kwargs={"pk": truck.pk}), payload
+        )
         assert response.status_code == status.HTTP_201_CREATED
 
     def test_list_maintenance_records(self, auth_client):
@@ -136,10 +138,12 @@ class TestTruckOwnerList:
 
 # ── Accident Views ────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestAccidentList:
     def test_lists_accidents(self, auth_client):
         from apps.fleet.tests.factories import AccidentFactory
+
         client, _ = auth_client
         AccidentFactory.create_batch(3)
         response = client.get(reverse("accident-list"))
@@ -148,6 +152,7 @@ class TestAccidentList:
 
     def test_filter_by_truck(self, auth_client):
         from apps.fleet.tests.factories import AccidentFactory, TruckFactory
+
         client, _ = auth_client
         truck = TruckFactory()
         AccidentFactory(truck=truck)
@@ -164,7 +169,12 @@ class TestAccidentList:
 @pytest.mark.django_db
 class TestAccidentCreate:
     def test_creates_accident(self, auth_client):
-        from apps.fleet.tests.factories import TruckFactory, TrailerFactory, DriverFactory
+        from apps.fleet.tests.factories import (
+            TruckFactory,
+            TrailerFactory,
+            DriverFactory,
+        )
+
         client, user = auth_client
         truck = TruckFactory()
         trailer = TrailerFactory()
@@ -189,6 +199,7 @@ class TestAccidentCreate:
 class TestAccidentDetail:
     def test_retrieves_accident(self, auth_client):
         from apps.fleet.tests.factories import AccidentFactory
+
         client, _ = auth_client
         accident = AccidentFactory()
         response = client.get(reverse("accident-detail", kwargs={"pk": accident.pk}))
@@ -197,6 +208,7 @@ class TestAccidentDetail:
 
     def test_updates_crash_number(self, auth_client):
         from apps.fleet.tests.factories import AccidentFactory
+
         client, _ = auth_client
         accident = AccidentFactory(crash_number="OLD-001")
         response = client.patch(
@@ -209,6 +221,7 @@ class TestAccidentDetail:
 
     def test_deletes_accident(self, auth_client):
         from apps.fleet.tests.factories import AccidentFactory
+
         client, _ = auth_client
         accident = AccidentFactory()
         response = client.delete(reverse("accident-detail", kwargs={"pk": accident.pk}))

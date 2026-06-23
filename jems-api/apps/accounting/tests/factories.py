@@ -3,7 +3,14 @@ import datetime
 import factory
 from factory.django import DjangoModelFactory
 
-from apps.accounting.models import Account, Category, CategoryType, DriverInvoice, OwnerInvoice, Record
+from apps.accounting.models import (
+    Account,
+    Category,
+    CategoryType,
+    DriverInvoice,
+    OwnerInvoice,
+    Record,
+)
 from apps.drivers.models import Driver
 from apps.fleet.models import TruckOwner
 from apps.users.tests.factories import UserFactory  # noqa: F401

@@ -38,8 +38,12 @@ class LoadStopSerializer(serializers.ModelSerializer):
 class LoadSerializer(serializers.ModelSerializer):
     stops = LoadStopSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
-    pickup_city_display = serializers.CharField(source="pickup_city.__str__", read_only=True)
-    dropoff_city_display = serializers.CharField(source="dropoff_city.__str__", read_only=True)
+    pickup_city_display = serializers.CharField(
+        source="pickup_city.__str__", read_only=True
+    )
+    dropoff_city_display = serializers.CharField(
+        source="dropoff_city.__str__", read_only=True
+    )
 
     class Meta:
         model = Load
@@ -127,8 +131,12 @@ class LoadListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views."""
 
     status_display = serializers.CharField(source="get_status_display", read_only=True)
-    pickup_city_display = serializers.CharField(source="pickup_city.__str__", read_only=True)
-    dropoff_city_display = serializers.CharField(source="dropoff_city.__str__", read_only=True)
+    pickup_city_display = serializers.CharField(
+        source="pickup_city.__str__", read_only=True
+    )
+    dropoff_city_display = serializers.CharField(
+        source="dropoff_city.__str__", read_only=True
+    )
 
     class Meta:
         model = Load

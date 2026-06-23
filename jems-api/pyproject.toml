@@ -15,7 +15,18 @@ dependencies = [
     "psycopg2-binary>=2.9.12",
     "redis>=8.0.0",
     "anthropic>=0.40.0",
+    "django-cors-headers>=4.9.0",
+    "pymysql>=1.2.0",
+    "faker>=40.23.0",
 ]
+
+[tool.mypy]
+explicit_package_bases = true
+ignore_missing_imports = true
+plugins = ["mypy_django_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "config.settings.development"
 
 [dependency-groups]
 dev = [

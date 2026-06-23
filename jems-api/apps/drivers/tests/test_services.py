@@ -43,7 +43,9 @@ class TestToggleDriverStatus:
 class TestUpdateDriver:
     def test_updates_basic_fields(self):
         driver = DriverFactory(phone="000")
-        updated = update_driver(driver=driver, phone="555-9999", email="new@example.com")
+        updated = update_driver(
+            driver=driver, phone="555-9999", email="new@example.com"
+        )
         assert updated.phone == "555-9999"
         assert updated.email == "new@example.com"
 

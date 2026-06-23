@@ -5,7 +5,14 @@ import factory
 from factory.django import DjangoModelFactory
 
 from apps.drivers.models import Driver
-from apps.fleet.models import Accident, Trailer, TrailerType, Truck, TruckOwner, TruckType
+from apps.fleet.models import (
+    Accident,
+    Trailer,
+    TrailerType,
+    Truck,
+    TruckOwner,
+    TruckType,
+)
 from apps.users.tests.factories import UserFactory
 
 UTC = zoneinfo.ZoneInfo("UTC")
@@ -72,7 +79,9 @@ class AccidentFactory(DjangoModelFactory):
     class Meta:
         model = Accident
 
-    date = factory.LazyFunction(lambda: datetime.datetime(2024, 3, 15, 14, 30, tzinfo=UTC))
+    date = factory.LazyFunction(
+        lambda: datetime.datetime(2024, 3, 15, 14, 30, tzinfo=UTC)
+    )
     driver = factory.SubFactory(DriverFactory)
     truck = factory.SubFactory(TruckFactory)
     trailer = factory.SubFactory(TrailerFactory)

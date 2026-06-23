@@ -171,6 +171,11 @@ cleanup() {
   echo "==> Cleaning up test DB ${DB_NAME}"
   PGPASSWORD="${DB_PASS}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
     -q -c "DROP DATABASE IF EXISTS ${DB_NAME};" 2>/dev/null || true
+  echo "==> Cleaning up uploaded media files"
+  rm -rf "${BACKEND_DIR}/media/documents" "${BACKEND_DIR}/media/trucks" \
+         "${BACKEND_DIR}/media/trailers" "${BACKEND_DIR}/media/drivers" \
+         "${BACKEND_DIR}/media/loads" "${BACKEND_DIR}/media/carriers" \
+         "${BACKEND_DIR}/media/accidents"
 }
 
 wait_for_server() {

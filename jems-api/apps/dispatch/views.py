@@ -5,7 +5,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import DispatcherWork, DispatcherWorkInvoiceByHour, DispatcherWorkInvoiceByPercent
+from .models import (
+    DispatcherWork,
+    DispatcherWorkInvoiceByHour,
+    DispatcherWorkInvoiceByPercent,
+)
 from .serializers import (
     DispatcherWorkInvoiceByHourSerializer,
     DispatcherWorkInvoiceByPercentSerializer,
@@ -29,8 +33,8 @@ from .services import (
     update_invoice_by_percent,
 )
 
-
 # ── Dispatcher Work ───────────────────────────────────────────────────────────
+
 
 class DispatcherWorkListView(APIView):
     def get(self, request: Request) -> Response:
@@ -48,7 +52,9 @@ class DispatcherWorkListView(APIView):
         serializer = DispatcherWorkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         work = create_dispatcher_work(**serializer.validated_data)
-        return Response(DispatcherWorkSerializer(work).data, status=status.HTTP_201_CREATED)
+        return Response(
+            DispatcherWorkSerializer(work).data, status=status.HTTP_201_CREATED
+        )
 
 
 class DispatcherWorkDetailView(APIView):
@@ -88,6 +94,7 @@ class DispatcherWorkMarkPaidView(APIView):
 
 # ── Invoice By Percent ────────────────────────────────────────────────────────
 
+
 class InvoiceByPercentListView(APIView):
     def get(self, request: Request) -> Response:
         qs = DispatcherWorkInvoiceByPercent.objects.all()
@@ -121,7 +128,9 @@ class InvoiceByPercentDetailView(APIView):
             invoice, data=request.data, partial=True
         )
         serializer.is_valid(raise_exception=True)
-        invoice = update_invoice_by_percent(invoice=invoice, **serializer.validated_data)
+        invoice = update_invoice_by_percent(
+            invoice=invoice, **serializer.validated_data
+        )
         return Response(DispatcherWorkInvoiceByPercentSerializer(invoice).data)
 
 
@@ -153,6 +162,7 @@ class InvoiceByPercentAmountView(APIView):
 
 
 # ── Invoice By Hour ───────────────────────────────────────────────────────────
+
 
 class InvoiceByHourListView(APIView):
     def get(self, request: Request) -> Response:

@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
@@ -28,6 +28,7 @@ def auth_client(api_client, user):
 
 # ── Conversations ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestConversationViews:
     def test_list_own_conversations(self, auth_client, user):
@@ -56,7 +57,9 @@ class TestConversationViews:
     def test_retrieve_with_messages(self, auth_client, user):
         conv = ConversationFactory(user=user)
         MessageFactory(conversation=conv, role=Message.Role.USER, content="Hello")
-        MessageFactory(conversation=conv, role=Message.Role.ASSISTANT, content="Hi there")
+        MessageFactory(
+            conversation=conv, role=Message.Role.ASSISTANT, content="Hi there"
+        )
         response = auth_client.get(
             reverse("ai-conversation-detail", kwargs={"pk": conv.pk})
         )
@@ -86,6 +89,7 @@ class TestConversationViews:
 
 # ── Send message ──────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestSendMessage:
     def test_send_message_calls_service(self, auth_client, user):
@@ -97,7 +101,9 @@ class TestSendMessage:
         )
         mock_reply.pk = 99
 
-        with patch("apps.ai.views.services.send_message", return_value=mock_reply) as mock_svc:
+        with patch(
+            "apps.ai.views.services.send_message", return_value=mock_reply
+        ) as mock_svc:
             response = auth_client.post(
                 reverse("ai-conversation-message", kwargs={"pk": conv.pk}),
                 {"content": "What loads are active?"},

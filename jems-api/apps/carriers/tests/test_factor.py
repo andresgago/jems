@@ -31,14 +31,18 @@ class TestFactor:
 
     def test_create_factor(self, auth_client):
         client, _ = auth_client
-        response = client.post(reverse("factor-list"), {"value": "2000.00", "percent": "2.25"})
+        response = client.post(
+            reverse("factor-list"), {"value": "2000.00", "percent": "2.25"}
+        )
         assert response.status_code == status.HTTP_201_CREATED
         assert float(response.data["value"]) == 2000.0
 
     def test_duplicate_value_rejected(self, auth_client):
         client, _ = auth_client
         Factor.objects.create(value="3000.00", percent="2.00")
-        response = client.post(reverse("factor-list"), {"value": "3000.00", "percent": "1.50"})
+        response = client.post(
+            reverse("factor-list"), {"value": "3000.00", "percent": "1.50"}
+        )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_update_factor(self, auth_client):

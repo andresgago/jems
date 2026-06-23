@@ -3,7 +3,11 @@ import datetime
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.accounting.models import Account, Category, DriverInvoice, OwnerInvoice, Record
+from apps.accounting.models import (
+    DriverInvoice,
+    OwnerInvoice,
+    Record,
+)
 from apps.accounting.services import (
     close_driver_invoice,
     close_owner_invoice,
@@ -64,7 +68,9 @@ class TestCreateCategory:
 class TestCreateRecord:
     def test_creates_record(self):
         account = AccountFactory()
-        record = create_record(date=datetime.date.today(), amount=250.0, account=account)
+        record = create_record(
+            date=datetime.date.today(), amount=250.0, account=account
+        )
         assert record.pk is not None
         assert record.amount == 250.0
 
@@ -84,7 +90,9 @@ class TestCreateRecord:
 class TestDriverInvoice:
     def test_creates_with_auto_number(self):
         driver = DriverFactory()
-        invoice = create_driver_invoice(driver=driver, date=datetime.date.today(), percent=25.0)
+        invoice = create_driver_invoice(
+            driver=driver, date=datetime.date.today(), percent=25.0
+        )
         assert invoice.pk is not None
         assert invoice.number >= 1
         assert invoice.status == DriverInvoice.Status.OPEN
@@ -110,7 +118,9 @@ class TestDriverInvoice:
 class TestOwnerInvoice:
     def test_creates_with_auto_number(self):
         owner = TruckOwnerFactory()
-        invoice = create_owner_invoice(owner=owner, date=datetime.date.today(), percent=80.0)
+        invoice = create_owner_invoice(
+            owner=owner, date=datetime.date.today(), percent=80.0
+        )
         assert invoice.pk is not None
         assert invoice.number >= 1
         assert invoice.status == OwnerInvoice.Status.OPEN

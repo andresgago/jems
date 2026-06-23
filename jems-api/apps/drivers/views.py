@@ -28,7 +28,9 @@ class DriverTypeViewSet(ViewSet):
     def create(self, request: Request) -> Response:
         name = request.data.get("name", "").strip()
         driver_type = services.create_driver_type(name=name)
-        return Response(DriverTypeSerializer(driver_type).data, status=status.HTTP_201_CREATED)
+        return Response(
+            DriverTypeSerializer(driver_type).data, status=status.HTTP_201_CREATED
+        )
 
 
 class DriverViewSet(ViewSet):
@@ -43,20 +45,28 @@ class DriverViewSet(ViewSet):
         return Response(DriverListSerializer(drivers, many=True).data)
 
     def retrieve(self, request: Request, pk: int) -> Response:
-        driver = Driver.objects.select_related(
-            "driver_type", "license_state", "fuel_card", "team_driver", "carrier"
-        ).prefetch_related("documents").get(pk=pk)
+        driver = (
+            Driver.objects.select_related(
+                "driver_type", "license_state", "fuel_card", "team_driver", "carrier"
+            )
+            .prefetch_related("documents")
+            .get(pk=pk)
+        )
         return Response(DriverSerializer(driver).data)
 
     def create(self, request: Request) -> Response:
         serializer = DriverCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        driver = services.create_driver(created_by=request.user, **serializer.validated_data)
+        driver = services.create_driver(
+            created_by=request.user, **serializer.validated_data
+        )
         return Response(DriverSerializer(driver).data, status=status.HTTP_201_CREATED)
 
     def update(self, request: Request, pk: int) -> Response:
         driver = Driver.objects.get(pk=pk)
-        serializer = DriverCreateUpdateSerializer(driver, data=request.data, partial=True)
+        serializer = DriverCreateUpdateSerializer(
+            driver, data=request.data, partial=True
+        )
         serializer.is_valid(raise_exception=True)
         driver = services.update_driver(driver=driver, **serializer.validated_data)
         return Response(DriverSerializer(driver).data)
@@ -79,7 +89,9 @@ class DriverViewSet(ViewSet):
         serializer = DocumentUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         document = services.upload_document(driver=driver, **serializer.validated_data)
-        return Response(DriverDocumentSerializer(document).data, status=status.HTTP_201_CREATED)
+        return Response(
+            DriverDocumentSerializer(document).data, status=status.HTTP_201_CREATED
+        )
 
     @action(detail=True, methods=["get"], url_path="documents")
     def list_documents(self, request: Request, pk: int) -> Response:
@@ -91,15 +103,21 @@ class DriverVacationViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request: Request, driver_pk: int) -> Response:
-        vacations = DriverVacation.objects.filter(driver_id=driver_pk).order_by("-start")
+        vacations = DriverVacation.objects.filter(driver_id=driver_pk).order_by(
+            "-start"
+        )
         return Response(DriverVacationSerializer(vacations, many=True).data)
 
     def create(self, request: Request, driver_pk: int) -> Response:
         driver = Driver.objects.get(pk=driver_pk)
         serializer = DriverVacationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        vacation = DriverVacation.objects.create(driver=driver, **serializer.validated_data)
-        return Response(DriverVacationSerializer(vacation).data, status=status.HTTP_201_CREATED)
+        vacation = DriverVacation.objects.create(
+            driver=driver, **serializer.validated_data
+        )
+        return Response(
+            DriverVacationSerializer(vacation).data, status=status.HTTP_201_CREATED
+        )
 
     def destroy(self, request: Request, driver_pk: int, pk: int) -> Response:
         try:

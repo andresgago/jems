@@ -5,7 +5,10 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.dispatch.models import DispatcherWorkInvoiceByHour, DispatcherWorkInvoiceByPercent
+from apps.dispatch.models import (
+    DispatcherWorkInvoiceByHour,
+    DispatcherWorkInvoiceByPercent,
+)
 from apps.dispatch.tests.factories import (
     DispatcherWorkFactory,
     DispatcherWorkInvoiceByHourFactory,
@@ -32,6 +35,7 @@ def auth_client(api_client):
 
 # ── Dispatcher Work ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestDispatcherWorkList:
     def test_lists_work_sessions(self, auth_client):
@@ -50,7 +54,9 @@ class TestDispatcherWorkList:
         user = UserFactory()
         DispatcherWorkFactory(dispatcher=user)
         DispatcherWorkFactory()
-        response = client.get(reverse("dispatcher-work-list") + f"?dispatcher={user.pk}")
+        response = client.get(
+            reverse("dispatcher-work-list") + f"?dispatcher={user.pk}"
+        )
         assert response.status_code == status.HTTP_200_OK
         assert all(w["dispatcher"] == user.pk for w in response.data)
 
@@ -93,7 +99,9 @@ class TestDispatcherWorkDetail:
     def test_deletes_work(self, auth_client):
         client, _ = auth_client
         work = DispatcherWorkFactory()
-        response = client.delete(reverse("dispatcher-work-detail", kwargs={"pk": work.pk}))
+        response = client.delete(
+            reverse("dispatcher-work-detail", kwargs={"pk": work.pk})
+        )
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
@@ -102,14 +110,18 @@ class TestDispatcherWorkFinish:
     def test_finishes_work(self, auth_client):
         client, _ = auth_client
         work = DispatcherWorkFactory(is_finished=False)
-        response = client.post(reverse("dispatcher-work-finish", kwargs={"pk": work.pk}))
+        response = client.post(
+            reverse("dispatcher-work-finish", kwargs={"pk": work.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["is_finished"] is True
 
     def test_finish_already_finished_returns_400(self, auth_client):
         client, _ = auth_client
         work = DispatcherWorkFactory(is_finished=True)
-        response = client.post(reverse("dispatcher-work-finish", kwargs={"pk": work.pk}))
+        response = client.post(
+            reverse("dispatcher-work-finish", kwargs={"pk": work.pk})
+        )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -118,12 +130,15 @@ class TestDispatcherWorkMarkPaid:
     def test_marks_work_as_paid(self, auth_client):
         client, _ = auth_client
         work = DispatcherWorkFactory(is_paid=False)
-        response = client.post(reverse("dispatcher-work-mark-paid", kwargs={"pk": work.pk}))
+        response = client.post(
+            reverse("dispatcher-work-mark-paid", kwargs={"pk": work.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["is_paid"] is True
 
 
 # ── Invoice By Percent ────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestInvoiceByPercentList:
@@ -136,14 +151,21 @@ class TestInvoiceByPercentList:
 
     def test_filter_by_status(self, auth_client):
         client, _ = auth_client
-        DispatcherWorkInvoiceByPercentFactory(status=DispatcherWorkInvoiceByPercent.Status.OPEN)
-        DispatcherWorkInvoiceByPercentFactory(status=DispatcherWorkInvoiceByPercent.Status.CLOSED)
+        DispatcherWorkInvoiceByPercentFactory(
+            status=DispatcherWorkInvoiceByPercent.Status.OPEN
+        )
+        DispatcherWorkInvoiceByPercentFactory(
+            status=DispatcherWorkInvoiceByPercent.Status.CLOSED
+        )
         response = client.get(
             reverse("dispatch-invoice-percent-list")
             + f"?status={DispatcherWorkInvoiceByPercent.Status.OPEN}"
         )
         assert response.status_code == status.HTTP_200_OK
-        assert all(i["status"] == DispatcherWorkInvoiceByPercent.Status.OPEN for i in response.data)
+        assert all(
+            i["status"] == DispatcherWorkInvoiceByPercent.Status.OPEN
+            for i in response.data
+        )
 
 
 @pytest.mark.django_db
@@ -188,6 +210,7 @@ class TestInvoiceByPercentCloseOpen:
 
 
 # ── Invoice By Hour ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestInvoiceByHourList:

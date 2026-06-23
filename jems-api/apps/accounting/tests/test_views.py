@@ -32,6 +32,7 @@ def auth_client(api_client):
 
 # ── Accounts ──────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestAccountList:
     def test_lists_accounts(self, auth_client):
@@ -58,11 +59,14 @@ class TestAccountCreate:
     def test_duplicate_code_rejected(self, auth_client):
         client, _ = auth_client
         AccountFactory(code="DUP001")
-        response = client.post(reverse("account-list"), {"code": "DUP001", "name": "Dup"})
+        response = client.post(
+            reverse("account-list"), {"code": "DUP001", "name": "Dup"}
+        )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 # ── Categories ────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestCategoryList:
@@ -76,6 +80,7 @@ class TestCategoryList:
 
 
 # ── Records ───────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestRecordList:
@@ -123,6 +128,7 @@ class TestRecordDelete:
 
 # ── Driver Invoices ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestDriverInvoiceList:
     def test_lists_invoices(self, auth_client):
@@ -136,7 +142,9 @@ class TestDriverInvoiceList:
         client, _ = auth_client
         DriverInvoiceFactory(status=DriverInvoice.Status.OPEN)
         DriverInvoiceFactory(status=DriverInvoice.Status.CLOSED)
-        response = client.get(reverse("driver-invoice-list") + f"?status={DriverInvoice.Status.OPEN}")
+        response = client.get(
+            reverse("driver-invoice-list") + f"?status={DriverInvoice.Status.OPEN}"
+        )
         assert response.status_code == status.HTTP_200_OK
         assert all(i["status"] == DriverInvoice.Status.OPEN for i in response.data)
 
@@ -146,7 +154,11 @@ class TestDriverInvoiceCreate:
     def test_creates_invoice(self, auth_client):
         client, _ = auth_client
         driver = DriverFactory()
-        payload = {"driver": driver.pk, "date": str(datetime.date.today()), "percent": 25.0}
+        payload = {
+            "driver": driver.pk,
+            "date": str(datetime.date.today()),
+            "percent": 25.0,
+        }
         response = client.post(reverse("driver-invoice-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["percent"] == 25.0
@@ -157,19 +169,24 @@ class TestDriverInvoiceClose:
     def test_closes_invoice(self, auth_client):
         client, _ = auth_client
         invoice = DriverInvoiceFactory(status=DriverInvoice.Status.OPEN)
-        response = client.post(reverse("driver-invoice-close", kwargs={"pk": invoice.pk}))
+        response = client.post(
+            reverse("driver-invoice-close", kwargs={"pk": invoice.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == DriverInvoice.Status.CLOSED
 
     def test_opens_invoice(self, auth_client):
         client, _ = auth_client
         invoice = DriverInvoiceFactory(status=DriverInvoice.Status.CLOSED)
-        response = client.post(reverse("driver-invoice-open", kwargs={"pk": invoice.pk}))
+        response = client.post(
+            reverse("driver-invoice-open", kwargs={"pk": invoice.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == DriverInvoice.Status.OPEN
 
 
 # ── Owner Invoices ────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestOwnerInvoiceList:
@@ -186,7 +203,11 @@ class TestOwnerInvoiceCreate:
     def test_creates_invoice(self, auth_client):
         client, _ = auth_client
         owner = TruckOwnerFactory()
-        payload = {"owner": owner.pk, "date": str(datetime.date.today()), "percent": 80.0}
+        payload = {
+            "owner": owner.pk,
+            "date": str(datetime.date.today()),
+            "percent": 80.0,
+        }
         response = client.post(reverse("owner-invoice-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["percent"] == 80.0
@@ -197,6 +218,8 @@ class TestOwnerInvoiceClose:
     def test_closes_invoice(self, auth_client):
         client, _ = auth_client
         invoice = TruckOwnerInvoiceFactory(status=OwnerInvoice.Status.OPEN)
-        response = client.post(reverse("owner-invoice-close", kwargs={"pk": invoice.pk}))
+        response = client.post(
+            reverse("owner-invoice-close", kwargs={"pk": invoice.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == OwnerInvoice.Status.CLOSED

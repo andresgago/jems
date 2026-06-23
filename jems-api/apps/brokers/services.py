@@ -42,7 +42,9 @@ def delete_broker(*, broker: Broker) -> None:
     broker.delete()
 
 
-def create_broker_contact(*, broker: Broker, name: str, email: str, **kwargs: Any) -> BrokerContact:
+def create_broker_contact(
+    *, broker: Broker, name: str, email: str, **kwargs: Any
+) -> BrokerContact:
     if BrokerContact.objects.filter(email=email).exists():
         raise ValidationError(f"Contact with email '{email}' already exists.")
     contact = BrokerContact(broker=broker, name=name, email=email, **kwargs)

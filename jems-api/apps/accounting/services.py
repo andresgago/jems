@@ -2,8 +2,7 @@ from typing import Any, Optional
 
 from django.core.exceptions import ValidationError
 
-from .models import Account, Category, CategoryType, DriverInvoice, OwnerInvoice, Record
-
+from .models import Account, Category, DriverInvoice, OwnerInvoice, Record
 
 # ── Accounts ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +70,11 @@ def delete_record(*, record: Record) -> None:
 
 
 def create_driver_invoice(*, driver: Any, date: Any, **kwargs: Any) -> DriverInvoice:
-    last = DriverInvoice.objects.order_by("-number").values_list("number", flat=True).first()
+    last = (
+        DriverInvoice.objects.order_by("-number")
+        .values_list("number", flat=True)
+        .first()
+    )
     number = (last or 0) + 1
     invoice = DriverInvoice(driver=driver, date=date, number=number, **kwargs)
     invoice.full_clean()
@@ -87,7 +90,9 @@ def update_driver_invoice(*, invoice: DriverInvoice, **kwargs: Any) -> DriverInv
     return invoice
 
 
-def close_driver_invoice(*, invoice: DriverInvoice, updated_by: Optional[Any] = None) -> DriverInvoice:
+def close_driver_invoice(
+    *, invoice: DriverInvoice, updated_by: Optional[Any] = None
+) -> DriverInvoice:
     if invoice.status == DriverInvoice.Status.CLOSED:
         raise ValueError("Invoice is already closed.")
     invoice.status = DriverInvoice.Status.CLOSED
@@ -97,7 +102,9 @@ def close_driver_invoice(*, invoice: DriverInvoice, updated_by: Optional[Any] = 
     return invoice
 
 
-def open_driver_invoice(*, invoice: DriverInvoice, updated_by: Optional[Any] = None) -> DriverInvoice:
+def open_driver_invoice(
+    *, invoice: DriverInvoice, updated_by: Optional[Any] = None
+) -> DriverInvoice:
     invoice.status = DriverInvoice.Status.OPEN
     if updated_by:
         invoice.updated_by = updated_by
@@ -113,7 +120,11 @@ def delete_driver_invoice(*, invoice: DriverInvoice) -> None:
 
 
 def create_owner_invoice(*, owner: Any, date: Any, **kwargs: Any) -> OwnerInvoice:
-    last = OwnerInvoice.objects.order_by("-number").values_list("number", flat=True).first()
+    last = (
+        OwnerInvoice.objects.order_by("-number")
+        .values_list("number", flat=True)
+        .first()
+    )
     number = (last or 0) + 1
     invoice = OwnerInvoice(owner=owner, date=date, number=number, **kwargs)
     invoice.full_clean()
@@ -129,7 +140,9 @@ def update_owner_invoice(*, invoice: OwnerInvoice, **kwargs: Any) -> OwnerInvoic
     return invoice
 
 
-def close_owner_invoice(*, invoice: OwnerInvoice, updated_by: Optional[Any] = None) -> OwnerInvoice:
+def close_owner_invoice(
+    *, invoice: OwnerInvoice, updated_by: Optional[Any] = None
+) -> OwnerInvoice:
     invoice.status = OwnerInvoice.Status.CLOSED
     if updated_by:
         invoice.updated_by = updated_by
@@ -137,7 +150,9 @@ def close_owner_invoice(*, invoice: OwnerInvoice, updated_by: Optional[Any] = No
     return invoice
 
 
-def open_owner_invoice(*, invoice: OwnerInvoice, updated_by: Optional[Any] = None) -> OwnerInvoice:
+def open_owner_invoice(
+    *, invoice: OwnerInvoice, updated_by: Optional[Any] = None
+) -> OwnerInvoice:
     invoice.status = OwnerInvoice.Status.OPEN
     if updated_by:
         invoice.updated_by = updated_by

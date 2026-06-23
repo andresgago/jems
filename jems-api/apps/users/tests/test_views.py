@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.users.models import User
-from apps.users.tests.factories import AdminUserFactory, DispatcherFactory, UserFactory
+from apps.users.tests.factories import AdminUserFactory, UserFactory
 
 
 @pytest.fixture
@@ -88,7 +88,9 @@ class TestToggleDispatcher:
     def test_admin_can_toggle_dispatcher(self, admin_client):
         client, _ = admin_client
         user = UserFactory(is_dispatcher=False)
-        response = client.post(reverse("user-toggle-dispatcher", kwargs={"pk": user.pk}))
+        response = client.post(
+            reverse("user-toggle-dispatcher", kwargs={"pk": user.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["is_dispatcher"] is True
 

@@ -12,28 +12,38 @@ from .views import (
 
 # Accounts
 account_list = AccountViewSet.as_view({"get": "list", "post": "create"})
-account_detail = AccountViewSet.as_view({"get": "retrieve", "put": "update", "patch": "update"})
+account_detail = AccountViewSet.as_view(
+    {"get": "retrieve", "put": "update", "patch": "update"}
+)
 
 # Category types
 category_type_list = CategoryTypeViewSet.as_view({"get": "list", "post": "create"})
 
 # Categories
 category_list = CategoryViewSet.as_view({"get": "list", "post": "create"})
-category_detail = CategoryViewSet.as_view({"get": "retrieve", "put": "update", "patch": "update"})
+category_detail = CategoryViewSet.as_view(
+    {"get": "retrieve", "put": "update", "patch": "update"}
+)
 
 # Records
 record_list = RecordViewSet.as_view({"get": "list", "post": "create"})
-record_detail = RecordViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"})
+record_detail = RecordViewSet.as_view(
+    {"get": "retrieve", "put": "update", "delete": "destroy"}
+)
 
 # Driver invoices
 di_list = DriverInvoiceViewSet.as_view({"get": "list", "post": "create"})
-di_detail = DriverInvoiceViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"})
+di_detail = DriverInvoiceViewSet.as_view(
+    {"get": "retrieve", "put": "update", "delete": "destroy"}
+)
 di_close = DriverInvoiceViewSet.as_view({"post": "close"})
 di_open = DriverInvoiceViewSet.as_view({"post": "open"})
 
 # Owner invoices
 oi_list = OwnerInvoiceViewSet.as_view({"get": "list", "post": "create"})
-oi_detail = OwnerInvoiceViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"})
+oi_detail = OwnerInvoiceViewSet.as_view(
+    {"get": "retrieve", "put": "update", "delete": "destroy"}
+)
 oi_close = OwnerInvoiceViewSet.as_view({"post": "close"})
 oi_open = OwnerInvoiceViewSet.as_view({"post": "open"})
 

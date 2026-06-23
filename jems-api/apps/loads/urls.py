@@ -4,7 +4,9 @@ from .views import CitySearchView, LoadStopViewSet, LoadViewSet
 
 # Loads
 load_list = LoadViewSet.as_view({"get": "list", "post": "create"})
-load_detail = LoadViewSet.as_view({"get": "retrieve", "put": "update", "patch": "update", "delete": "destroy"})
+load_detail = LoadViewSet.as_view(
+    {"get": "retrieve", "put": "update", "patch": "update", "delete": "destroy"}
+)
 load_assign = LoadViewSet.as_view({"post": "assign"})
 load_set_status = LoadViewSet.as_view({"post": "set_status"})
 load_set_invoiced = LoadViewSet.as_view({"post": "toggle_invoiced"})
@@ -13,7 +15,9 @@ load_set_history = LoadViewSet.as_view({"post": "toggle_history"})
 load_stops = LoadViewSet.as_view({"get": "stops", "post": "stops"})
 
 # Stops detail
-stop_detail = LoadStopViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"})
+stop_detail = LoadStopViewSet.as_view(
+    {"get": "retrieve", "put": "update", "delete": "destroy"}
+)
 
 # City search
 city_search = CitySearchView.as_view({"get": "search"})

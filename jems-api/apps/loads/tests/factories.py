@@ -97,7 +97,9 @@ class LoadFactory(DjangoModelFactory):
 
     number = factory.Sequence(lambda n: f"LD-{n:05d}")
     pickup_date = factory.LazyFunction(lambda: datetime.date.today())
-    dropoff_date = factory.LazyFunction(lambda: datetime.date.today() + datetime.timedelta(days=2))
+    dropoff_date = factory.LazyFunction(
+        lambda: datetime.date.today() + datetime.timedelta(days=2)
+    )
     pickup_city = factory.SubFactory(CityFactory)
     dropoff_city = factory.SubFactory(CityFactory)
     pickup_address = "123 Main St"
@@ -116,7 +118,9 @@ class LoadStopFactory(DjangoModelFactory):
     load = factory.SubFactory(LoadFactory)
     stop_type = LoadStop.StopType.PICKUP
     from_date = factory.LazyFunction(lambda: datetime.date.today())
-    to_date = factory.LazyFunction(lambda: datetime.date.today() + datetime.timedelta(days=1))
+    to_date = factory.LazyFunction(
+        lambda: datetime.date.today() + datetime.timedelta(days=1)
+    )
     address = "789 Stop Rd"
     city = factory.SubFactory(CityFactory)
     business = factory.SubFactory(BusinessFactory)

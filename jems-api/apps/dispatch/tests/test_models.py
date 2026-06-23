@@ -3,9 +3,9 @@ import zoneinfo
 
 import pytest
 
-UTC = zoneinfo.ZoneInfo("UTC")
-
 from apps.dispatch.tests.factories import DispatcherWorkFactory
+
+UTC = zoneinfo.ZoneInfo("UTC")
 
 
 @pytest.mark.django_db

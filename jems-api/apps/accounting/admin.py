@@ -24,7 +24,16 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Record)
 class RecordAdmin(admin.ModelAdmin):
-    list_display = ["id", "date", "account", "amount", "record_type", "driver", "truck", "load"]
+    list_display = [
+        "id",
+        "date",
+        "account",
+        "amount",
+        "record_type",
+        "driver",
+        "truck",
+        "load",
+    ]
     list_filter = ["record_type", "is_automatic"]
     search_fields = ["detail", "transaction_number"]
     date_hierarchy = "date"

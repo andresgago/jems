@@ -36,7 +36,11 @@ class BrokerViewSet(ViewSet):
 
     def retrieve(self, request, pk=None):
         try:
-            broker = Broker.objects.prefetch_related("contacts").select_related("carrier").get(pk=pk)
+            broker = (
+                Broker.objects.prefetch_related("contacts")
+                .select_related("carrier")
+                .get(pk=pk)
+            )
         except Broker.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(BrokerSerializer(broker).data)
@@ -78,18 +82,26 @@ class BrokerViewSet(ViewSet):
         if not q:
             return Response([])
         brokers = (
-            Broker.objects.filter(status=Broker.Status.ACTIVE)
-            .filter(name__icontains=q)
+            Broker.objects.filter(status=Broker.Status.ACTIVE).filter(name__icontains=q)
             | Broker.objects.filter(status=Broker.Status.ACTIVE).filter(mc__icontains=q)
-            | Broker.objects.filter(status=Broker.Status.ACTIVE).filter(dba_name__icontains=q)
+            | Broker.objects.filter(status=Broker.Status.ACTIVE).filter(
+                dba_name__icontains=q
+            )
         ).order_by("name")[:20]
         serializer = BrokerListSerializer(brokers, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="options")
     def options_list(self, request):
-        brokers = Broker.objects.filter(status=Broker.Status.ACTIVE).values("id", "name", "mc", "dba_name").order_by("name")
-        data = [{"id": b["id"], "label": f"{b['name']}, {b['mc']} ({b['dba_name']})"} for b in brokers]
+        brokers = (
+            Broker.objects.filter(status=Broker.Status.ACTIVE)
+            .values("id", "name", "mc", "dba_name")
+            .order_by("name")
+        )
+        data = [
+            {"id": b["id"], "label": f"{b['name']}, {b['mc']} ({b['dba_name']})"}
+            for b in brokers
+        ]
         return Response(data)
 
     @action(detail=True, methods=["get"], url_path="contacts")
@@ -127,7 +139,9 @@ class BrokerContactViewSet(ViewSet):
         data = serializer.validated_data
         data.pop("broker", None)
         contact = create_broker_contact(broker=broker, **data)
-        return Response(BrokerContactSerializer(contact).data, status=status.HTTP_201_CREATED)
+        return Response(
+            BrokerContactSerializer(contact).data, status=status.HTTP_201_CREATED
+        )
 
     def retrieve(self, request, pk=None, broker_pk=None):
         try:

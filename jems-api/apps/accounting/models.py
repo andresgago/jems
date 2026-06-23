@@ -101,7 +101,9 @@ class Record(models.Model):
     quantity = models.FloatField(default=1.0)
     amount = models.FloatField(default=0.0)
     detail = models.TextField(blank=True, default="")
-    record_type = models.IntegerField(choices=RecordType.choices, default=RecordType.EXPENSE)
+    record_type = models.IntegerField(
+        choices=RecordType.choices, default=RecordType.EXPENSE
+    )
     # Linked entities
     load = models.ForeignKey(
         "loads.Load",
@@ -276,7 +278,9 @@ class OwnerInvoice(models.Model):
         related_name="invoices",
     )
     date = models.DateField()
-    owner_type = models.CharField(max_length=20, choices=OwnerType.choices, blank=True, default="")
+    owner_type = models.CharField(
+        max_length=20, choices=OwnerType.choices, blank=True, default=""
+    )
     contract = models.IntegerField(default=0)
     percent = models.FloatField(default=0.0)
     status = models.IntegerField(choices=Status.choices, default=Status.OPEN)

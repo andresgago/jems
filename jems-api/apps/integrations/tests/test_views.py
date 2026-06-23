@@ -1,5 +1,3 @@
-import datetime
-
 import pytest
 from django.urls import reverse
 from rest_framework import status
@@ -31,6 +29,7 @@ def auth_client(api_client):
 
 # ── RtlDriver ─────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestRtlDriverViews:
     def test_list(self, auth_client):
@@ -48,14 +47,18 @@ class TestRtlDriverViews:
 
     def test_retrieve(self, auth_client):
         driver = RtlDriverFactory()
-        response = auth_client.get(reverse("rtl-driver-detail", kwargs={"pk": driver.pk}))
+        response = auth_client.get(
+            reverse("rtl-driver-detail", kwargs={"pk": driver.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["rtl_id"] == driver.rtl_id
 
     def test_retrieve_includes_status(self, auth_client):
         driver = RtlDriverFactory()
         RtlDriverStatusFactory(rtl_driver=driver)
-        response = auth_client.get(reverse("rtl-driver-detail", kwargs={"pk": driver.pk}))
+        response = auth_client.get(
+            reverse("rtl-driver-detail", kwargs={"pk": driver.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["latest_status"] is not None
 
@@ -65,6 +68,7 @@ class TestRtlDriverViews:
 
 
 # ── RtlTruck ──────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestRtlTruckViews:
@@ -88,6 +92,7 @@ class TestRtlTruckViews:
 
 # ── RtlIfta ───────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestRtlIftaViews:
     def test_list(self, auth_client):
@@ -105,6 +110,7 @@ class TestRtlIftaViews:
 
 
 # ── ReportIFTA ────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestReportIFTAViews:
@@ -136,6 +142,7 @@ class TestReportIFTAViews:
 
 
 # ── Sync endpoint ─────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestRtlSync:

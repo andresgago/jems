@@ -1,6 +1,10 @@
 from rest_framework import serializers
 
-from .models import DispatcherWork, DispatcherWorkInvoiceByHour, DispatcherWorkInvoiceByPercent
+from .models import (
+    DispatcherWork,
+    DispatcherWorkInvoiceByHour,
+    DispatcherWorkInvoiceByPercent,
+)
 
 
 class DispatcherWorkInvoiceByPercentSerializer(serializers.ModelSerializer):

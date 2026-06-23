@@ -29,10 +29,18 @@ class LoadViewSet(ViewSet):
 
     def _base_queryset(self):
         return Load.objects.select_related(
-            "broker", "dispatcher", "driver", "team_driver",
-            "truck", "trailer", "trailer_type",
-            "pickup_city", "dropoff_city",
-            "shipper", "receiver", "carrier",
+            "broker",
+            "dispatcher",
+            "driver",
+            "team_driver",
+            "truck",
+            "trailer",
+            "trailer_type",
+            "pickup_city",
+            "dropoff_city",
+            "shipper",
+            "receiver",
+            "carrier",
         ).prefetch_related("stops")
 
     def list(self, request):
@@ -138,9 +146,13 @@ class LoadViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         new_status = request.data.get("status")
         if new_status is None:
-            return Response({"error": "status is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "status is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         try:
-            load = set_load_status(load=load, new_status=int(new_status), updated_by=request.user)
+            load = set_load_status(
+                load=load, new_status=int(new_status), updated_by=request.user
+            )
         except InvalidStatusTransition as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(LoadSerializer(load).data)
@@ -182,7 +194,9 @@ class LoadViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
         if request.method == "GET":
-            stops = LoadStop.objects.filter(load=load).order_by("from_date", "stop_type")
+            stops = LoadStop.objects.filter(load=load).order_by(
+                "from_date", "stop_type"
+            )
             return Response(LoadStopSerializer(stops, many=True).data)
 
         # POST — create stop
@@ -240,9 +254,16 @@ class CitySearchView(ViewSet):
         q = request.query_params.get("q", "").strip()
         if not q:
             return Response([])
-        cities = City.objects.filter(active=True, name__icontains=q).select_related("state")[:20]
+        cities = City.objects.filter(active=True, name__icontains=q).select_related(
+            "state"
+        )[:20]
         data = [
-            {"id": c.pk, "name": c.name, "state": c.state.abbreviation if c.state else "", "zip": c.zip}
+            {
+                "id": c.pk,
+                "name": c.name,
+                "state": c.state.abbreviation if c.state else "",
+                "zip": c.zip,
+            }
             for c in cities
         ]
         return Response(data)

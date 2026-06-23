@@ -4,7 +4,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
-from .models import Account, CardGain, Category, CategoryType, DriverInvoice, OwnerInvoice, Record
+from .models import (
+    Account,
+    CardGain,
+    Category,
+    CategoryType,
+    DriverInvoice,
+    OwnerInvoice,
+    Record,
+)
 from .serializers import (
     AccountSerializer,
     CardGainSerializer,
@@ -94,7 +102,9 @@ class CategoryViewSet(ViewSet):
         serializer = CategorySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         category = create_category(**serializer.validated_data)
-        return Response(CategorySerializer(category).data, status=status.HTTP_201_CREATED)
+        return Response(
+            CategorySerializer(category).data, status=status.HTTP_201_CREATED
+        )
 
     def retrieve(self, request, pk=None):
         try:
@@ -119,8 +129,17 @@ class RecordViewSet(ViewSet):
 
     def _base_qs(self):
         return Record.objects.select_related(
-            "account", "load", "truck", "trailer", "driver", "owner",
-            "category", "dispatcher", "city", "card", "created_by",
+            "account",
+            "load",
+            "truck",
+            "trailer",
+            "driver",
+            "owner",
+            "category",
+            "dispatcher",
+            "city",
+            "card",
+            "created_by",
         )
 
     def list(self, request):
@@ -166,7 +185,9 @@ class RecordViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = RecordSerializer(record, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        record = update_record(record=record, updated_by=request.user, **serializer.validated_data)
+        record = update_record(
+            record=record, updated_by=request.user, **serializer.validated_data
+        )
         return Response(RecordSerializer(record).data)
 
     def destroy(self, request, pk=None):
@@ -194,9 +215,13 @@ class DriverInvoiceViewSet(ViewSet):
     def create(self, request):
         serializer = DriverInvoiceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        data = {k: v for k, v in serializer.validated_data.items() if k not in ("number",)}
+        data = {
+            k: v for k, v in serializer.validated_data.items() if k not in ("number",)
+        }
         invoice = create_driver_invoice(created_by=request.user, **data)
-        return Response(DriverInvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
+        return Response(
+            DriverInvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED
+        )
 
     def retrieve(self, request, pk=None):
         try:
@@ -212,8 +237,12 @@ class DriverInvoiceViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = DriverInvoiceSerializer(invoice, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        data = {k: v for k, v in serializer.validated_data.items() if k not in ("number",)}
-        invoice = update_driver_invoice(invoice=invoice, updated_by=request.user, **data)
+        data = {
+            k: v for k, v in serializer.validated_data.items() if k not in ("number",)
+        }
+        invoice = update_driver_invoice(
+            invoice=invoice, updated_by=request.user, **data
+        )
         return Response(DriverInvoiceSerializer(invoice).data)
 
     def destroy(self, request, pk=None):
@@ -262,9 +291,13 @@ class OwnerInvoiceViewSet(ViewSet):
     def create(self, request):
         serializer = OwnerInvoiceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        data = {k: v for k, v in serializer.validated_data.items() if k not in ("number",)}
+        data = {
+            k: v for k, v in serializer.validated_data.items() if k not in ("number",)
+        }
         invoice = create_owner_invoice(created_by=request.user, **data)
-        return Response(OwnerInvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
+        return Response(
+            OwnerInvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED
+        )
 
     def retrieve(self, request, pk=None):
         try:
@@ -280,7 +313,9 @@ class OwnerInvoiceViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = OwnerInvoiceSerializer(invoice, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        data = {k: v for k, v in serializer.validated_data.items() if k not in ("number",)}
+        data = {
+            k: v for k, v in serializer.validated_data.items() if k not in ("number",)
+        }
         invoice = update_owner_invoice(invoice=invoice, updated_by=request.user, **data)
         return Response(OwnerInvoiceSerializer(invoice).data)
 

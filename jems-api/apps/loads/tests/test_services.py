@@ -18,13 +18,11 @@ from apps.loads.services import (
 )
 from apps.loads.tests.factories import (
     BrokerFactory,
-    CarrierFactory,
     CityFactory,
     DriverFactory,
     LoadFactory,
     LoadStopFactory,
     TruckFactory,
-    UserFactory,
 )
 
 

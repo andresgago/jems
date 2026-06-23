@@ -40,7 +40,9 @@ class TestCardGain:
         client, _ = auth_client
         other_card = Card.objects.create(number="FLEET-002")
         CardGain.objects.create(card=card, date=datetime.date(2024, 1, 10), gain=100.0)
-        CardGain.objects.create(card=other_card, date=datetime.date(2024, 1, 11), gain=200.0)
+        CardGain.objects.create(
+            card=other_card, date=datetime.date(2024, 1, 11), gain=200.0
+        )
         response = client.get(reverse("card-gain-list") + f"?card={card.pk}")
         assert response.status_code == status.HTTP_200_OK
         assert all(g["card"] == card.pk for g in response.data)
@@ -56,7 +58,9 @@ class TestCardGain:
 
     def test_delete_gain(self, auth_client, card):
         client, _ = auth_client
-        gain = CardGain.objects.create(card=card, date=datetime.date(2024, 1, 15), gain=75.0)
+        gain = CardGain.objects.create(
+            card=card, date=datetime.date(2024, 1, 15), gain=75.0
+        )
         response = client.delete(reverse("card-gain-detail", kwargs={"pk": gain.pk}))
         assert response.status_code == status.HTTP_204_NO_CONTENT
 

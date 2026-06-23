@@ -3,7 +3,6 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.carriers.models import Carrier
 from apps.carriers.tests.factories import CarrierFactory
 from apps.users.tests.factories import UserFactory
 
@@ -38,7 +37,11 @@ class TestCarrierList:
 class TestCarrierCreate:
     def test_create_carrier(self, auth_client):
         client, _ = auth_client
-        payload = {"mc": "MC999001", "dot_number": "DOT999001", "name": "New Carrier LLC"}
+        payload = {
+            "mc": "MC999001",
+            "dot_number": "DOT999001",
+            "name": "New Carrier LLC",
+        }
         response = client.post(reverse("carrier-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["mc"] == "MC999001"
@@ -46,7 +49,10 @@ class TestCarrierCreate:
     def test_duplicate_mc_rejected(self, auth_client):
         client, _ = auth_client
         CarrierFactory(mc="MCDUP001")
-        response = client.post(reverse("carrier-list"), {"mc": "MCDUP001", "dot_number": "DOT001", "name": "X"})
+        response = client.post(
+            reverse("carrier-list"),
+            {"mc": "MCDUP001", "dot_number": "DOT001", "name": "X"},
+        )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -70,14 +76,18 @@ class TestCarrierToggleStatus:
     def test_toggle_active_to_inactive(self, auth_client):
         client, _ = auth_client
         carrier = CarrierFactory(active=True)
-        response = client.post(reverse("carrier-toggle-status", kwargs={"pk": carrier.pk}))
+        response = client.post(
+            reverse("carrier-toggle-status", kwargs={"pk": carrier.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["active"] is False
 
     def test_toggle_inactive_to_active(self, auth_client):
         client, _ = auth_client
         carrier = CarrierFactory(active=False)
-        response = client.post(reverse("carrier-toggle-status", kwargs={"pk": carrier.pk}))
+        response = client.post(
+            reverse("carrier-toggle-status", kwargs={"pk": carrier.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["active"] is True
 

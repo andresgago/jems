@@ -1,3 +1,5 @@
+from typing import Any, ClassVar
+
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -7,9 +9,23 @@ from rest_framework.viewsets import ViewSet
 
 from . import services
 from .models import (
-    Accident, AccidentPicture, Card, CabinType, EngineType, LossPayee, Make,
-    Trailer, TrailerMaintenance, TransmissionType, Truck, TruckMaintenance,
-    TruckMilesReset, TruckOwner, TruckType, TrailerType, TireSize,
+    Accident,
+    AccidentPicture,
+    Card,
+    CabinType,
+    EngineType,
+    LossPayee,
+    Make,
+    Trailer,
+    TrailerMaintenance,
+    TransmissionType,
+    Truck,
+    TruckMaintenance,
+    TruckMilesReset,
+    TruckOwner,
+    TruckType,
+    TrailerType,
+    TireSize,
 )
 from .serializers import (
     AccidentCreateUpdateSerializer,
@@ -48,7 +64,9 @@ class TruckTypeViewSet(ViewSet):
     def create(self, request: Request) -> Response:
         name = request.data.get("name", "").strip()
         truck_type = TruckType.objects.create(name=name)
-        return Response(TruckTypeSerializer(truck_type).data, status=status.HTTP_201_CREATED)
+        return Response(
+            TruckTypeSerializer(truck_type).data, status=status.HTTP_201_CREATED
+        )
 
 
 class TrailerTypeViewSet(ViewSet):
@@ -61,14 +79,18 @@ class TrailerTypeViewSet(ViewSet):
     def create(self, request: Request) -> Response:
         name = request.data.get("name", "").strip()
         trailer_type = TrailerType.objects.create(name=name)
-        return Response(TrailerTypeSerializer(trailer_type).data, status=status.HTTP_201_CREATED)
+        return Response(
+            TrailerTypeSerializer(trailer_type).data, status=status.HTTP_201_CREATED
+        )
 
 
 class TruckOwnerViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request: Request) -> Response:
-        owners = TruckOwner.objects.filter(status=TruckOwner.Status.ACTIVE).order_by("first_name")
+        owners = TruckOwner.objects.filter(status=TruckOwner.Status.ACTIVE).order_by(
+            "first_name"
+        )
         return Response(TruckOwnerSerializer(owners, many=True).data)
 
     def retrieve(self, request: Request, pk: int) -> Response:
@@ -82,18 +104,24 @@ class TruckOwnerViewSet(ViewSet):
         serializer = TruckOwnerCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         owner = services.create_truck_owner(**serializer.validated_data)
-        return Response(TruckOwnerSerializer(owner).data, status=status.HTTP_201_CREATED)
+        return Response(
+            TruckOwnerSerializer(owner).data, status=status.HTTP_201_CREATED
+        )
 
     def update(self, request: Request, pk: int) -> Response:
         owner = TruckOwner.objects.get(pk=pk)
-        serializer = TruckOwnerCreateUpdateSerializer(owner, data=request.data, partial=True)
+        serializer = TruckOwnerCreateUpdateSerializer(
+            owner, data=request.data, partial=True
+        )
         serializer.is_valid(raise_exception=True)
         owner = services.update_truck_owner(owner=owner, **serializer.validated_data)
         return Response(TruckOwnerSerializer(owner).data)
 
     def partial_update(self, request: Request, pk: int) -> Response:
         owner = TruckOwner.objects.get(pk=pk)
-        serializer = TruckOwnerCreateUpdateSerializer(owner, data=request.data, partial=True)
+        serializer = TruckOwnerCreateUpdateSerializer(
+            owner, data=request.data, partial=True
+        )
         serializer.is_valid(raise_exception=True)
         owner = services.update_truck_owner(owner=owner, **serializer.validated_data)
         return Response(TruckOwnerSerializer(owner).data)
@@ -122,17 +150,31 @@ class TruckViewSet(ViewSet):
         return Response(TruckListSerializer(trucks, many=True).data)
 
     def retrieve(self, request: Request, pk: int) -> Response:
-        truck = Truck.objects.select_related(
-            "truck_type", "make", "engine_type", "cabin_type",
-            "transmission_type", "tire_size", "dispatcher",
-            "owner", "fuel_card", "carrier", "loss_payee"
-        ).prefetch_related("maintenance_records").get(pk=pk)
+        truck = (
+            Truck.objects.select_related(
+                "truck_type",
+                "make",
+                "engine_type",
+                "cabin_type",
+                "transmission_type",
+                "tire_size",
+                "dispatcher",
+                "owner",
+                "fuel_card",
+                "carrier",
+                "loss_payee",
+            )
+            .prefetch_related("maintenance_records")
+            .get(pk=pk)
+        )
         return Response(TruckSerializer(truck).data)
 
     def create(self, request: Request) -> Response:
         serializer = TruckCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        truck = services.create_truck(created_by=request.user, **serializer.validated_data)
+        truck = services.create_truck(
+            created_by=request.user, **serializer.validated_data
+        )
         return Response(TruckSerializer(truck).data, status=status.HTTP_201_CREATED)
 
     def update(self, request: Request, pk: int) -> Response:
@@ -169,8 +211,12 @@ class TruckViewSet(ViewSet):
             return Response(TruckMaintenanceSerializer(records, many=True).data)
         serializer = TruckMaintenanceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        record = services.add_truck_maintenance(truck=truck, **serializer.validated_data)
-        return Response(TruckMaintenanceSerializer(record).data, status=status.HTTP_201_CREATED)
+        record = services.add_truck_maintenance(
+            truck=truck, **serializer.validated_data
+        )
+        return Response(
+            TruckMaintenanceSerializer(record).data, status=status.HTTP_201_CREATED
+        )
 
 
 class TrailerViewSet(ViewSet):
@@ -185,20 +231,26 @@ class TrailerViewSet(ViewSet):
         return Response(TrailerListSerializer(trailers, many=True).data)
 
     def retrieve(self, request: Request, pk: int) -> Response:
-        trailer = Trailer.objects.select_related(
-            "trailer_type", "plate_state"
-        ).prefetch_related("maintenance_records").get(pk=pk)
+        trailer = (
+            Trailer.objects.select_related("trailer_type", "plate_state")
+            .prefetch_related("maintenance_records")
+            .get(pk=pk)
+        )
         return Response(TrailerSerializer(trailer).data)
 
     def create(self, request: Request) -> Response:
         serializer = TrailerCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        trailer = services.create_trailer(created_by=request.user, **serializer.validated_data)
+        trailer = services.create_trailer(
+            created_by=request.user, **serializer.validated_data
+        )
         return Response(TrailerSerializer(trailer).data, status=status.HTTP_201_CREATED)
 
     def update(self, request: Request, pk: int) -> Response:
         trailer = Trailer.objects.get(pk=pk)
-        serializer = TrailerCreateUpdateSerializer(trailer, data=request.data, partial=True)
+        serializer = TrailerCreateUpdateSerializer(
+            trailer, data=request.data, partial=True
+        )
         serializer.is_valid(raise_exception=True)
         trailer = services.update_trailer(trailer=trailer, **serializer.validated_data)
         return Response(TrailerSerializer(trailer).data)
@@ -223,8 +275,12 @@ class TrailerViewSet(ViewSet):
             return Response(TrailerMaintenanceSerializer(records, many=True).data)
         serializer = TrailerMaintenanceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        record = services.add_trailer_maintenance(trailer=trailer, **serializer.validated_data)
-        return Response(TrailerMaintenanceSerializer(record).data, status=status.HTTP_201_CREATED)
+        record = services.add_trailer_maintenance(
+            trailer=trailer, **serializer.validated_data
+        )
+        return Response(
+            TrailerMaintenanceSerializer(record).data, status=status.HTTP_201_CREATED
+        )
 
 
 class AccidentViewSet(ViewSet):
@@ -243,8 +299,12 @@ class AccidentViewSet(ViewSet):
     def create(self, request: Request) -> Response:
         serializer = AccidentCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        accident = services.create_accident(created_by=request.user, **serializer.validated_data)
-        return Response(AccidentSerializer(accident).data, status=status.HTTP_201_CREATED)
+        accident = services.create_accident(
+            created_by=request.user, **serializer.validated_data
+        )
+        return Response(
+            AccidentSerializer(accident).data, status=status.HTTP_201_CREATED
+        )
 
     def retrieve(self, request: Request, pk: int) -> Response:
         try:
@@ -258,9 +318,13 @@ class AccidentViewSet(ViewSet):
             accident = Accident.objects.get(pk=pk)
         except Accident.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        serializer = AccidentCreateUpdateSerializer(accident, data=request.data, partial=True)
+        serializer = AccidentCreateUpdateSerializer(
+            accident, data=request.data, partial=True
+        )
         serializer.is_valid(raise_exception=True)
-        accident = services.update_accident(accident=accident, **serializer.validated_data)
+        accident = services.update_accident(
+            accident=accident, **serializer.validated_data
+        )
         return Response(AccidentSerializer(accident).data)
 
     def destroy(self, request: Request, pk: int) -> Response:
@@ -279,8 +343,12 @@ class AccidentViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = AccidentPictureSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        picture = services.add_accident_picture(accident=accident, **serializer.validated_data)
-        return Response(AccidentPictureSerializer(picture).data, status=status.HTTP_201_CREATED)
+        picture = services.add_accident_picture(
+            accident=accident, **serializer.validated_data
+        )
+        return Response(
+            AccidentPictureSerializer(picture).data, status=status.HTTP_201_CREATED
+        )
 
     @action(detail=True, methods=["delete"], url_path=r"pictures/(?P<picture_pk>\d+)")
     def delete_picture(self, request: Request, pk: int, picture_pk: int) -> Response:
@@ -294,11 +362,13 @@ class AccidentViewSet(ViewSet):
 
 # ── Catalog ViewSets ──────────────────────────────────────────────────────────
 
+
 class _SimpleCatalogViewSet(ViewSet):
     """Base for name-only lookup tables."""
+
     permission_classes = [IsAuthenticated]
-    model = None
-    serializer_class = None
+    model: ClassVar[Any] = None
+    serializer_class: ClassVar[Any] = None
 
     def list(self, request: Request) -> Response:
         qs = self.model.objects.all().order_by("name")
@@ -414,7 +484,9 @@ class TruckMilesResetViewSet(ViewSet):
         serializer = TruckMilesResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         reset = TruckMilesReset.objects.create(**serializer.validated_data)
-        return Response(TruckMilesResetSerializer(reset).data, status=status.HTTP_201_CREATED)
+        return Response(
+            TruckMilesResetSerializer(reset).data, status=status.HTTP_201_CREATED
+        )
 
     def destroy(self, request: Request, pk: int) -> Response:
         try:

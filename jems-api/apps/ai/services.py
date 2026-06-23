@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from typing import Literal, cast
+
+import anthropic
 from django.conf import settings
+
+from apps.users.models import User
 
 from .models import Conversation, Message
 
@@ -13,7 +18,7 @@ SYSTEM_PROMPT = (
 MODEL = "claude-sonnet-4-6"
 
 
-def create_conversation(*, user: object, topic: str = "") -> Conversation:
+def create_conversation(*, user: User, topic: str = "") -> Conversation:
     return Conversation.objects.create(user=user, topic=topic)
 
 
@@ -22,8 +27,6 @@ def send_message(*, conversation: Conversation, content: str) -> Message:
     Append a user message, call Claude, append the assistant reply, return it.
     Raises RuntimeError if the ANTHROPIC_API_KEY env var is not set.
     """
-    import anthropic
-
     api_key = settings.ANTHROPIC_API_KEY
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not configured.")
@@ -34,8 +37,8 @@ def send_message(*, conversation: Conversation, content: str) -> Message:
         content=content,
     )
 
-    history = [
-        {"role": m.role, "content": m.content}
+    history: list[anthropic.types.MessageParam] = [
+        {"role": cast(Literal["user", "assistant"], m.role), "content": m.content}
         for m in conversation.messages.all()
     ]
 
@@ -47,7 +50,10 @@ def send_message(*, conversation: Conversation, content: str) -> Message:
         messages=history,
     )
 
-    reply_text = response.content[0].text
+    first_block = response.content[0]
+    reply_text = (
+        first_block.text if isinstance(first_block, anthropic.types.TextBlock) else ""
+    )
     assistant_message = Message.objects.create(
         conversation=conversation,
         role=Message.Role.ASSISTANT,

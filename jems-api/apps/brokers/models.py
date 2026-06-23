@@ -14,7 +14,9 @@ class Broker(models.Model):
     phone = models.CharField(max_length=255, blank=True, default="")
     accounting_email = models.EmailField(max_length=255, blank=True, null=True)
     status = models.IntegerField(choices=Status.choices, default=Status.INACTIVE)
-    setup_packet_file = models.FileField(upload_to="brokers/packets/", blank=True, null=True)
+    setup_packet_file = models.FileField(
+        upload_to="brokers/packets/", blank=True, null=True
+    )
     factor_company = models.CharField(max_length=255, blank=True, default="")
     factor_account_id = models.CharField(max_length=255, blank=True, default="")
     buy_status = models.CharField(max_length=100, blank=True, default="")
@@ -83,7 +85,9 @@ class Business(models.Model):
 
 
 class BrokerContact(models.Model):
-    broker = models.ForeignKey(Broker, on_delete=models.CASCADE, related_name="contacts")
+    broker = models.ForeignKey(
+        Broker, on_delete=models.CASCADE, related_name="contacts"
+    )
     name = models.CharField(max_length=255)
     email = models.EmailField(max_length=255, unique=True)
     phone = models.CharField(max_length=255, blank=True, default="")

@@ -73,7 +73,9 @@ class UserViewSet(ViewSet):
         user = User.objects.get(pk=pk)
         serializer = ChangePasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        services.change_password(user=user, new_password=serializer.validated_data["password"])
+        services.change_password(
+            user=user, new_password=serializer.validated_data["password"]
+        )
         return Response({"detail": "Password updated successfully."})
 
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])

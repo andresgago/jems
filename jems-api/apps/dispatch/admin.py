@@ -1,6 +1,10 @@
 from django.contrib import admin
 
-from .models import DispatcherWork, DispatcherWorkInvoiceByHour, DispatcherWorkInvoiceByPercent
+from .models import (
+    DispatcherWork,
+    DispatcherWorkInvoiceByHour,
+    DispatcherWorkInvoiceByPercent,
+)
 
 
 @admin.register(DispatcherWorkInvoiceByPercent)

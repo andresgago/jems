@@ -1,12 +1,18 @@
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
-from .models import Carrier
-from .serializers import CarrierSerializer
-from .services import create_carrier, delete_carrier, toggle_carrier_status, update_carrier
+from .models import Carrier, Factor
+from .serializers import CarrierSerializer, FactorSerializer
+from .services import (
+    create_carrier,
+    delete_carrier,
+    toggle_carrier_status,
+    update_carrier,
+)
 
 
 class CarrierViewSet(ViewSet):
@@ -69,12 +75,10 @@ class CarrierViewSet(ViewSet):
         q = request.query_params.get("q", "").strip()
         if not q:
             return Response([])
-        carriers = Carrier.objects.filter(active=True).filter(
-            name__icontains=q
-        ) | Carrier.objects.filter(active=True).filter(
-            mc__icontains=q
-        ) | Carrier.objects.filter(active=True).filter(
-            dba_name__icontains=q
+        carriers = (
+            Carrier.objects.filter(active=True).filter(name__icontains=q)
+            | Carrier.objects.filter(active=True).filter(mc__icontains=q)
+            | Carrier.objects.filter(active=True).filter(dba_name__icontains=q)
         )
         carriers = carriers.order_by("name")[:20]
         serializer = CarrierSerializer(carriers, many=True)
@@ -82,14 +86,13 @@ class CarrierViewSet(ViewSet):
 
     @action(detail=False, methods=["get"], url_path="options")
     def options_list(self, request):
-        carriers = Carrier.objects.filter(active=True).values("id", "name", "mc").order_by("name")
+        carriers = (
+            Carrier.objects.filter(active=True)
+            .values("id", "name", "mc")
+            .order_by("name")
+        )
         data = [{"id": c["id"], "label": f"{c['name']} ({c['mc']})"} for c in carriers]
         return Response(data)
-
-
-from .models import Factor
-from .serializers import FactorSerializer
-from rest_framework.request import Request
 
 
 class FactorViewSet(ViewSet):

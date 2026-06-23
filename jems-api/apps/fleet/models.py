@@ -1,7 +1,7 @@
 from django.db import models
 
-
 # --- Lookup tables ---
+
 
 class TruckType(models.Model):
     name = models.CharField(max_length=100)
@@ -88,6 +88,7 @@ class Card(models.Model):
 
 # --- TruckOwner ---
 
+
 class TruckOwner(models.Model):
     class Status(models.IntegerChoices):
         INACTIVE = 0, "Inactive"
@@ -102,7 +103,9 @@ class TruckOwner(models.Model):
     email = models.EmailField(blank=True, default="")
     phone = models.CharField(max_length=30, blank=True, default="")
     status = models.IntegerField(choices=Status.choices, default=Status.ACTIVE)
-    owner_type = models.IntegerField(choices=OwnerType.choices, default=OwnerType.OWNER_OPERATOR)
+    owner_type = models.IntegerField(
+        choices=OwnerType.choices, default=OwnerType.OWNER_OPERATOR
+    )
     worker_comp = models.FloatField(default=0)
     factor_dispatch = models.FloatField(default=0)
     factor_fee = models.FloatField(default=0)
@@ -127,6 +130,7 @@ class TruckOwner(models.Model):
 
 # --- Truck ---
 
+
 class Truck(models.Model):
     class Status(models.IntegerChoices):
         INACTIVE = 0, "Inactive"
@@ -135,26 +139,62 @@ class Truck(models.Model):
     number = models.CharField(max_length=60, unique=True)
     vin = models.CharField(max_length=100, blank=True, default="")
     year = models.IntegerField(null=True, blank=True)
-    truck_type = models.ForeignKey(TruckType, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks")
+    truck_type = models.ForeignKey(
+        TruckType,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trucks",
+    )
     status = models.IntegerField(choices=Status.choices, default=Status.ACTIVE)
     plate = models.CharField(max_length=30, blank=True, default="")
     transponder = models.CharField(max_length=100, blank=True, default="")
 
     # Specs
-    make = models.ForeignKey(Make, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks")
-    engine_type = models.ForeignKey(EngineType, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks")
-    cabin_type = models.ForeignKey(CabinType, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks")
-    transmission_type = models.ForeignKey(TransmissionType, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks")
-    tire_size = models.ForeignKey(TireSize, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks")
+    make = models.ForeignKey(
+        Make, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks"
+    )
+    engine_type = models.ForeignKey(
+        EngineType,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trucks",
+    )
+    cabin_type = models.ForeignKey(
+        CabinType,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trucks",
+    )
+    transmission_type = models.ForeignKey(
+        TransmissionType,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trucks",
+    )
+    tire_size = models.ForeignKey(
+        TireSize,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trucks",
+    )
     gross_weight = models.FloatField(default=0)
     odometer_current = models.FloatField(default=0)
 
     # Documents
     avi_file = models.FileField(upload_to="trucks/avi/", null=True, blank=True)
     avi_expiration = models.DateField(null=True, blank=True)
-    registration_file = models.FileField(upload_to="trucks/registration/", null=True, blank=True)
+    registration_file = models.FileField(
+        upload_to="trucks/registration/", null=True, blank=True
+    )
     registration_expiration = models.DateField(null=True, blank=True)
-    agreement_file = models.FileField(upload_to="trucks/agreements/", null=True, blank=True)
+    agreement_file = models.FileField(
+        upload_to="trucks/agreements/", null=True, blank=True
+    )
     photo = models.ImageField(upload_to="trucks/photos/", null=True, blank=True)
 
     # Purchase / Financing
@@ -169,18 +209,38 @@ class Truck(models.Model):
 
     # Assignments
     dispatcher = models.ForeignKey(
-        "users.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="dispatched_trucks"
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="dispatched_trucks",
     )
-    owner = models.ForeignKey(TruckOwner, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks")
-    fuel_card = models.ForeignKey(Card, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks")
+    owner = models.ForeignKey(
+        TruckOwner,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trucks",
+    )
+    fuel_card = models.ForeignKey(
+        Card, null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks"
+    )
     carrier = models.ForeignKey(
-        "carriers.Carrier", null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks"
+        "carriers.Carrier",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trucks",
     )
     carrier_start_date = models.DateField(null=True, blank=True)
     carrier_end_date = models.DateField(null=True, blank=True)
     carrier_end_reason = models.TextField(blank=True, default="")
     loss_payee = models.ForeignKey(
-        "fleet.LossPayee", null=True, blank=True, on_delete=models.SET_NULL, related_name="trucks"
+        "fleet.LossPayee",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trucks",
     )
 
     # ELD
@@ -191,7 +251,11 @@ class Truck(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        "users.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="created_trucks"
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_trucks",
     )
 
     class Meta:
@@ -202,7 +266,9 @@ class Truck(models.Model):
 
 
 class TruckMaintenance(models.Model):
-    truck = models.ForeignKey(Truck, on_delete=models.CASCADE, related_name="maintenance_records")
+    truck = models.ForeignKey(
+        Truck, on_delete=models.CASCADE, related_name="maintenance_records"
+    )
     date = models.DateField()
     miles_alert = models.IntegerField(default=0)
     time_alert = models.IntegerField(default=0)
@@ -223,6 +289,7 @@ class TruckMaintenance(models.Model):
 
 # --- Trailer ---
 
+
 class Trailer(models.Model):
     class Status(models.IntegerChoices):
         INACTIVE = 0, "Inactive"
@@ -233,18 +300,34 @@ class Trailer(models.Model):
     year = models.IntegerField(null=True, blank=True)
     width = models.FloatField(default=0)
     height = models.FloatField(default=0)
-    trailer_type = models.ForeignKey(TrailerType, null=True, blank=True, on_delete=models.SET_NULL, related_name="trailers")
+    trailer_type = models.ForeignKey(
+        TrailerType,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trailers",
+    )
     status = models.IntegerField(choices=Status.choices, default=Status.ACTIVE)
     plate_number = models.CharField(max_length=30, blank=True, default="")
     plate_state = models.ForeignKey(
-        "locations.State", null=True, blank=True, on_delete=models.SET_NULL, related_name="trailers"
+        "locations.State",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trailers",
     )
 
     # Documents
-    annual_inspection_file = models.FileField(upload_to="trailers/inspections/", null=True, blank=True)
+    annual_inspection_file = models.FileField(
+        upload_to="trailers/inspections/", null=True, blank=True
+    )
     annual_inspection_expiration = models.DateField(null=True, blank=True)
-    registration_file = models.FileField(upload_to="trailers/registration/", null=True, blank=True)
-    agreement_file = models.FileField(upload_to="trailers/agreements/", null=True, blank=True)
+    registration_file = models.FileField(
+        upload_to="trailers/registration/", null=True, blank=True
+    )
+    agreement_file = models.FileField(
+        upload_to="trailers/agreements/", null=True, blank=True
+    )
 
     # Purchase
     purchase_date = models.DateField(null=True, blank=True)
@@ -255,7 +338,11 @@ class Trailer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        "users.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="created_trailers"
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_trailers",
     )
 
     class Meta:
@@ -266,7 +353,9 @@ class Trailer(models.Model):
 
 
 class TrailerMaintenance(models.Model):
-    trailer = models.ForeignKey(Trailer, on_delete=models.CASCADE, related_name="maintenance_records")
+    trailer = models.ForeignKey(
+        Trailer, on_delete=models.CASCADE, related_name="maintenance_records"
+    )
     date = models.DateField()
     miles = models.FloatField(default=0)
     miles_alert = models.IntegerField(default=0)
@@ -298,6 +387,7 @@ class LossPayee(models.Model):
 
 
 # --- Accidents ---
+
 
 class Accident(models.Model):
     date = models.DateTimeField()
@@ -337,8 +427,12 @@ class Accident(models.Model):
         blank=True,
         related_name="accidents",
     )
-    police_report_file = models.FileField(upload_to="accidents/police_reports/", null=True, blank=True)
-    post_accident_file = models.FileField(upload_to="accidents/post_accident/", null=True, blank=True)
+    police_report_file = models.FileField(
+        upload_to="accidents/police_reports/", null=True, blank=True
+    )
+    post_accident_file = models.FileField(
+        upload_to="accidents/post_accident/", null=True, blank=True
+    )
     crash_number = models.CharField(max_length=100)
     tow_aways = models.BooleanField(default=False)
     death_count = models.PositiveIntegerField(default=0)
@@ -362,7 +456,9 @@ class Accident(models.Model):
 
 
 class AccidentPicture(models.Model):
-    accident = models.ForeignKey(Accident, on_delete=models.CASCADE, related_name="pictures")
+    accident = models.ForeignKey(
+        Accident, on_delete=models.CASCADE, related_name="pictures"
+    )
     file = models.ImageField(upload_to="accidents/pictures/")
     description = models.CharField(max_length=200, blank=True, default="")
     rank = models.PositiveIntegerField(default=0)
@@ -378,8 +474,11 @@ class AccidentPicture(models.Model):
 
 # --- TruckMilesReset ---
 
+
 class TruckMilesReset(models.Model):
-    truck = models.ForeignKey(Truck, on_delete=models.CASCADE, related_name="miles_resets")
+    truck = models.ForeignKey(
+        Truck, on_delete=models.CASCADE, related_name="miles_resets"
+    )
     date = models.DateField()
     created_at = models.DateTimeField(auto_now_add=True)
 

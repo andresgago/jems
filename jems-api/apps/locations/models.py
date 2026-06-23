@@ -15,7 +15,9 @@ class State(models.Model):
 class City(models.Model):
     name = models.CharField(max_length=100)
     zip = models.CharField(max_length=10, blank=True, default="")
-    state = models.ForeignKey(State, on_delete=models.SET_NULL, null=True, blank=True, related_name="cities")
+    state = models.ForeignKey(
+        State, on_delete=models.SET_NULL, null=True, blank=True, related_name="cities"
+    )
     active = models.BooleanField(default=True)
 
     class Meta:

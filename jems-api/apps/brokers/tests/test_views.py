@@ -46,7 +46,9 @@ class TestBrokerCreate:
     def test_duplicate_mc_rejected(self, auth_client):
         client, _ = auth_client
         BrokerFactory(mc="DUPBRK001")
-        response = client.post(reverse("broker-list"), {"mc": "DUPBRK001", "name": "Dup"})
+        response = client.post(
+            reverse("broker-list"), {"mc": "DUPBRK001", "name": "Dup"}
+        )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -72,14 +74,18 @@ class TestBrokerToggleStatus:
     def test_toggle_active_to_inactive(self, auth_client):
         client, _ = auth_client
         broker = BrokerFactory(status=Broker.Status.ACTIVE)
-        response = client.post(reverse("broker-toggle-status", kwargs={"pk": broker.pk}))
+        response = client.post(
+            reverse("broker-toggle-status", kwargs={"pk": broker.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == Broker.Status.INACTIVE
 
     def test_toggle_inactive_to_active(self, auth_client):
         client, _ = auth_client
         broker = BrokerFactory(status=Broker.Status.INACTIVE)
-        response = client.post(reverse("broker-toggle-status", kwargs={"pk": broker.pk}))
+        response = client.post(
+            reverse("broker-toggle-status", kwargs={"pk": broker.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == Broker.Status.ACTIVE
 
@@ -106,7 +112,9 @@ class TestBrokerContacts:
         client, _ = auth_client
         broker = BrokerFactory()
         BrokerContactFactory.create_batch(2, broker=broker)
-        response = client.get(reverse("broker-contacts", kwargs={"pk": broker.pk}))
+        response = client.get(
+            reverse("broker-contact-list", kwargs={"broker_pk": broker.pk})
+        )
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 2
 
@@ -114,13 +122,18 @@ class TestBrokerContacts:
         client, _ = auth_client
         broker = BrokerFactory()
         payload = {"name": "Alice Smith", "email": "alice@broker.com"}
-        response = client.post(reverse("broker-contact-list", kwargs={"broker_pk": broker.pk}), payload)
+        response = client.post(
+            reverse("broker-contact-list", kwargs={"broker_pk": broker.pk}), payload
+        )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["email"] == "alice@broker.com"
 
     def test_delete_contact(self, auth_client):
         client, _ = auth_client
         contact = BrokerContactFactory()
-        url = reverse("broker-contact-detail", kwargs={"broker_pk": contact.broker.pk, "pk": contact.pk})
+        url = reverse(
+            "broker-contact-detail",
+            kwargs={"broker_pk": contact.broker.pk, "pk": contact.pk},
+        )
         response = client.delete(url)
         assert response.status_code == status.HTTP_204_NO_CONTENT

@@ -16,7 +16,9 @@ truck_file_detail = TruckFileViewSet.as_view({"delete": "destroy"})
 trailer_file_list = TrailerFileViewSet.as_view({"get": "list", "post": "create"})
 trailer_file_detail = TrailerFileViewSet.as_view({"delete": "destroy"})
 
-import_record_file_list = ImportRecordFileViewSet.as_view({"get": "list", "post": "create"})
+import_record_file_list = ImportRecordFileViewSet.as_view(
+    {"get": "list", "post": "create"}
+)
 import_record_file_detail = ImportRecordFileViewSet.as_view({"delete": "destroy"})
 
 urlpatterns = [
@@ -26,6 +28,12 @@ urlpatterns = [
     path("truck-files/<int:pk>/", truck_file_detail, name="truck-file-detail"),
     path("trailer-files/", trailer_file_list, name="trailer-file-list"),
     path("trailer-files/<int:pk>/", trailer_file_detail, name="trailer-file-detail"),
-    path("import-record-files/", import_record_file_list, name="import-record-file-list"),
-    path("import-record-files/<int:pk>/", import_record_file_detail, name="import-record-file-detail"),
+    path(
+        "import-record-files/", import_record_file_list, name="import-record-file-list"
+    ),
+    path(
+        "import-record-files/<int:pk>/",
+        import_record_file_detail,
+        name="import-record-file-detail",
+    ),
 ]

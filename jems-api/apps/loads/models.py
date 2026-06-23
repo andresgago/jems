@@ -125,7 +125,9 @@ class Load(models.Model):
     rate_file = models.FileField(upload_to="loads/rates/", blank=True, null=True)
     bill_file = models.FileField(upload_to="loads/bills/", blank=True, null=True)
     lumper_file = models.FileField(upload_to="loads/lumpers/", blank=True, null=True)
-    detention_file = models.FileField(upload_to="loads/detentions/", blank=True, null=True)
+    detention_file = models.FileField(
+        upload_to="loads/detentions/", blank=True, null=True
+    )
     # Status and flags
     status = models.IntegerField(choices=Status.choices, default=Status.REGISTERED)
     execute = models.BooleanField(default=False)

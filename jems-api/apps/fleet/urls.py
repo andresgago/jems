@@ -19,19 +19,27 @@ from .views import (
 
 # Trucks
 truck_list = TruckViewSet.as_view({"get": "list", "post": "create"})
-truck_detail = TruckViewSet.as_view({"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"})
+truck_detail = TruckViewSet.as_view(
+    {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
+)
 truck_toggle_status = TruckViewSet.as_view({"post": "toggle_status"})
 truck_maintenance = TruckViewSet.as_view({"get": "maintenance", "post": "maintenance"})
 
 # Trailers
 trailer_list = TrailerViewSet.as_view({"get": "list", "post": "create"})
-trailer_detail = TrailerViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"})
+trailer_detail = TrailerViewSet.as_view(
+    {"get": "retrieve", "put": "update", "delete": "destroy"}
+)
 trailer_toggle_status = TrailerViewSet.as_view({"post": "toggle_status"})
-trailer_maintenance = TrailerViewSet.as_view({"get": "maintenance", "post": "maintenance"})
+trailer_maintenance = TrailerViewSet.as_view(
+    {"get": "maintenance", "post": "maintenance"}
+)
 
 # Truck owners
 owner_list = TruckOwnerViewSet.as_view({"get": "list", "post": "create"})
-owner_detail = TruckOwnerViewSet.as_view({"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"})
+owner_detail = TruckOwnerViewSet.as_view(
+    {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
+)
 owner_toggle_status = TruckOwnerViewSet.as_view({"post": "toggle_status"})
 
 # Lookup types
@@ -56,7 +64,9 @@ loss_payee_detail = LossPayeeViewSet.as_view({"patch": "partial_update"})
 
 # Accidents
 accident_list = AccidentViewSet.as_view({"get": "list", "post": "create"})
-accident_detail = AccidentViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"})
+accident_detail = AccidentViewSet.as_view(
+    {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+)
 accident_pictures = AccidentViewSet.as_view({"post": "add_picture"})
 accident_picture_detail = AccidentViewSet.as_view({"delete": "delete_picture"})
 
@@ -67,15 +77,31 @@ miles_reset_detail = TruckMilesResetViewSet.as_view({"delete": "destroy"})
 urlpatterns = [
     path("trucks/", truck_list, name="truck-list"),
     path("trucks/<int:pk>/", truck_detail, name="truck-detail"),
-    path("trucks/<int:pk>/toggle-status/", truck_toggle_status, name="truck-toggle-status"),
+    path(
+        "trucks/<int:pk>/toggle-status/",
+        truck_toggle_status,
+        name="truck-toggle-status",
+    ),
     path("trucks/<int:pk>/maintenance/", truck_maintenance, name="truck-maintenance"),
     path("trailers/", trailer_list, name="trailer-list"),
     path("trailers/<int:pk>/", trailer_detail, name="trailer-detail"),
-    path("trailers/<int:pk>/toggle-status/", trailer_toggle_status, name="trailer-toggle-status"),
-    path("trailers/<int:pk>/maintenance/", trailer_maintenance, name="trailer-maintenance"),
+    path(
+        "trailers/<int:pk>/toggle-status/",
+        trailer_toggle_status,
+        name="trailer-toggle-status",
+    ),
+    path(
+        "trailers/<int:pk>/maintenance/",
+        trailer_maintenance,
+        name="trailer-maintenance",
+    ),
     path("owners/", owner_list, name="truck-owner-list"),
     path("owners/<int:pk>/", owner_detail, name="truck-owner-detail"),
-    path("owners/<int:pk>/toggle-status/", owner_toggle_status, name="truck-owner-toggle-status"),
+    path(
+        "owners/<int:pk>/toggle-status/",
+        owner_toggle_status,
+        name="truck-owner-toggle-status",
+    ),
     path("truck-types/", truck_types, name="truck-type-list"),
     path("trailer-types/", trailer_types, name="trailer-type-list"),
     # Catalog lookups
@@ -86,7 +112,11 @@ urlpatterns = [
     path("cabin-types/", cabin_types, name="cabin-type-list"),
     path("cabin-types/<int:pk>/", cabin_type_detail, name="cabin-type-detail"),
     path("transmission-types/", transmission_types, name="transmission-type-list"),
-    path("transmission-types/<int:pk>/", transmission_type_detail, name="transmission-type-detail"),
+    path(
+        "transmission-types/<int:pk>/",
+        transmission_type_detail,
+        name="transmission-type-detail",
+    ),
     path("tire-sizes/", tire_sizes, name="tire-size-list"),
     path("tire-sizes/<int:pk>/", tire_size_detail, name="tire-size-detail"),
     path("cards/", cards, name="card-list"),
@@ -97,7 +127,11 @@ urlpatterns = [
     path("accidents/", accident_list, name="accident-list"),
     path("accidents/<int:pk>/", accident_detail, name="accident-detail"),
     path("accidents/<int:pk>/pictures/", accident_pictures, name="accident-pictures"),
-    path("accidents/<int:pk>/pictures/<int:picture_pk>/", accident_picture_detail, name="accident-picture-detail"),
+    path(
+        "accidents/<int:pk>/pictures/<int:picture_pk>/",
+        accident_picture_detail,
+        name="accident-picture-detail",
+    ),
     # Miles reset
     path("miles-resets/", miles_reset_list, name="truck-miles-reset-list"),
     path("miles-resets/<int:pk>/", miles_reset_detail, name="truck-miles-reset-detail"),

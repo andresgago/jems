@@ -1,6 +1,14 @@
 from apps.users.models import User
 
-from .models import Accident, AccidentPicture, Trailer, TrailerMaintenance, Truck, TruckMaintenance, TruckOwner
+from .models import (
+    Accident,
+    AccidentPicture,
+    Trailer,
+    TrailerMaintenance,
+    Truck,
+    TruckMaintenance,
+    TruckOwner,
+)
 
 
 def create_truck(*, created_by: User | None = None, **fields) -> Truck:
@@ -20,7 +28,9 @@ def update_truck(*, truck: Truck, **fields) -> Truck:
 
 def toggle_truck_status(*, truck: Truck) -> Truck:
     truck.status = (
-        Truck.Status.INACTIVE if truck.status == Truck.Status.ACTIVE else Truck.Status.ACTIVE
+        Truck.Status.INACTIVE
+        if truck.status == Truck.Status.ACTIVE
+        else Truck.Status.ACTIVE
     )
     truck.save(update_fields=["status", "updated_at"])
     return truck
@@ -50,7 +60,9 @@ def update_trailer(*, trailer: Trailer, **fields) -> Trailer:
 
 def toggle_trailer_status(*, trailer: Trailer) -> Trailer:
     trailer.status = (
-        Trailer.Status.INACTIVE if trailer.status == Trailer.Status.ACTIVE else Trailer.Status.ACTIVE
+        Trailer.Status.INACTIVE
+        if trailer.status == Trailer.Status.ACTIVE
+        else Trailer.Status.ACTIVE
     )
     trailer.save(update_fields=["status", "updated_at"])
     return trailer
@@ -80,7 +92,9 @@ def update_truck_owner(*, owner: TruckOwner, **fields) -> TruckOwner:
 
 def toggle_truck_owner_status(*, owner: TruckOwner) -> TruckOwner:
     owner.status = (
-        TruckOwner.Status.INACTIVE if owner.status == TruckOwner.Status.ACTIVE else TruckOwner.Status.ACTIVE
+        TruckOwner.Status.INACTIVE
+        if owner.status == TruckOwner.Status.ACTIVE
+        else TruckOwner.Status.ACTIVE
     )
     owner.save(update_fields=["status", "updated_at"])
     return owner

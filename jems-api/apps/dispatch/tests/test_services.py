@@ -2,11 +2,12 @@ import datetime
 import zoneinfo
 
 import pytest
-from django.core.exceptions import ValidationError
 
-UTC = zoneinfo.ZoneInfo("UTC")
-
-from apps.dispatch.models import DispatcherWork, DispatcherWorkInvoiceByHour, DispatcherWorkInvoiceByPercent
+from apps.dispatch.models import (
+    DispatcherWork,
+    DispatcherWorkInvoiceByHour,
+    DispatcherWorkInvoiceByPercent,
+)
 from apps.dispatch.services import (
     calculate_amount_by_hour,
     close_invoice_by_hour,
@@ -35,12 +36,14 @@ from apps.dispatch.tests.factories import (
     UserFactory,
 )
 
+UTC = zoneinfo.ZoneInfo("UTC")
 START = datetime.datetime(2024, 1, 1, 8, 0, tzinfo=UTC)
 END = datetime.datetime(2024, 1, 31, 17, 0, tzinfo=UTC)
 DATE = datetime.date(2024, 1, 31)
 
 
 # ── DispatcherWork ────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestCreateDispatcherWork:
@@ -106,10 +109,13 @@ class TestDeleteDispatcherWork:
 
 # ── Invoice By Percent ────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestCreateInvoiceByPercent:
     def test_creates_with_auto_number(self):
-        invoice = create_invoice_by_percent(date=DATE, start=START, end=END, percent=5.0)
+        invoice = create_invoice_by_percent(
+            date=DATE, start=START, end=END, percent=5.0
+        )
         assert invoice.pk is not None
         assert invoice.number >= 1
         assert invoice.status == DispatcherWorkInvoiceByPercent.Status.OPEN
@@ -161,17 +167,24 @@ class TestCloseOpenInvoiceByPercent:
 
 # ── Invoice By Hour ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestCreateInvoiceByHour:
     def test_creates_with_auto_number(self):
-        invoice = create_invoice_by_hour(date=DATE, start=START, end=END, pay_per_hour=15.0)
+        invoice = create_invoice_by_hour(
+            date=DATE, start=START, end=END, pay_per_hour=15.0
+        )
         assert invoice.pk is not None
         assert invoice.number >= 1
         assert invoice.status == DispatcherWorkInvoiceByHour.Status.OPEN
 
     def test_sequential_numbers(self):
-        inv1 = create_invoice_by_hour(date=DATE, start=START, end=END, pay_per_hour=15.0)
-        inv2 = create_invoice_by_hour(date=DATE, start=START, end=END, pay_per_hour=20.0)
+        inv1 = create_invoice_by_hour(
+            date=DATE, start=START, end=END, pay_per_hour=15.0
+        )
+        inv2 = create_invoice_by_hour(
+            date=DATE, start=START, end=END, pay_per_hour=20.0
+        )
         assert inv2.number == inv1.number + 1
 
 

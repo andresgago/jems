@@ -1,7 +1,25 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import Position, User
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token["full_name"] = user.full_name
+        token["username"] = user.username
+        roles = []
+        if user.is_superuser:
+            roles.append("root")
+        if user.is_staff:
+            roles.append("admin")
+        if user.is_dispatcher:
+            roles.append("dispatcher")
+        token["roles"] = roles
+        return token
 
 
 class UserSerializer(serializers.ModelSerializer):

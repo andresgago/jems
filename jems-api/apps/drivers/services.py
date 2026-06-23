@@ -22,7 +22,9 @@ def update_driver(*, driver: Driver, **fields) -> Driver:
 
 def toggle_driver_status(*, driver: Driver) -> Driver:
     driver.status = (
-        Driver.Status.INACTIVE if driver.status == Driver.Status.ACTIVE else Driver.Status.ACTIVE
+        Driver.Status.INACTIVE
+        if driver.status == Driver.Status.ACTIVE
+        else Driver.Status.ACTIVE
     )
     driver.save(update_fields=["status", "updated_at"])
     return driver
@@ -31,7 +33,7 @@ def toggle_driver_status(*, driver: Driver) -> Driver:
 def upload_document(
     *,
     driver: Driver,
-    document_type: int,
+    document_type: DriverDocument.DocumentType,
     file: UploadedFile,
     expiration_date=None,
 ) -> DriverDocument:
