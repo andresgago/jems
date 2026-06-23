@@ -361,14 +361,16 @@ assert_status "truck type list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "truck type listed" "$(body "$resp")" "Dry Van"
 
 step "Fleet catalogs: trailer type"
-resp="$(post "/api/v1/fleet/trailer-types/" '{"name":"53ft Dry Van","is_active":true}')"
+resp="$(post "/api/v1/fleet/trailer-types/" '{"name":"53ft Dry Van","short_name":"DV","is_active":true}')"
 assert_status "trailer type create" "201" "$(code "$resp")" "$(body "$resp")"
+assert_contains "trailer type has short_name" "$(body "$resp")" "DV"
 TRAILER_TYPE_ID="$(body "$resp" | json_get_num id)"
 
 step "Fleet catalogs: trailer type list"
 resp="$(get "/api/v1/fleet/trailer-types/")"
 assert_status "trailer type list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "trailer type listed" "$(body "$resp")" "53ft"
+assert_contains "trailer type list has short_name" "$(body "$resp")" "DV"
 
 step "Fleet catalogs: make"
 resp="$(post "/api/v1/fleet/makes/" '{"name":"Freightliner"}')"

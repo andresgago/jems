@@ -30,7 +30,7 @@ class TruckTypeSerializer(serializers.ModelSerializer):
 class TrailerTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = TrailerType
-        fields = ["id", "name", "is_active"]
+        fields = ["id", "name", "short_name", "is_active"]
 
 
 class TruckOwnerSerializer(serializers.ModelSerializer):

@@ -77,8 +77,9 @@ class TrailerTypeViewSet(ViewSet):
         return Response(TrailerTypeSerializer(types, many=True).data)
 
     def create(self, request: Request) -> Response:
-        name = request.data.get("name", "").strip()
-        trailer_type = TrailerType.objects.create(name=name)
+        serializer = TrailerTypeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        trailer_type = serializer.save()
         return Response(
             TrailerTypeSerializer(trailer_type).data, status=status.HTTP_201_CREATED
         )

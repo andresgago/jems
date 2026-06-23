@@ -10,9 +10,10 @@ from apps.fleet.models import (
     EngineType,
     LossPayee,
     Make,
+    TrailerType,
     TruckMilesReset,
 )
-from apps.fleet.tests.factories import TruckFactory, UserFactory
+from apps.fleet.tests.factories import TrailerTypeFactory, TruckFactory, UserFactory
 
 
 @pytest.fixture
@@ -25,6 +26,58 @@ def auth_client(api_client):
     user = UserFactory()
     api_client.force_authenticate(user=user)
     return api_client, user
+
+
+# ── TrailerType ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestTrailerType:
+    def test_list_returns_only_active(self, auth_client):
+        client, _ = auth_client
+        TrailerTypeFactory(name="Van", short_name="V", is_active=True)
+        TrailerTypeFactory(name="Retired", short_name="R", is_active=False)
+        response = client.get(reverse("trailer-type-list"))
+        assert response.status_code == status.HTTP_200_OK
+        names = [t["name"] for t in response.data]
+        assert "Van" in names
+        assert "Retired" not in names
+
+    def test_response_includes_short_name(self, auth_client):
+        client, _ = auth_client
+        TrailerTypeFactory(name="Reefer", short_name="R", is_active=True)
+        response = client.get(reverse("trailer-type-list"))
+        assert response.status_code == status.HTTP_200_OK
+        reefer = next(t for t in response.data if t["name"] == "Reefer")
+        assert reefer["short_name"] == "R"
+
+    def test_create_with_short_name(self, auth_client):
+        client, _ = auth_client
+        payload = {"name": "Flatbed", "short_name": "F", "is_active": True}
+        response = client.post(reverse("trailer-type-list"), payload)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["short_name"] == "F"
+        assert TrailerType.objects.filter(name="Flatbed", short_name="F").exists()
+
+    def test_short_name_max_3_chars(self, auth_client):
+        client, _ = auth_client
+        payload = {"name": "Too Long", "short_name": "ABCD", "is_active": True}
+        response = client.post(reverse("trailer-type-list"), payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_list_ordered_by_name(self, auth_client):
+        client, _ = auth_client
+        TrailerTypeFactory(name="Reefer", short_name="R", is_active=True)
+        TrailerTypeFactory(name="Flatbed", short_name="F", is_active=True)
+        TrailerTypeFactory(name="Van", short_name="V", is_active=True)
+        response = client.get(reverse("trailer-type-list"))
+        assert response.status_code == status.HTTP_200_OK
+        names = [t["name"] for t in response.data]
+        assert names == sorted(names)
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.get(reverse("trailer-type-list"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 # ── Make ──────────────────────────────────────────────────────────────────────

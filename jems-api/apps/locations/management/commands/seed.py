@@ -64,11 +64,11 @@ STATES = [
 ]
 
 TRAILER_TYPES = [
-    (1, "Van"),
-    (2, "Reefer"),
-    (3, "Flatbed"),
-    (4, "Van or Reefer"),
-    (5, "Van Vented"),
+    (1, "Van", "V"),
+    (2, "Reefer", "R"),
+    (3, "Flatbed", "F"),
+    (4, "Van or Reefer", "VR"),
+    (5, "Van Vented", "VV"),
 ]
 
 TRUCK_TYPES = [
@@ -129,6 +129,35 @@ DRIVER_TYPES = [
     (3, "Owner Operator"),
     (4, "Solo Driver"),
     (5, "Team Driver"),
+]
+
+CARRIERS = [
+    (
+        1,
+        "041672",
+        "3035327",
+        "JOBEE EXPRESS LLC",
+        "Jobee Express",
+        "dispatch@jobeeexpress.com",
+        "(980) 298-1291",
+        "4401 E Independence Blvd",
+        "Charlotte",
+        34,
+        "28205",
+    ),
+    (
+        2,
+        "1447438",
+        "3916656",
+        "BEST WHEELS TRANSPORT LLC",
+        "BEST WHEELS",
+        "dispatch@bwheelstransport.com",
+        "(980) 298-4209",
+        "4401 E Independence Blvd Suite 206",
+        "Charlotte",
+        34,
+        "28205",
+    ),
 ]
 
 CARDS = [
@@ -227,6 +256,7 @@ class Command(BaseCommand):
             self._seed_loss_payees()
             self._seed_driver_types()
             self._seed_cards()
+            self._seed_carriers()
         self.stdout.write(self.style.SUCCESS("Seed complete."))
 
     def _seed_states(self):
@@ -246,9 +276,10 @@ class Command(BaseCommand):
 
         created = sum(
             1
-            for pk, name in TRAILER_TYPES
+            for pk, name, short_name in TRAILER_TYPES
             if TrailerType.objects.update_or_create(
-                id=pk, defaults={"name": name, "is_active": True}
+                id=pk,
+                defaults={"name": name, "short_name": short_name, "is_active": True},
             )[1]
         )
         self.stdout.write(f"  TrailerTypes: {len(TRAILER_TYPES)} total, {created} new")
@@ -342,6 +373,45 @@ class Command(BaseCommand):
             )[1]
         )
         self.stdout.write(f"  DriverTypes: {len(DRIVER_TYPES)} total, {created} new")
+
+    def _seed_carriers(self):
+        from apps.carriers.models import Carrier
+        from apps.locations.models import State
+
+        created = 0
+        for (
+            pk,
+            mc,
+            dot,
+            name,
+            dba,
+            email,
+            phone,
+            address,
+            city,
+            state_id,
+            zip_code,
+        ) in CARRIERS:
+            state = State.objects.filter(pk=state_id).first()
+            _, is_new = Carrier.objects.update_or_create(
+                id=pk,
+                defaults={
+                    "mc": mc,
+                    "dot_number": dot,
+                    "name": name,
+                    "dba_name": dba,
+                    "email": email,
+                    "phone": phone,
+                    "address": address,
+                    "city": city,
+                    "state": state,
+                    "zip": zip_code,
+                    "active": True,
+                },
+            )
+            if is_new:
+                created += 1
+        self.stdout.write(f"  Carriers: {len(CARRIERS)} total, {created} new")
 
     def _seed_cards(self):
         from apps.fleet.models import Card

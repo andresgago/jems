@@ -15,7 +15,8 @@ class TruckType(models.Model):
 
 
 class TrailerType(models.Model):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=200, unique=True)
+    short_name = models.CharField(max_length=3, default="")
     is_active = models.BooleanField(default=True)
 
     class Meta:
