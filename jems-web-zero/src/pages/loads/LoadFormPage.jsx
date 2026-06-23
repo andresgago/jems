@@ -5,6 +5,7 @@ import { useOptions } from '../../hooks/useOptions';
 import api from '../../services/api';
 import { loadGoogleMaps, parsePlaceComponents, calculateMiles } from '../../services/googleMaps';
 import DateTimePicker from '../../components/DateTimePicker';
+import { utcIsoToEtDisplay } from '../../utils/dates';
 
 const LUMPER_PAID_BY = [
   { value: '', label: '—' },
@@ -365,9 +366,9 @@ export default function LoadFormPage() {
         lumper: data.lumper || 0, lumper_paid_by: data.lumper_paid_by || '',
         drop_trailer: data.drop_trailer || 0, miles: data.miles || 0,
         miles_empty: data.miles_empty || 0,
-        pickup_date: data.pickup_date || '', pickup_address: data.pickup_address || '',
+        pickup_date: utcIsoToEtDisplay(data.pickup_date), pickup_address: data.pickup_address || '',
         pickup_city: data.pickup_city || null,
-        dropoff_date: data.dropoff_date || '', dropoff_address: data.dropoff_address || '',
+        dropoff_date: utcIsoToEtDisplay(data.dropoff_date), dropoff_address: data.dropoff_address || '',
         dropoff_city: data.dropoff_city || null,
         broker: data.broker || null, broker_contacts: data.broker_contacts || '',
         trailer_type: data.trailer_type || null, carrier: data.carrier || null,
@@ -608,6 +609,7 @@ export default function LoadFormPage() {
               value={form.dropoff_date}
               onChange={v => set('dropoff_date', v)}
               required
+              minDate={form.pickup_date || null}
               className={`form-control form-control-sm ${errors.dropoff_date ? 'is-invalid' : ''}`}
             />
             {err('dropoff_date')}

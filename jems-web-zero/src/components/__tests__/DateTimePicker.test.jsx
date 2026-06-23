@@ -7,6 +7,7 @@ vi.mock('flatpickr', () => {
     setDate: vi.fn(),
     clear: vi.fn(),
     destroy: vi.fn(),
+    set: vi.fn(),
   };
   const flatpickr = vi.fn(() => instance);
   flatpickr._instance = instance;
@@ -56,5 +57,21 @@ describe('DateTimePicker', () => {
   it('calls clear when value is empty', () => {
     render(<DateTimePicker value="" onChange={() => {}} />)
     expect(flatpickr._instance.clear).toHaveBeenCalled()
+  })
+
+  it('sets minDate on flatpickr when minDate prop is provided', () => {
+    render(<DateTimePicker value="" onChange={() => {}} minDate="2024-01-09 10:00" />)
+    expect(flatpickr._instance.set).toHaveBeenCalledWith('minDate', '2024-01-09 10:00')
+  })
+
+  it('clears minDate when minDate prop is absent', () => {
+    render(<DateTimePicker value="" onChange={() => {}} />)
+    expect(flatpickr._instance.set).toHaveBeenCalledWith('minDate', null)
+  })
+
+  it('updates minDate when prop changes', () => {
+    const { rerender } = render(<DateTimePicker value="" onChange={() => {}} minDate="2024-01-09 10:00" />)
+    rerender(<DateTimePicker value="" onChange={() => {}} minDate="2024-01-15 08:00" />)
+    expect(flatpickr._instance.set).toHaveBeenLastCalledWith('minDate', '2024-01-15 08:00')
   })
 })

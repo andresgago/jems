@@ -6,6 +6,13 @@ import LoadFormPage from '../LoadFormPage'
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
+vi.mock('flatpickr', () => {
+  const instance = { setDate: vi.fn(), clear: vi.fn(), destroy: vi.fn(), set: vi.fn() };
+  const fp = vi.fn(() => instance);
+  fp._instance = instance;
+  return { default: fp };
+})
+
 vi.mock('../../../hooks/useOptions', () => ({
   useOptions: vi.fn(),
 }))
@@ -28,6 +35,7 @@ vi.mock('../../../services/googleMaps', () => ({
   calculateMiles: vi.fn(),
 }))
 
+import flatpickr from 'flatpickr'
 import { useOptions } from '../../../hooks/useOptions'
 import { loadsService } from '../../../services/loads'
 import api from '../../../services/api'
@@ -184,11 +192,11 @@ describe('LoadFormPage — edit load', () => {
         drop_trailer: 0,
         miles: 500,
         miles_empty: 50,
-        pickup_date: '2026-01-10',
+        pickup_date: '2026-01-10T15:00:00Z',
         pickup_address: '123 Main St',
         pickup_city: 1,
         pickup_city_display: 'Denver, CO',
-        dropoff_date: '2026-01-12',
+        dropoff_date: '2026-01-12T20:00:00Z',
         dropoff_address: '456 Oak Ave',
         dropoff_city: 2,
         dropoff_city_display: 'Chicago, IL',
@@ -301,6 +309,16 @@ describe('LoadFormPage — edit load', () => {
     fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'test@example.com' } })
 
     expect(screen.getByRole('button', { name: /add broker contact/i })).toBeDisabled()
+  })
+
+  it('converts UTC ISO dates to ET "YYYY-MM-DD HH:MM" when populating the pickers', async () => {
+    renderEditForm()
+    // 2026-01-10T15:00:00Z = 2026-01-10 10:00 ET (UTC-5, EST)
+    // 2026-01-12T20:00:00Z = 2026-01-12 15:00 ET (UTC-5, EST)
+    await waitFor(() =>
+      expect(flatpickr._instance.setDate).toHaveBeenCalledWith('2026-01-10 10:00', false)
+    )
+    expect(flatpickr._instance.setDate).toHaveBeenCalledWith('2026-01-12 15:00', false)
   })
 
   it('scrolls to the newly created contact after adding', async () => {

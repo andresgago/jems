@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import flatpickr from 'flatpickr';
 import 'flatpickr/dist/flatpickr.min.css';
 
-export default function DateTimePicker({ value, onChange, required, className, id }) {
+export default function DateTimePicker({ value, onChange, required, className, id, minDate }) {
   const inputRef = useRef(null);
   const fpRef = useRef(null);
   const onChangeRef = useRef(onChange);
@@ -33,6 +33,11 @@ export default function DateTimePicker({ value, onChange, required, className, i
       fpRef.current.clear();
     }
   }, [value]);
+
+  useEffect(() => {
+    if (!fpRef.current) return;
+    fpRef.current.set('minDate', minDate || null);
+  }, [minDate]);
 
   return (
     <input
