@@ -724,7 +724,7 @@ export default function LoadFormPage() {
           <div className="col-md-2">
             <label className="control-label">Miles</label>
             <input type="number" className="form-control form-control-sm" value={form.miles}
-              onChange={e => set('miles', parseFloat(e.target.value) || 0)} />
+              readOnly />
           </div>
           <div className="col-md-2">
             <label className="control-label">Miles Empty</label>

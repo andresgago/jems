@@ -603,5 +603,71 @@ describe('LoadFormPage — address autocomplete', () => {
 
     act(() => acInstances[1]._fire()) // dropoff — both latlng refs now set, miles are calculated
     await waitFor(() => expect(calculateMiles).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByDisplayValue('350')).toBeInTheDocument())
+  })
+
+  it('miles input is readonly', async () => {
+    renderNewForm()
+    await waitFor(() => expect(acInstances).toHaveLength(2))
+    const milesLabel = screen.getByText('Miles', { selector: 'label' })
+    const milesInput = milesLabel.nextElementSibling
+    expect(milesInput).toHaveAttribute('readonly')
+  })
+
+  it('does not call calculateMiles when only one address is set', async () => {
+    parsePlaceComponents.mockReturnValue({ street: '123 Main St', zip: '10001', cityName: 'New York', state: 'NY' })
+
+    renderNewForm()
+    await waitFor(() => expect(acInstances).toHaveLength(2))
+
+    act(() => acInstances[0]._fire()) // pickup only — dropoffLatLng is null
+    await waitFor(() => expect(screen.getByDisplayValue('123 Main St')).toBeInTheDocument())
+
+    expect(calculateMiles).not.toHaveBeenCalled()
+  })
+
+  it('recalculates miles when pickup changes after dropoff is already set', async () => {
+    calculateMiles.mockResolvedValue(350)
+    parsePlaceComponents
+      .mockReturnValueOnce({ street: '456 Oak Ave', zip: '90210', cityName: 'Beverly Hills', state: 'CA' })
+      .mockReturnValueOnce({ street: '123 Main St', zip: '10001', cityName: 'New York', state: 'NY' })
+      .mockReturnValueOnce({ street: '999 New St', zip: '10002', cityName: 'Brooklyn', state: 'NY' })
+
+    renderNewForm()
+    await waitFor(() => expect(acInstances).toHaveLength(2))
+
+    act(() => acInstances[1]._fire()) // dropoff only — pickupLatLng is null, no calc
+    await waitFor(() => expect(screen.getByDisplayValue('456 Oak Ave')).toBeInTheDocument())
+    expect(calculateMiles).not.toHaveBeenCalled()
+
+    act(() => acInstances[0]._fire()) // pickup set — both latlng refs now set, calc once
+    await waitFor(() => expect(calculateMiles).toHaveBeenCalledTimes(1))
+
+    act(() => acInstances[0]._fire()) // pickup changes again — recalculates
+    await waitFor(() => expect(calculateMiles).toHaveBeenCalledTimes(2))
+  })
+
+  it('miles value is included in the submit payload', async () => {
+    calculateMiles.mockResolvedValue(350)
+    parsePlaceComponents
+      .mockReturnValueOnce({ street: '123 Main St', zip: '10001', cityName: 'New York', state: 'NY' })
+      .mockReturnValueOnce({ street: '456 Oak Ave', zip: '90210', cityName: 'Beverly Hills', state: 'CA' })
+    loadsService.create.mockResolvedValue({ data: { id: 99 } })
+
+    renderNewForm()
+    await waitFor(() => expect(acInstances).toHaveLength(2))
+
+    act(() => acInstances[0]._fire()) // pickup
+    await waitFor(() => expect(screen.getByDisplayValue('123 Main St')).toBeInTheDocument())
+
+    act(() => acInstances[1]._fire()) // dropoff — miles auto-calculated to 350
+    await waitFor(() => expect(screen.getByDisplayValue('350')).toBeInTheDocument())
+
+    const form = screen.getByRole('button', { name: /create load/i }).closest('form')
+    fireEvent.submit(form)
+
+    await waitFor(() =>
+      expect(loadsService.create).toHaveBeenCalledWith(expect.objectContaining({ miles: 350 }))
+    )
   })
 })

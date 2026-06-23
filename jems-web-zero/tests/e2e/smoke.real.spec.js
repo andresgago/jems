@@ -180,6 +180,7 @@ test('can create and delete a load via API (real)', async ({ page }) => {
     dropoff_city: cityId,
     dropoff_address: 'E2E dropoff address',
     payment: 1200,
+    miles: 350,
     weight: 42000,
     trailer_type: trailerTypeId,
     carrier: carrierId,
