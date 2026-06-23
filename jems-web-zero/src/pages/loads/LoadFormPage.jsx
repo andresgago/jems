@@ -283,7 +283,7 @@ function csvToIds(value) {
 
 const EMPTY = {
   number: '', weight: 42000, payment: '',
-  detention: 0, lumper: 0, lumper_paid_by: '', drop_trailer: 0,
+  detention: 0, lumper: 0, lumper_paid_by: '',
   miles: 0, miles_empty: 0,
   pickup_date: '', pickup_address: '', pickup_city: null,
   dropoff_date: '', dropoff_address: '', dropoff_city: null,
@@ -411,7 +411,7 @@ export default function LoadFormPage() {
         number: data.number || '', weight: data.weight || 0,
         payment: data.payment || '', detention: data.detention || 0,
         lumper: data.lumper || 0, lumper_paid_by: data.lumper_paid_by || '',
-        drop_trailer: data.drop_trailer || 0, miles: data.miles || 0,
+        miles: data.miles || 0,
         miles_empty: data.miles_empty || 0,
         pickup_date: utcIsoToEtDisplay(data.pickup_date), pickup_address: data.pickup_address || '',
         pickup_city: data.pickup_city || null,
@@ -755,11 +755,6 @@ export default function LoadFormPage() {
               {err('lumper_paid_by')}
             </div>
           )}
-          <div className="col-md-2">
-            <label className="control-label">Drop Trailer ($)</label>
-            <input type="number" step="0.01" className="form-control form-control-sm" value={form.drop_trailer}
-              onChange={e => set('drop_trailer', parseFloat(e.target.value) || 0)} />
-          </div>
         </div>
 
         {/* Row 8: Details */}

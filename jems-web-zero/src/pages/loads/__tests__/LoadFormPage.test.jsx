@@ -250,7 +250,6 @@ describe('LoadFormPage — edit load', () => {
         detention: 0,
         lumper: 0,
         lumper_paid_by: '',
-        drop_trailer: 0,
         miles: 500,
         miles_empty: 50,
         pickup_date: '2026-01-10T15:00:00Z',
