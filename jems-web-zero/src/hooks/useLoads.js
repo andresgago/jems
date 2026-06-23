@@ -1,25 +1,31 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { loadsService } from '../services/loads';
 
 export function useLoads(filters) {
   const [loads, setLoads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [tick, setTick] = useState(0);
 
-  const fetch = useCallback(async () => {
+  const filtersRef = useRef(filters);
+  useEffect(() => { filtersRef.current = filters; });
+
+  const filtersKey = JSON.stringify(filters);
+
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    try {
-      const { data } = await loadsService.list(filters);
-      setLoads(Array.isArray(data) ? data : data.results || []);
-    } catch (e) {
-      setError(e);
-    } finally {
-      setLoading(false);
-    }
-  }, [JSON.stringify(filters)]);
+    loadsService.list(filtersRef.current)
+      .then(({ data }) => {
+        if (!cancelled) setLoads(Array.isArray(data) ? data : data.results || []);
+      })
+      .catch((e) => { if (!cancelled) setError(e); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  // filtersKey is a stable serialization of filters — re-fetch only on deep change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersKey, tick]);
 
-  useEffect(() => { fetch(); }, [fetch]);
-
-  return { loads, loading, error, refresh: fetch };
+  return { loads, loading, error, refresh: () => setTick((t) => t + 1) };
 }

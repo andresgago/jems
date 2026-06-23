@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { loadsService } from '../../services/loads';
 import { useOptions } from '../../hooks/useOptions';
 import api from '../../services/api';
+import { loadGoogleMaps, parsePlaceComponents, calculateMiles } from '../../services/googleMaps';
+import DateTimePicker from '../../components/DateTimePicker';
 
 const LUMPER_PAID_BY = [
   { value: '', label: '—' },
@@ -265,6 +267,79 @@ export default function LoadFormPage() {
   const trailerTypes = useOptions('/fleet/trailer-types/');
   const carriers = useOptions('/carriers/');
 
+  const pickupAddressRef = useRef(null);
+  const dropoffAddressRef = useRef(null);
+  const pickupLatLng = useRef(null);
+  const dropoffLatLng = useRef(null);
+  const autocompleteReady = useRef(false);
+
+  useEffect(() => {
+    if (loadingData) return;
+    if (autocompleteReady.current) return;
+    autocompleteReady.current = true;
+
+    let cancelled = false;
+
+    const findCity = async ({ zip, cityName, state }) => {
+      if (zip) {
+        const { data } = await api.get('/loads/cities/search/', { params: { q: zip } }).catch(() => ({ data: [] }));
+        const match = state ? data.find(c => c.state === state) : data[0];
+        if (match) return match;
+      }
+      if (cityName) {
+        const { data } = await api.get('/loads/cities/search/', { params: { q: cityName } }).catch(() => ({ data: [] }));
+        const match = state ? data.find(c => c.state === state) : data[0];
+        if (match) return match;
+      }
+      return null;
+    };
+
+    loadGoogleMaps().then(() => {
+      if (cancelled) return;
+      const options = {
+        fields: ['address_components', 'geometry'],
+        componentRestrictions: { country: 'us' },
+      };
+
+      const pickupAC = new window.google.maps.places.Autocomplete(pickupAddressRef.current, options);
+      pickupAC.addListener('place_changed', async () => {
+        const place = pickupAC.getPlace();
+        if (!place.geometry) return;
+        const components = parsePlaceComponents(place);
+        if (components.street) set('pickup_address', components.street);
+        pickupLatLng.current = place.geometry.location;
+        const city = await findCity(components);
+        if (city) {
+          setForm(f => ({ ...f, pickup_city: city.id }));
+          setDisp('pickup_city', `${city.name}, ${city.state}`);
+        }
+        if (dropoffLatLng.current) {
+          const miles = await calculateMiles(pickupLatLng.current, dropoffLatLng.current);
+          if (miles) set('miles', miles);
+        }
+      });
+
+      const dropoffAC = new window.google.maps.places.Autocomplete(dropoffAddressRef.current, options);
+      dropoffAC.addListener('place_changed', async () => {
+        const place = dropoffAC.getPlace();
+        if (!place.geometry) return;
+        const components = parsePlaceComponents(place);
+        if (components.street) set('dropoff_address', components.street);
+        dropoffLatLng.current = place.geometry.location;
+        const city = await findCity(components);
+        if (city) {
+          setForm(f => ({ ...f, dropoff_city: city.id }));
+          setDisp('dropoff_city', `${city.name}, ${city.state}`);
+        }
+        if (pickupLatLng.current) {
+          const miles = await calculateMiles(pickupLatLng.current, dropoffLatLng.current);
+          if (miles) set('miles', miles);
+        }
+      });
+    });
+    return () => { cancelled = true; };
+  }, [loadingData]);
+
   const loadBrokerContacts = async (brokerId) => {
     if (!brokerId) {
       setBrokerContacts([]);
@@ -312,7 +387,7 @@ export default function LoadFormPage() {
       });
       setLoadingData(false);
     });
-  }, [id]);
+  }, [id, isEdit]);
 
   useEffect(() => {
     if (!form.broker) {
@@ -481,12 +556,12 @@ export default function LoadFormPage() {
           <div className="col-md-6">
             <label className="control-label">Pickup Address</label>
             <input type="text" className="form-control form-control-sm" value={form.pickup_address}
-              onChange={e => set('pickup_address', e.target.value)} autoComplete="on" />
+              onChange={e => set('pickup_address', e.target.value)} autoComplete="off" ref={pickupAddressRef} />
           </div>
           <div className="col-md-6">
             <label className="control-label">Dropoff Address</label>
             <input type="text" className="form-control form-control-sm" value={form.dropoff_address}
-              onChange={e => set('dropoff_address', e.target.value)} autoComplete="on" />
+              onChange={e => set('dropoff_address', e.target.value)} autoComplete="off" ref={dropoffAddressRef} />
           </div>
         </div>
 
@@ -522,14 +597,22 @@ export default function LoadFormPage() {
         <div className="row mb-3">
           <div className="col-md-4">
             <label className="control-label">Pickup Date <span className="text-danger">*</span></label>
-            <input type="date" className={`form-control form-control-sm ${errors.pickup_date ? 'is-invalid' : ''}`}
-              value={form.pickup_date} onChange={e => set('pickup_date', e.target.value)} required />
+            <DateTimePicker
+              value={form.pickup_date}
+              onChange={v => set('pickup_date', v)}
+              required
+              className={`form-control form-control-sm ${errors.pickup_date ? 'is-invalid' : ''}`}
+            />
             {err('pickup_date')}
           </div>
           <div className="col-md-4">
             <label className="control-label">Dropoff Date <span className="text-danger">*</span></label>
-            <input type="date" className={`form-control form-control-sm ${errors.dropoff_date ? 'is-invalid' : ''}`}
-              value={form.dropoff_date} onChange={e => set('dropoff_date', e.target.value)} required />
+            <DateTimePicker
+              value={form.dropoff_date}
+              onChange={v => set('dropoff_date', v)}
+              required
+              className={`form-control form-control-sm ${errors.dropoff_date ? 'is-invalid' : ''}`}
+            />
             {err('dropoff_date')}
           </div>
         </div>
