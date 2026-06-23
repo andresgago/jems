@@ -86,6 +86,153 @@ function AsyncSearch({ label, placeholder = 'Type to search...', value, displayV
   );
 }
 
+function BrokerContactsSelect({ brokerId, contacts, loading, value, onChange, onContactCreated }) {
+  const [showNewContact, setShowNewContact] = useState(false);
+  const [newContact, setNewContact] = useState({ name: '', email: '', phone: '' });
+  const [creatingContact, setCreatingContact] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [lastCreatedId, setLastCreatedId] = useState(null);
+  const listRef = useRef(null);
+  const selectedIds = csvToIds(value);
+
+  useEffect(() => {
+    if (!lastCreatedId || !listRef.current) return;
+    const el = listRef.current.querySelector(`[data-contact-id="${lastCreatedId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      setLastCreatedId(null);
+    }
+  }, [contacts, lastCreatedId]);
+
+  const toggleContact = (contact) => {
+    const contactId = String(contact.id);
+    const isSelected = selectedIds.includes(contactId);
+    let next = isSelected
+      ? selectedIds.filter((id) => id !== contactId)
+      : [...selectedIds, contactId];
+
+    if (!isSelected && contact?.team) {
+      const teamIds = contacts
+        .filter((item) => item.team === contact.team)
+        .map((item) => String(item.id));
+      next = Array.from(new Set([...next, ...teamIds]));
+    }
+
+    onChange(next.join(','));
+  };
+
+  const handleCreateContact = async () => {
+    if (!brokerId || !newContact.name || !newContact.email || !newContact.phone) return;
+    setCreatingContact(true);
+    setCreateError('');
+    try {
+      const { data } = await api.post(`/brokers/${brokerId}/contacts/`, newContact);
+      await onContactCreated(data);
+      setLastCreatedId(data.id);
+      setNewContact({ name: '', email: '', phone: '' });
+      setShowNewContact(false);
+    } catch (error) {
+      const response = error.response?.data;
+      setCreateError(response ? JSON.stringify(response) : 'Could not create contact.');
+    } finally {
+      setCreatingContact(false);
+    }
+  };
+
+  return (
+    <div>
+      <label className="control-label d-flex align-items-center gap-1">
+        Broker Contacts
+        <button
+          type="button"
+          className="btn btn-default btn-xs border py-0 px-1"
+          title="Create new contact"
+          aria-label="Create new contact"
+          disabled={!brokerId}
+          onClick={() => setShowNewContact((current) => !current)}
+        >
+          <i className="bi bi-plus" />
+        </button>
+      </label>
+      {showNewContact && (
+        <div className="border rounded p-2 mb-2 bg-light">
+          <div className="row g-2">
+            <div className="col-md-4">
+              <input
+                className="form-control form-control-sm"
+                placeholder="Name"
+                value={newContact.name}
+                onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+              />
+            </div>
+            <div className="col-md-4">
+              <input
+                className="form-control form-control-sm"
+                placeholder="Email"
+                type="email"
+                value={newContact.email}
+                onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
+              />
+            </div>
+            <div className="col-md-4">
+              <div className="input-group input-group-sm">
+                <input
+                  className="form-control"
+                  placeholder="Phone"
+                  value={newContact.phone}
+                  onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+                />
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  aria-label="Add broker contact"
+                  disabled={creatingContact || !newContact.name || !newContact.email || !newContact.phone}
+                  onClick={handleCreateContact}
+                >
+                  <i className="bi bi-check" />
+                </button>
+              </div>
+            </div>
+          </div>
+          {createError && <div className="text-danger small mt-1">{createError}</div>}
+        </div>
+      )}
+      <div className="broker-contacts-list border rounded bg-white" ref={listRef}>
+        {contacts.map((contact) => {
+          const contactId = String(contact.id);
+          return (
+            <label className="broker-contact-option" key={contact.id} data-contact-id={contact.id}>
+              <input
+                className="form-check-input"
+                type="checkbox"
+                checked={selectedIds.includes(contactId)}
+                disabled={!brokerId || loading}
+                onChange={() => toggleContact(contact)}
+              />
+              <span>
+                {contact.name} <span className="text-muted">({contact.email})</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      {!brokerId && <div className="form-text">Select a broker first.</div>}
+      {brokerId && loading && <div className="form-text">Loading contacts...</div>}
+      {brokerId && !loading && contacts.length === 0 && (
+        <div className="form-text">No contacts found for this broker.</div>
+      )}
+    </div>
+  );
+}
+
+function csvToIds(value) {
+  if (!value) return [];
+  return String(value)
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
 const EMPTY = {
   number: '', weight: 42000, payment: '',
   detention: 0, lumper: 0, lumper_paid_by: '', drop_trailer: 0,
@@ -110,11 +257,32 @@ export default function LoadFormPage() {
   const [form, setForm] = useState(EMPTY);
   const [display, setDisplay] = useState(EMPTY_DISPLAY);
   const [errors, setErrors] = useState({});
+  const [brokerContacts, setBrokerContacts] = useState([]);
+  const [loadingBrokerContacts, setLoadingBrokerContacts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingData, setLoadingData] = useState(isEdit);
 
   const trailerTypes = useOptions('/fleet/trailer-types/');
   const carriers = useOptions('/carriers/');
+
+  const loadBrokerContacts = async (brokerId) => {
+    if (!brokerId) {
+      setBrokerContacts([]);
+      return [];
+    }
+
+    setLoadingBrokerContacts(true);
+    try {
+      const { data } = await api.get(`/brokers/${brokerId}/contacts/`);
+      setBrokerContacts(data);
+      return data;
+    } catch {
+      setBrokerContacts([]);
+      return [];
+    } finally {
+      setLoadingBrokerContacts(false);
+    }
+  };
 
   useEffect(() => {
     if (!isEdit) return;
@@ -145,6 +313,28 @@ export default function LoadFormPage() {
       setLoadingData(false);
     });
   }, [id]);
+
+  useEffect(() => {
+    if (!form.broker) {
+      setBrokerContacts([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingBrokerContacts(true);
+    api.get(`/brokers/${form.broker}/contacts/`)
+      .then(({ data }) => {
+        if (!cancelled) setBrokerContacts(data);
+      })
+      .catch(() => {
+        if (!cancelled) setBrokerContacts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBrokerContacts(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [form.broker]);
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
   const setDisp = (field, value) => setDisplay(d => ({ ...d, [field]: value }));
@@ -258,14 +448,31 @@ export default function LoadFormPage() {
               value={form.broker}
               displayValue={display.broker}
               onSearch={searchBrokers}
-              onSelect={item => { set('broker', item.id); setDisp('broker', item.label); }}
-              onClear={() => { set('broker', null); setDisp('broker', ''); }}
+              onSelect={item => { set('broker', item.id); set('broker_contacts', ''); setDisp('broker', item.label); }}
+              onClear={() => { set('broker', null); set('broker_contacts', ''); setDisp('broker', ''); }}
             />
           </div>
           <div className="col-md-4">
-            <label className="control-label">Broker Contacts</label>
-            <input type="text" className="form-control form-control-sm" value={form.broker_contacts}
-              onChange={e => set('broker_contacts', e.target.value)} placeholder="Contact info" />
+            <BrokerContactsSelect
+              brokerId={form.broker}
+              contacts={brokerContacts}
+              loading={loadingBrokerContacts}
+              value={form.broker_contacts}
+              onChange={(value) => set('broker_contacts', value)}
+              onContactCreated={async (contact) => {
+                const contacts = await loadBrokerContacts(form.broker);
+                if (!contacts.some((item) => String(item.id) === String(contact.id))) {
+                  setBrokerContacts((current) => [...current, contact]);
+                }
+                setForm((current) => ({
+                  ...current,
+                  broker_contacts: Array.from(new Set([
+                    ...csvToIds(current.broker_contacts),
+                    String(contact.id),
+                  ])).join(','),
+                }));
+              }}
+            />
           </div>
         </div>
 

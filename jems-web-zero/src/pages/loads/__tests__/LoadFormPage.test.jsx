@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import LoadFormPage from '../LoadFormPage'
 
@@ -18,11 +18,12 @@ vi.mock('../../../services/loads', () => ({
 }))
 
 vi.mock('../../../services/api', () => ({
-  default: { get: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn() },
 }))
 
 import { useOptions } from '../../../hooks/useOptions'
 import { loadsService } from '../../../services/loads'
+import api from '../../../services/api'
 
 const TRAILER_TYPES = [
   { id: 1, name: 'Van', short_name: 'V', is_active: true },
@@ -67,6 +68,7 @@ const getTrailerTypeSelect = () =>
 
 describe('LoadFormPage — new load', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     useOptions.mockImplementation((url) => {
       if (url.includes('trailer-types')) return TRAILER_TYPES
       if (url.includes('carriers')) return CARRIERS
@@ -141,10 +143,24 @@ describe('LoadFormPage — new load', () => {
 
 describe('LoadFormPage — edit load', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
+    window.HTMLElement.prototype.scrollIntoView = vi.fn()
     useOptions.mockImplementation((url) => {
       if (url.includes('trailer-types')) return TRAILER_TYPES
       if (url.includes('carriers')) return CARRIERS
       return []
+    })
+
+    api.get.mockImplementation((url) => {
+      if (url === '/brokers/1/contacts/') {
+        return Promise.resolve({
+          data: [
+            { id: 10, name: 'John Doe', email: 'john@example.com', phone: '555-1000', team: 10 },
+            { id: 11, name: 'Jane Doe', email: 'jane@example.com', phone: '555-1001', team: 10 },
+          ],
+        })
+      }
+      return Promise.resolve({ data: [] })
     })
 
     loadsService.get.mockResolvedValue({
@@ -168,7 +184,7 @@ describe('LoadFormPage — edit load', () => {
         dropoff_city_display: 'Chicago, IL',
         broker: 1,
         broker_name: 'Test Broker',
-        broker_contacts: 'John Doe',
+        broker_contacts: '10',
         trailer_type: 1,
         carrier: 1,
         carrier_name: 'Jobee Express LLC',
@@ -198,5 +214,101 @@ describe('LoadFormPage — edit load', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument()
     )
+  })
+
+  it('loads real broker contacts for the selected broker', async () => {
+    renderEditForm()
+
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith('/brokers/1/contacts/')
+    )
+
+    const john = await screen.findByRole('checkbox', { name: /john doe \(john@example.com\)/i })
+    expect(john).toBeInTheDocument()
+    expect(john).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /jane doe \(jane@example.com\)/i })).toBeInTheDocument()
+  })
+
+  it('allows selecting multiple existing broker contacts with normal clicks', async () => {
+    renderEditForm()
+
+    const jane = await screen.findByRole('checkbox', { name: /jane doe \(jane@example.com\)/i })
+    fireEvent.click(jane)
+
+    expect(screen.getByRole('checkbox', { name: /john doe \(john@example.com\)/i })).toBeChecked()
+    expect(jane).toBeChecked()
+  })
+
+  it('creates a new broker contact inline and selects it', async () => {
+    api.post.mockResolvedValueOnce({
+      data: {
+        id: 12,
+        name: 'New Contact',
+        email: 'new@example.com',
+        phone: '555-1002',
+        team: null,
+      },
+    })
+
+    renderEditForm()
+    await screen.findByRole('checkbox', { name: /john doe/i })
+
+    fireEvent.click(screen.getByTitle(/create new contact/i))
+    fireEvent.change(screen.getByPlaceholderText('Name'), {
+      target: { value: 'New Contact' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Email'), {
+      target: { value: 'new@example.com' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Phone'), {
+      target: { value: '555-1002' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /add broker contact/i }))
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/brokers/1/contacts/', {
+        name: 'New Contact',
+        email: 'new@example.com',
+        phone: '555-1002',
+      })
+    )
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledTimes(2)
+    )
+
+    const created = await screen.findByRole('checkbox', {
+      name: /new contact \(new@example.com\)/i,
+    })
+    expect(created).toBeChecked()
+  })
+
+  it('add button stays disabled when phone is missing', async () => {
+    renderEditForm()
+    await screen.findByRole('checkbox', { name: /john doe/i })
+
+    fireEvent.click(screen.getByTitle(/create new contact/i))
+    fireEvent.change(screen.getByPlaceholderText('Name'), { target: { value: 'Test' } })
+    fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'test@example.com' } })
+
+    expect(screen.getByRole('button', { name: /add broker contact/i })).toBeDisabled()
+  })
+
+  it('scrolls to the newly created contact after adding', async () => {
+    api.post.mockResolvedValueOnce({
+      data: { id: 12, name: 'New Contact', email: 'new@example.com', phone: '', team: null },
+    })
+
+    renderEditForm()
+    await screen.findByRole('checkbox', { name: /john doe/i })
+
+    fireEvent.click(screen.getByTitle(/create new contact/i))
+    fireEvent.change(screen.getByPlaceholderText('Name'), { target: { value: 'New Contact' } })
+    fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'new@example.com' } })
+    fireEvent.change(screen.getByPlaceholderText('Phone'), { target: { value: '555-9999' } })
+    fireEvent.click(screen.getByRole('button', { name: /add broker contact/i }))
+
+    await screen.findByRole('checkbox', { name: /new contact \(new@example.com\)/i })
+
+    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' })
   })
 })
