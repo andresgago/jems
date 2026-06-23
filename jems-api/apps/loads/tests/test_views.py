@@ -75,6 +75,7 @@ class TestLoadCreate:
             "dropoff_city": city.pk,
             "pickup_address": "123 Start Ave",
             "dropoff_address": "456 End Blvd",
+            "miles": 350,
             "payment": 2000.00,
             "broker": broker.pk,
             "carrier": carrier.pk,
@@ -146,6 +147,35 @@ class TestLoadCreate:
         response = client.post(reverse("load-list"), payload)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "receiver" in response.data
+
+    def test_miles_required(self, auth_client):
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
+
+        client, _ = auth_client
+        city = CityFactory()
+        payload = {
+            "number": "LD-NOMILES",
+            "pickup_date": timezone.now().strftime("%Y-%m-%d %H:%M"),
+            "dropoff_date": (timezone.now() + datetime.timedelta(days=2)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "payment": 1500.00,
+            "broker": BrokerFactory().pk,
+            "carrier": CarrierFactory().pk,
+            "shipper": BusinessFactory().pk,
+            "receiver": BusinessFactory().pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "miles" in response.data
 
 
 @pytest.mark.django_db
@@ -330,6 +360,7 @@ class TestLoadDateValidation:
             "dropoff_city": city.pk,
             "pickup_address": "123 Start Ave",
             "dropoff_address": "456 End Blvd",
+            "miles": 350,
             "payment": 1500.00,
             "broker": broker.pk,
             "carrier": carrier.pk,
@@ -362,6 +393,7 @@ class TestLoadDateValidation:
             "dropoff_city": city.pk,
             "pickup_address": "123 Start Ave",
             "dropoff_address": "456 End Blvd",
+            "miles": 350,
             "payment": 1500.00,
             "broker": broker.pk,
             "carrier": carrier.pk,
@@ -395,6 +427,7 @@ class TestLoadDateValidation:
             "dropoff_city": city.pk,
             "pickup_address": "123 Start Ave",
             "dropoff_address": "456 End Blvd",
+            "miles": 350,
             "payment": 1500.00,
             "broker": broker.pk,
             "carrier": carrier.pk,

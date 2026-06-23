@@ -139,6 +139,8 @@ class LoadSerializer(serializers.ModelSerializer):
             "stops",
         ]
 
+    miles = serializers.FloatField(required=True, min_value=0)
+
     shipper = serializers.PrimaryKeyRelatedField(
         queryset=Business.objects.all(),
         required=True,
