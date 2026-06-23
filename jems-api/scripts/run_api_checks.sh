@@ -256,7 +256,7 @@ pass "State TX id=${STATE_ID}, City Houston id=${CITY_ID}"
 step "Start Django dev server on port ${SERVER_PORT}"
 free_port
 DATABASE_URL="postgis://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}" \
-  uv run python manage.py runserver "${SERVER_PORT}" > /tmp/jems-server.log 2>&1 &
+  uv run python manage.py runserver --noreload "${SERVER_PORT}" > /tmp/jems-server.log 2>&1 &
 SERVER_PID=$!
 wait_for_server
 pass "Server running (pid ${SERVER_PID})"

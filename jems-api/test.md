@@ -69,6 +69,11 @@ uv run mypy .
 uv run python manage.py seed
 ```
 
+### Import legacy TMS data from the local SQL dump
+```bash
+uv run python manage.py seed_from_tms_dump
+```
+
 ### Apply migrations
 ```bash
 uv run python manage.py migrate
