@@ -3,7 +3,7 @@
 <html lang="en">
 
 <head>
-    <title>Code coverage report for hooks/useLoads.js</title>
+    <title>Code coverage report for utils/dates.js</title>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="../prettify.css" />
     <link rel="stylesheet" href="../base.css" />
@@ -19,34 +19,34 @@
 <body>
 <div class='wrapper'>
     <div class='pad1'>
-        <h1><a href="../index.html">All files</a> / <a href="index.html">hooks</a> useLoads.js</h1>
+        <h1><a href="../index.html">All files</a> / <a href="index.html">utils</a> dates.js</h1>
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">83.33% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>20/24</span>
+                <span class='fraction'>13/13</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">50% </span>
+                <span class="strong">87.5% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>5/10</span>
+                <span class='fraction'>7/8</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">66.66% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>6/9</span>
+                <span class='fraction'>2/2</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">94.11% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>16/17</span>
+                <span class='fraction'>9/9</span>
             </div>
         
             
@@ -93,68 +93,65 @@
 <a name='L28'></a><a href='#L28'>28</a>
 <a name='L29'></a><a href='#L29'>29</a>
 <a name='L30'></a><a href='#L30'>30</a>
-<a name='L31'></a><a href='#L31'>31</a>
-<a name='L32'></a><a href='#L32'>32</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
+<a name='L31'></a><a href='#L31'>31</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { useState, useEffect, useRef } from 'react';
-import { loadsService } from '../services/loads';
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">29x</span>
+<span class="cline-any cline-yes">26x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">25x</span>
+<span class="cline-any cline-yes">25x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">24x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">216x</span>
+<span class="cline-any cline-yes">24x</span>
+<span class="cline-any cline-yes">29x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const _ET = 'America/New_York';
 &nbsp;
-export function useLoads(filters) {
-  const [loads, setLoads] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [tick, setTick] = useState(0);
+/**
+ * Converts a UTC ISO 8601 string (as returned by the API) to a "YYYY-MM-DD HH:MM"
+ * string in Eastern Time, which is the format the DateTimePicker emits and expects.
+ *
+ * If the value is already in "YYYY-MM-DD HH:MM" form (e.g. still in local state
+ * after user interaction), it is returned unchanged.
+ */
+export function utcIsoToEtDisplay(isoStr) {
+  if (!isoStr) return '';
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(isoStr)) return isoStr;
 &nbsp;
-  const filtersRef = useRef(filters);
-  useEffect(() =&gt; { filtersRef.current = filters; });
+  const date = new Date(isoStr);
+  if (isNaN(date.getTime())) return '';
 &nbsp;
-  const filtersKey = JSON.stringify(filters);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: _ET,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
 &nbsp;
-  useEffect(() =&gt; {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    loadsService.list(filtersRef.current)
-      .then(({ data }) =&gt; {
-        <span class="missing-if-branch" title="else path not taken" >E</span>if (!cancelled) setLoads(Array.isArray(data) ? data : data.results || <span class="branch-1 cbranch-no" title="branch not covered" >[])</span>;
-      })
-      .<span class="fstat-no" title="function not covered" >catch((e</span>) =&gt; { <span class="cstat-no" title="statement not covered" >if (!cancelled) <span class="cstat-no" title="statement not covered" >setError(e); }</span></span>)
-      .finally(() =&gt; { <span class="missing-if-branch" title="else path not taken" >E</span>if (!cancelled) setLoading(false); });
-    return () =&gt; { cancelled = true; };
-  // filtersKey is a stable serialization of filters — re-fetch only on deep change
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey, tick]);
-&nbsp;
-  return { loads, loading, error, <span class="fstat-no" title="function not covered" >refresh: () =&gt; <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >s</span>etTick((t</span>) =&gt; <span class="cstat-no" title="statement not covered" >t + 1)</span> }</span>;
+  const p = Object.fromEntries(parts.map(({ type, value }) =&gt; [type, value]));
+  const hour = p.hour === '24' ? <span class="branch-0 cbranch-no" title="branch not covered" >'00' : p</span>.hour;
+  return `${p.year}-${p.month}-${p.day} ${hour}:${p.minute}`;
 }
 &nbsp;</pre></td></tr></table></pre>
 

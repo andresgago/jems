@@ -640,7 +640,7 @@ export default function LoadFormPage() {
 
         {/* Row 5: Pickup Date | Dropoff Date */}
         <div className="row mb-3">
-          <div className="col-md-4">
+          <div className="col-md-6">
             <label className="control-label">Pickup Date <span className="text-danger">*</span></label>
             <DateTimePicker
               value={form.pickup_date}
@@ -650,7 +650,7 @@ export default function LoadFormPage() {
             />
             {err('pickup_date')}
           </div>
-          <div className="col-md-4">
+          <div className="col-md-6">
             <label className="control-label">Dropoff Date <span className="text-danger">*</span></label>
             <DateTimePicker
               value={form.dropoff_date}

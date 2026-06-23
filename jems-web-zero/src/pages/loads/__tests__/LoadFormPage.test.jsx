@@ -117,6 +117,20 @@ describe('LoadFormPage — new load', () => {
     expect(label).toHaveTextContent('*')
   })
 
+  // Dates ────────────────────────────────────────────────────────────────────
+
+  it('Pickup Date label shows required asterisk', () => {
+    renderNewForm()
+    const label = screen.getByText(/pickup date/i, { selector: 'label' })
+    expect(label).toHaveTextContent('*')
+  })
+
+  it('Dropoff Date label shows required asterisk', () => {
+    renderNewForm()
+    const label = screen.getByText(/dropoff date/i, { selector: 'label' })
+    expect(label).toHaveTextContent('*')
+  })
+
   // Trailer Type ─────────────────────────────────────────────────────────────
 
   it('trailer type select is required', () => {

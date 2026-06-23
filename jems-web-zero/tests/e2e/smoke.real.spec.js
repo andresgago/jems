@@ -167,6 +167,9 @@ test('can create and delete a load via API (real)', async ({ page }) => {
   expect(brokerId).toBeTruthy()
   expect(cityId).toBeTruthy()
 
+  const shipper = await apiPost(page, token, '/brokers/business/', { name: `E2E Shipper ${Date.now()}` })
+  const receiver = await apiPost(page, token, '/brokers/business/', { name: `E2E Receiver ${Date.now()}` })
+
   const number = `E2E-${Date.now()}`
   const created = await apiPost(page, token, '/loads/', {
     number,
@@ -182,6 +185,8 @@ test('can create and delete a load via API (real)', async ({ page }) => {
     carrier: carrierId,
     broker: brokerId,
     broker_contacts: 'E2E contact',
+    shipper: shipper.id,
+    receiver: receiver.id,
   })
 
   expect(created.id).toBeTruthy()
