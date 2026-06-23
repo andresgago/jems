@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -198,6 +199,17 @@ class Load(models.Model):
 
     def __str__(self) -> str:
         return self.number
+
+    def clean(self) -> None:
+        super().clean()
+        if self.lumper <= 0:
+            self.lumper_paid_by = ""
+        elif not self.lumper_paid_by:
+            raise ValidationError(
+                {
+                    "lumper_paid_by": "Lumper Paid By is required when lumper is greater than 0."
+                }
+            )
 
 
 class LoadStop(models.Model):

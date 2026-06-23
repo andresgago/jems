@@ -153,13 +153,27 @@ class LoadSerializer(serializers.ModelSerializer):
     )
 
     def validate(self, attrs: dict) -> dict:
+        instance = getattr(self, "instance", None)
+        lumper = attrs.get("lumper", instance.lumper if instance else 0)
+        lumper_paid_by = attrs.get(
+            "lumper_paid_by", instance.lumper_paid_by if instance else ""
+        )
+        if lumper <= 0:
+            attrs["lumper_paid_by"] = ""
+        elif not lumper_paid_by:
+            raise serializers.ValidationError(
+                {
+                    "lumper_paid_by": "Lumper Paid By is required when lumper is greater than 0."
+                }
+            )
+
         pickup = attrs.get(
             "pickup_date",
-            getattr(self.instance, "pickup_date", None),
+            getattr(instance, "pickup_date", None),
         )
         dropoff = attrs.get(
             "dropoff_date",
-            getattr(self.instance, "dropoff_date", None),
+            getattr(instance, "dropoff_date", None),
         )
         if pickup and dropoff and dropoff < pickup:
             raise serializers.ValidationError(

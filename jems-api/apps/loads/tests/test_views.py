@@ -110,6 +110,69 @@ class TestLoadCreate:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["number"] == "LD-99999"
 
+    def test_lumper_paid_by_required_when_lumper_is_positive(self, auth_client):
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
+
+        client, _ = auth_client
+        city = CityFactory()
+        payload = {
+            "number": "LD-LUMPER-1",
+            "pickup_date": timezone.now().strftime("%Y-%m-%d %H:%M"),
+            "dropoff_date": (timezone.now() + datetime.timedelta(days=2)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "miles": 350,
+            "payment": 2000.00,
+            "lumper": 75.00,
+            "broker": BrokerFactory().pk,
+            "carrier": CarrierFactory().pk,
+            "shipper": BusinessFactory().pk,
+            "receiver": BusinessFactory().pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "lumper_paid_by" in response.data
+
+    def test_lumper_paid_by_is_cleared_when_lumper_is_zero(self, auth_client):
+        from apps.loads.tests.factories import (
+            BrokerFactory,
+            BusinessFactory,
+            CarrierFactory,
+        )
+
+        client, _ = auth_client
+        city = CityFactory()
+        payload = {
+            "number": "LD-LUMPER-0",
+            "pickup_date": timezone.now().strftime("%Y-%m-%d %H:%M"),
+            "dropoff_date": (timezone.now() + datetime.timedelta(days=2)).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "pickup_city": city.pk,
+            "dropoff_city": city.pk,
+            "pickup_address": "123 Start Ave",
+            "dropoff_address": "456 End Blvd",
+            "miles": 350,
+            "payment": 2000.00,
+            "lumper": 0,
+            "lumper_paid_by": Load.LumperPaidBy.DRIVER,
+            "broker": BrokerFactory().pk,
+            "carrier": CarrierFactory().pk,
+            "shipper": BusinessFactory().pk,
+            "receiver": BusinessFactory().pk,
+        }
+        response = client.post(reverse("load-list"), payload)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["lumper_paid_by"] == ""
+
     def test_duplicate_number_rejected(self, auth_client):
         client, _ = auth_client
         LoadFactory(number="LD-DUP99")

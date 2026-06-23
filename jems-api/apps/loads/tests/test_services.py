@@ -144,6 +144,16 @@ class TestUpdateLoad:
         updated = update_load(load=load, payment=2500.0)
         assert updated.payment == 2500.0
 
+    def test_clears_lumper_paid_by_when_lumper_is_zero(self):
+        load = LoadFactory(lumper=100.0, lumper_paid_by=Load.LumperPaidBy.DRIVER)
+        updated = update_load(load=load, lumper=0.0)
+        assert updated.lumper_paid_by == ""
+
+    def test_requires_lumper_paid_by_when_lumper_is_positive(self):
+        load = LoadFactory(lumper=0.0, lumper_paid_by="")
+        with pytest.raises(ValidationError):
+            update_load(load=load, lumper=100.0, lumper_paid_by="")
+
     def test_recalculates_accounting_day_when_dropoff_changes(self):
         from zoneinfo import ZoneInfo
 
