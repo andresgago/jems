@@ -42,6 +42,40 @@ def delete_broker(*, broker: Broker) -> None:
     broker.delete()
 
 
+BROKER_FILE_SLOTS = {
+    "setup-packet": "setup_packet_file",
+}
+
+
+def set_broker_file(*, broker: Broker, slot: str, file: Any) -> Broker:
+    field = BROKER_FILE_SLOTS[slot]
+    old_file = getattr(broker, field)
+    if old_file:
+        try:
+            if os.path.isfile(old_file.path):
+                os.remove(old_file.path)
+        except (ValueError, OSError):
+            pass
+    setattr(broker, field, file)
+    broker.save(update_fields=[field])
+    return broker
+
+
+def clear_broker_file(*, broker: Broker, slot: str) -> Broker:
+    field = BROKER_FILE_SLOTS[slot]
+    current = getattr(broker, field)
+    if not current:
+        return broker
+    try:
+        if os.path.isfile(current.path):
+            os.remove(current.path)
+    except (ValueError, OSError):
+        pass
+    setattr(broker, field, None)
+    broker.save(update_fields=[field])
+    return broker
+
+
 def create_broker_contact(
     *, broker: Broker, name: str, email: str, **kwargs: Any
 ) -> BrokerContact:

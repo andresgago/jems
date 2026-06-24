@@ -7,16 +7,19 @@ from rest_framework.viewsets import ViewSet
 from .models import Broker, BrokerContact, Business
 from .serializers import (
     BrokerContactSerializer,
+    BrokerFileUploadSerializer,
     BrokerListSerializer,
     BrokerSerializer,
     BusinessSerializer,
 )
 from .services import (
+    BROKER_FILE_SLOTS,
+    clear_broker_file,
     create_broker,
     create_broker_contact,
     create_business,
-    delete_broker,
     delete_broker_contact,
+    set_broker_file,
     toggle_broker_status,
     update_broker,
     update_broker_contact,
@@ -27,6 +30,12 @@ from .services import (
 class BrokerViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
+    def _get_broker(self, pk: int) -> Broker | None:
+        try:
+            return Broker.objects.select_related("carrier", "city", "state").get(pk=pk)
+        except Broker.DoesNotExist:
+            return None
+
     def list(self, request):
         brokers = Broker.objects.select_related("carrier").order_by("name")
         serializer = BrokerListSerializer(brokers, many=True)
@@ -35,53 +44,66 @@ class BrokerViewSet(ViewSet):
     def create(self, request):
         serializer = BrokerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data = {
+            k: v for k, v in serializer.validated_data.items() if k not in ("contacts",)
+        }
         broker = create_broker(
             created_by=request.user,
-            **serializer.validated_data,
+            **data,
+        )
+        broker = (
+            Broker.objects.select_related("carrier", "city", "state")
+            .prefetch_related("contacts")
+            .get(pk=broker.pk)
         )
         return Response(BrokerSerializer(broker).data, status=status.HTTP_201_CREATED)
 
     def retrieve(self, request, pk=None):
-        try:
-            broker = (
-                Broker.objects.prefetch_related("contacts")
-                .select_related("carrier")
-                .get(pk=pk)
-            )
-        except Broker.DoesNotExist:
+        broker = (
+            Broker.objects.prefetch_related("contacts")
+            .select_related("carrier", "city", "state")
+            .filter(pk=pk)
+            .first()
+        )
+        if broker is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(BrokerSerializer(broker).data)
 
     def update(self, request, pk=None):
-        try:
-            broker = Broker.objects.get(pk=pk)
-        except Broker.DoesNotExist:
+        broker = self._get_broker(pk)
+        if broker is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = BrokerSerializer(broker, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        data = {
+            k: v for k, v in serializer.validated_data.items() if k not in ("contacts",)
+        }
         broker = update_broker(
             broker=broker,
             updated_by=request.user,
-            **serializer.validated_data,
+            **data,
+        )
+        broker = (
+            Broker.objects.select_related("carrier", "city", "state")
+            .prefetch_related("contacts")
+            .get(pk=broker.pk)
         )
         return Response(BrokerSerializer(broker).data)
 
     def destroy(self, request, pk=None):
-        try:
-            broker = Broker.objects.get(pk=pk)
-        except Broker.DoesNotExist:
+        broker = self._get_broker(pk)
+        if broker is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        delete_broker(broker=broker)
+        toggle_broker_status(broker=broker)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"], url_path="toggle-status")
     def toggle_status(self, request, pk=None):
-        try:
-            broker = Broker.objects.get(pk=pk)
-        except Broker.DoesNotExist:
+        broker = self._get_broker(pk)
+        if broker is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         broker = toggle_broker_status(broker=broker)
-        return Response(BrokerSerializer(broker).data)
+        return Response(BrokerListSerializer(broker).data)
 
     @action(detail=False, methods=["get"], url_path="search")
     def search(self, request):
@@ -113,12 +135,39 @@ class BrokerViewSet(ViewSet):
 
     @action(detail=True, methods=["get"], url_path="contacts")
     def contacts(self, request, pk=None):
-        try:
-            broker = Broker.objects.get(pk=pk)
-        except Broker.DoesNotExist:
+        broker = self._get_broker(pk)
+        if broker is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         contacts = broker.contacts.order_by("email")
         return Response(BrokerContactSerializer(contacts, many=True).data)
+
+    @action(
+        detail=True,
+        methods=["post", "delete"],
+        url_path=r"files/(?P<slot>[^/.]+)",
+    )
+    def file(self, request, pk=None, slot=None):
+        if slot not in BROKER_FILE_SLOTS:
+            return Response(
+                {"error": f"Unknown slot '{slot}'. Valid: {list(BROKER_FILE_SLOTS)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        broker = self._get_broker(pk)
+        if broker is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        if request.method == "DELETE":
+            broker = clear_broker_file(broker=broker, slot=slot)
+            return Response(BrokerSerializer(broker).data)
+
+        serializer = BrokerFileUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        broker = set_broker_file(
+            broker=broker,
+            slot=slot,
+            file=serializer.validated_data["file"],
+        )
+        return Response(BrokerSerializer(broker).data)
 
 
 class BusinessViewSet(ViewSet):
@@ -165,7 +214,7 @@ class BusinessViewSet(ViewSet):
 class BrokerContactViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
-    def _get_broker(self, broker_pk):
+    def _get_broker(self, broker_pk: int) -> Broker | None:
         try:
             return Broker.objects.get(pk=broker_pk)
         except Broker.DoesNotExist:

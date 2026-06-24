@@ -1,4 +1,5 @@
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -137,3 +138,96 @@ class TestBrokerContacts:
         )
         response = client.delete(url)
         assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_contact_has_confirmed_and_is_scam_fields(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory()
+        BrokerContactFactory(broker=broker, confirmed=True, is_scam=False)
+        response = client.get(
+            reverse("broker-contact-list", kwargs={"broker_pk": broker.pk})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data[0]["confirmed"] is True
+        assert response.data[0]["is_scam"] is False
+
+    def test_patch_contact_sets_is_scam(self, auth_client):
+        client, _ = auth_client
+        contact = BrokerContactFactory(is_scam=False)
+        url = reverse(
+            "broker-contact-detail",
+            kwargs={"broker_pk": contact.broker.pk, "pk": contact.pk},
+        )
+        response = client.patch(url, {"is_scam": True})
+        assert response.status_code == status.HTTP_200_OK
+        contact.refresh_from_db()
+        assert contact.is_scam is True
+
+
+@pytest.mark.django_db
+class TestBrokerRetrieveNewFields:
+    def test_retrieve_includes_address_fields(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory(
+            physical_address="123 Main St",
+            usdot_number="1234567",
+            safer_operating_status="AUTHORIZED",
+        )
+        response = client.get(reverse("broker-detail", kwargs={"pk": broker.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["physical_address"] == "123 Main St"
+        assert response.data["usdot_number"] == "1234567"
+        assert response.data["safer_operating_status"] == "AUTHORIZED"
+
+    def test_retrieve_includes_carrier_name(self, auth_client):
+        from apps.carriers.tests.factories import CarrierFactory
+
+        client, _ = auth_client
+        carrier = CarrierFactory()
+        broker = BrokerFactory(carrier=carrier)
+        response = client.get(reverse("broker-detail", kwargs={"pk": broker.pk}))
+        assert response.data["carrier_name"] == carrier.name
+
+
+@pytest.mark.django_db
+class TestBrokerDestroy:
+    def test_destroy_soft_deletes_broker(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory(status=Broker.Status.ACTIVE)
+        response = client.delete(reverse("broker-detail", kwargs={"pk": broker.pk}))
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        broker.refresh_from_db()
+        assert broker.status == Broker.Status.INACTIVE
+
+
+@pytest.mark.django_db
+class TestBrokerFileUpload:
+    def _pdf(self, name: str = "packet.pdf") -> SimpleUploadedFile:
+        return SimpleUploadedFile(
+            name, b"%PDF-1.4 fake", content_type="application/pdf"
+        )
+
+    def test_upload_setup_packet(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory()
+        url = reverse("broker-file", kwargs={"pk": broker.pk, "slot": "setup-packet"})
+        response = client.post(url, {"file": self._pdf()}, format="multipart")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["setup_packet_file"]
+
+    def test_unknown_slot_returns_400(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory()
+        url = reverse("broker-file", kwargs={"pk": broker.pk, "slot": "does-not-exist"})
+        response = client.post(url, {"file": self._pdf()}, format="multipart")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_clear_setup_packet(self, auth_client):
+        from apps.brokers.services import set_broker_file
+
+        client, _ = auth_client
+        broker = BrokerFactory()
+        broker = set_broker_file(broker=broker, slot="setup-packet", file=self._pdf())
+        url = reverse("broker-file", kwargs={"pk": broker.pk, "slot": "setup-packet"})
+        response = client.delete(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert not response.data["setup_packet_file"]

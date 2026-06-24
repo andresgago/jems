@@ -22,7 +22,26 @@ class Broker(models.Model):
     buy_status = models.CharField(max_length=100, blank=True, default="")
     debtor_buy_status = models.CharField(max_length=100, blank=True, default="")
     details = models.TextField(blank=True, default="")
-    checked_at = models.DateTimeField(null=True, blank=True)
+    checked_at = models.DateField(null=True, blank=True)
+    physical_address = models.CharField(max_length=255, blank=True, default="")
+    mailing_address = models.CharField(max_length=255, blank=True, default="")
+    city = models.ForeignKey(
+        "locations.City",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="brokers",
+    )
+    state = models.ForeignKey(
+        "locations.State",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="brokers",
+    )
+    zip = models.CharField(max_length=12, blank=True, default="")
+    usdot_number = models.CharField(max_length=10, blank=True, default="")
+    safer_operating_status = models.CharField(max_length=100, blank=True, default="")
     carrier = models.ForeignKey(
         "carriers.Carrier",
         on_delete=models.SET_NULL,
@@ -92,6 +111,8 @@ class BrokerContact(models.Model):
     email = models.EmailField(max_length=255, unique=True)
     phone = models.CharField(max_length=255, blank=True, default="")
     team = models.BooleanField(default=False)
+    confirmed = models.BooleanField(default=False)
+    is_scam = models.BooleanField(default=False)
     details = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

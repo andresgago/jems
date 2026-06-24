@@ -935,15 +935,19 @@ resp="$(post "/api/v1/brokers/" '{"name":"Echo Global Logistics","mc":"MC999888"
 assert_status "broker create" "201" "$(code "$resp")" "$(body "$resp")"
 BROKER_ID="$(body "$resp" | json_get_num id)"
 
-step "Brokers: retrieve"
+step "Brokers: retrieve (includes new fields)"
 resp="$(get "/api/v1/brokers/${BROKER_ID}/")"
 assert_status "broker retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "broker name" "$(body "$resp")" "Echo"
+assert_contains "broker has physical_address" "$(body "$resp")" "physical_address"
+assert_contains "broker has usdot_number" "$(body "$resp")" "usdot_number"
+assert_contains "broker has safer_operating_status" "$(body "$resp")" "safer_operating_status"
 
-step "Brokers: update"
-resp="$(put "/api/v1/brokers/${BROKER_ID}/" '{"name":"Echo Global Logistics (updated)"}')"
-assert_status "broker update" "200" "$(code "$resp")" "$(body "$resp")"
+step "Brokers: PATCH new fields"
+resp="$(patch "/api/v1/brokers/${BROKER_ID}/" '{"name":"Echo Global Logistics (updated)","usdot_number":"1234567","physical_address":"123 Main St"}')"
+assert_status "broker patch" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "broker updated" "$(body "$resp")" "updated"
+assert_contains "broker usdot_number" "$(body "$resp")" "1234567"
 
 step "Brokers: search by name"
 resp="$(get "/api/v1/brokers/search/?q=Echo")"
@@ -982,10 +986,11 @@ resp="$(get "/api/v1/brokers/${BROKER_ID}/contacts/${BROKER_CONTACT_ID}/")"
 assert_status "broker contact retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "contact name" "$(body "$resp")" "Alice"
 
-step "Brokers: contact update"
-resp="$(put "/api/v1/brokers/${BROKER_ID}/contacts/${BROKER_CONTACT_ID}/" '{"name":"Alice Smith","email":"alice@echo.com","phone":"8005550001"}')"
+step "Brokers: contact PATCH (name + confirmed flag)"
+resp="$(patch "/api/v1/brokers/${BROKER_ID}/contacts/${BROKER_CONTACT_ID}/" '{"name":"Alice Smith","confirmed":true}')"
 assert_status "broker contact update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "contact updated" "$(body "$resp")" "Alice Smith"
+assert_contains "contact confirmed" "$(body "$resp")" "true"
 
 step "Brokers: contact delete"
 resp="$(delete "/api/v1/brokers/${BROKER_ID}/contacts/${BROKER_CONTACT_ID}/")"
@@ -994,6 +999,28 @@ assert_status "broker contact delete" "204" "$(code "$resp")"
 step "Brokers: contact deleted → 404"
 resp="$(get "/api/v1/brokers/${BROKER_ID}/contacts/${BROKER_CONTACT_ID}/")"
 assert_status "contact gone" "404" "$(code "$resp")"
+
+step "Brokers: setup packet file upload"
+_TMP_PACKET="$(mktemp /tmp/jems_broker_packet.XXXXXX.pdf)"
+printf '%%PDF-1.4 fake' > "${_TMP_PACKET}"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "file=@${_TMP_PACKET};type=application/pdf" \
+  "${API_URL}/api/v1/brokers/${BROKER_ID}/files/setup-packet/")"
+assert_status "broker setup-packet upload" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "broker has setup_packet_file" "$(body "$resp")" "/media/brokers/"
+rm -f "${_TMP_PACKET}"
+
+step "Brokers: unknown file slot → 400"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "file=@/dev/null;type=application/pdf" \
+  "${API_URL}/api/v1/brokers/${BROKER_ID}/files/does-not-exist/")"
+assert_status "broker bad slot" "400" "$(code "$resp")"
+
+step "Brokers: clear setup packet"
+resp="$(delete "/api/v1/brokers/${BROKER_ID}/files/setup-packet/")"
+assert_status "broker clear packet" "200" "$(code "$resp")"
 
 # get dispatcher user id for load assignment
 resp="$(get "/api/v1/users/")"
@@ -1631,13 +1658,14 @@ step "Cleanup: truck owner deleted → 404"
 resp="$(get "/api/v1/fleet/owners/${TRUCK_OWNER_ID}/")"
 assert_status "truck owner gone" "404" "$(code "$resp")"
 
-step "Cleanup: broker delete"
+step "Cleanup: broker soft-delete (status → Inactive)"
 resp="$(delete "/api/v1/brokers/${BROKER_ID}/")"
-assert_status "broker delete" "204" "$(code "$resp")"
+assert_status "broker soft-delete" "204" "$(code "$resp")"
 
-step "Cleanup: broker deleted → 404"
+step "Cleanup: broker still exists but is Inactive"
 resp="$(get "/api/v1/brokers/${BROKER_ID}/")"
-assert_status "broker gone" "404" "$(code "$resp")"
+assert_status "broker retrievable after soft-delete" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "broker is inactive" "$(body "$resp")" '"status":0'
 
 step "Cleanup: carrier delete"
 resp="$(delete "/api/v1/carriers/${CARRIER_ID}/")"
