@@ -22,6 +22,9 @@ describe('useLoads', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.loads).toEqual([{ id: 1, number: 'L-001' }])
+    expect(result.current.count).toBe(1)
+    expect(result.current.next).toBeNull()
+    expect(result.current.previous).toBeNull()
     expect(loadsService.list).toHaveBeenCalledWith({ status: '1' })
   })
 
@@ -34,5 +37,6 @@ describe('useLoads', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.loads).toEqual([{ id: 2, number: 'L-002' }])
+    expect(result.current.count).toBe(1)
   })
 })

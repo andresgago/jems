@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/useAuth';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import MainLayout from './components/layout/MainLayout';
 import LoginPage from './pages/LoginPage';
@@ -44,6 +45,12 @@ import RtlDriverDetailPage from './pages/integrations/RtlDriverDetailPage';
 import RtlTruckDetailPage from './pages/integrations/RtlTruckDetailPage';
 import IftaPage from './pages/integrations/IftaPage';
 
+export function RequireAnyPermission({ permissions, children }) {
+  const { haveAnyPermission } = useAuth();
+  if (!haveAnyPermission(permissions)) return <Navigate to="/" replace />;
+  return children;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -56,11 +63,11 @@ function AppRoutes() {
               <Routes>
                 <Route index element={<HomePage />} />
                 {/* Loads */}
-                <Route path="loads" element={<LoadsPage />} />
-                <Route path="loads/create" element={<LoadFormPage />} />
-                <Route path="loads/:id" element={<LoadDetailPage />} />
-                <Route path="loads/:id/edit" element={<LoadFormPage />} />
-                <Route path="loads/history" element={<div><h5>Load History</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="loads" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><LoadsPage /></RequireAnyPermission>} />
+                <Route path="loads/create" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><LoadFormPage /></RequireAnyPermission>} />
+                <Route path="loads/:id" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><LoadDetailPage /></RequireAnyPermission>} />
+                <Route path="loads/:id/edit" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><LoadFormPage /></RequireAnyPermission>} />
+                <Route path="loads/history" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><div><h5>Load History</h5><p className="text-muted">Coming soon.</p></div></RequireAnyPermission>} />
                 {/* Drivers */}
                 <Route path="drivers" element={<DriversPage />} />
                 <Route path="drivers/create" element={<DriverFormPage />} />
