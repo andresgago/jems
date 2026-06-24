@@ -111,6 +111,42 @@ const BROKER_DETAIL = {
   ],
 }
 
+const ACCOUNTS = [
+  { id: 1, code: '90010', name: 'Rate', is_active: true, is_main: false, is_assistant: false, no_tax: false },
+  { id: 2, code: '80030', name: 'Fuel', is_active: true, is_main: false, is_assistant: false, no_tax: false },
+]
+
+const RECORDS = [
+  {
+    id: 1, date: '2026-06-01', account: 1, account_code: '90010', amount: 2500.0,
+    detail: 'Freight payment', record_type: 1, load: null, driver: null, truck: null,
+    created_at: '2026-06-01T10:00:00Z',
+  },
+]
+
+const RECORD_DETAIL = {
+  ...RECORDS[0],
+  account_name: 'Rate', quantity: 1.0, team_driver: null, owner: null,
+  category: null, category_expire: false, category_expire_date: null,
+  dispatcher: null, city: null, card: null, carrier: null,
+  is_automatic: false, progress: 0, follow: 0, position: 0,
+  product: '', transaction_number: '',
+  updated_at: '2026-06-01T10:00:00Z', created_by: null, updated_by: null,
+}
+
+const DRIVER_INVOICES = [
+  {
+    id: 1, number: 101, driver: 1, driver_name: 'John Doe', date: '2026-06-01',
+    invoice_type: 0, contract: 0, miles_empty: 0, miles_full: 0,
+    percent: 25.0, vacation_now: '', vacation_pay: false, status: 1,
+    status_display: 'Open', load_list: '',
+    created_at: '2026-06-01T10:00:00Z', updated_at: '2026-06-01T10:00:00Z',
+    created_by: null, updated_by: null,
+  },
+]
+
+const DRIVER_INVOICE_DETAIL = { ...DRIVER_INVOICES[0] }
+
 const TRAILER_DETAIL = {
   ...TRAILERS[0],
   width: 8.5, height: 13.5, plate_state: 9, plate_state_name: 'Texas',
@@ -140,10 +176,18 @@ async function mockApi(page) {
     if (pathname.endsWith('/auth/refresh/') && method === 'POST') {
       return json({ access: mockJWT() })
     }
+    if (pathname.endsWith('/accounts/') && method === 'GET') return json(ACCOUNTS)
+    if (pathname.endsWith('/categories/') && method === 'GET') return json([])
+    if (pathname.endsWith('/category-types/') && method === 'GET') return json([])
+    if (pathname.endsWith('/records/') && method === 'GET') return json(RECORDS)
+    if (/\/records\/\d+\/$/.test(pathname) && method === 'GET') return json(RECORD_DETAIL)
+    if (pathname.endsWith('/driver-invoices/') && method === 'GET') return json(DRIVER_INVOICES)
+    if (/\/driver-invoices\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_INVOICE_DETAIL)
     if (pathname.endsWith('/fleet/trailer-types/')) return json(TRAILER_TYPES)
     if (pathname.endsWith('/fleet/truck-types/')) return json(TRUCK_TYPES)
     if (pathname.endsWith('/fleet/cards/')) return json([])
     if (/\/fleet\/(makes|engine-types|cabin-types|transmission-types|tire-sizes|owners|loss-payees)\/$/.test(pathname)) return json([])
+    if (pathname.endsWith('/fleet/trucks/options/')) return json(TRUCKS)
     if (pathname.endsWith('/fleet/trucks/') && method === 'GET') return json(TRUCKS)
     if (/\/fleet\/trucks\/\d+\/$/.test(pathname) && method === 'GET') return json(TRUCK_DETAIL)
     if (pathname.endsWith('/brokers/options/')) return json(BROKERS.map((b) => ({ id: b.id, label: b.name })))
@@ -158,6 +202,7 @@ async function mockApi(page) {
     if (pathname.endsWith('/locations/states/')) return json(STATES)
     if (pathname.endsWith('/users/') && method === 'GET') return json([])
     if (pathname.endsWith('/drivers/types/')) return json(DRIVER_TYPES)
+    if (pathname.endsWith('/drivers/options/')) return json(DRIVERS)
     if (pathname.endsWith('/drivers/') && method === 'GET') return json(DRIVERS)
     if (/\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_DETAIL)
     if (pathname.endsWith('/loads/') && method === 'GET') return json({ results: [], count: 0 })
@@ -408,4 +453,50 @@ test('new broker form: submit button reads "Create Broker"', async ({ page }) =>
   await withAuth(page)
   await page.goto('/brokers/create')
   await expect(page.getByRole('button', { name: /create broker/i })).toBeVisible()
+})
+
+// ── Accounting: Records ───────────────────────────────────────────────────────
+
+test('records list renders a record returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/records')
+  await expect(page.getByText('90010')).toBeVisible()
+  await expect(page.getByText('Freight payment')).toBeVisible()
+})
+
+test('record detail renders heading with record id and account code', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/records/1')
+  await expect(page.getByRole('heading', { name: /Record #1/i })).toBeVisible()
+  await expect(page.getByText('90010')).toBeVisible()
+})
+
+test('new record form has "New Record" heading and Create button', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/records/create')
+  await expect(page.getByText('New Record')).toBeVisible()
+  await expect(page.getByRole('button', { name: /create record/i })).toBeVisible()
+})
+
+test('new record form: account options render from the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/records/create')
+  await expect(page.locator('option', { hasText: '90010 – Rate' })).toHaveCount(1)
+  await expect(page.locator('option', { hasText: '80030 – Fuel' })).toHaveCount(1)
+})
+
+// ── Accounting: Driver Invoices ───────────────────────────────────────────────
+
+test('driver invoices list renders an invoice returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/invoices/drivers')
+  await expect(page.getByRole('link', { name: '#101' })).toBeVisible()
+  await expect(page.getByText('John Doe')).toBeVisible()
+})
+
+test('driver invoice detail renders heading with invoice number and status', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/invoices/drivers/1')
+  await expect(page.getByRole('heading', { name: /Driver Invoice #101/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /close invoice/i })).toBeVisible()
 })

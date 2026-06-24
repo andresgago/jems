@@ -19,6 +19,11 @@ import TrailerDetailPage from './pages/fleet/TrailerDetailPage';
 import BrokersPage from './pages/brokers/BrokersPage';
 import BrokerFormPage from './pages/brokers/BrokerFormPage';
 import BrokerDetailPage from './pages/brokers/BrokerDetailPage';
+import RecordsPage from './pages/accounting/RecordsPage';
+import RecordDetailPage from './pages/accounting/RecordDetailPage';
+import RecordFormPage from './pages/accounting/RecordFormPage';
+import DriverInvoicesPage from './pages/accounting/DriverInvoicesPage';
+import DriverInvoiceDetailPage from './pages/accounting/DriverInvoiceDetailPage';
 
 function AppRoutes() {
   return (
@@ -57,14 +62,17 @@ function AppRoutes() {
                 <Route path="fleet/trailer-maintenance/create" element={<div><h5>Create Trailer Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/accidents" element={<div><h5>Accidents</h5><p className="text-muted">Coming soon.</p></div>} />
                 {/* Accounting */}
-                <Route path="accounting/records" element={<div><h5>Accounting Records</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="accounting/records/create" element={<div><h5>Add Record</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/records" element={<RecordsPage />} />
+                <Route path="accounting/records/create" element={<RecordFormPage />} />
+                <Route path="accounting/records/:id" element={<RecordDetailPage />} />
+                <Route path="accounting/records/:id/edit" element={<RecordFormPage />} />
+                <Route path="accounting/invoices/drivers" element={<DriverInvoicesPage />} />
+                <Route path="accounting/invoices/drivers/:id" element={<DriverInvoiceDetailPage />} />
                 <Route path="accounting/owner-operator" element={<div><h5>Owner Operator</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/dispatcher-percent" element={<div><h5>Dispatcher By Percent</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/dispatcher-hour" element={<div><h5>Dispatcher By Hour</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/invoices/dispatchers-percent" element={<div><h5>Dispatchers by Percent Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/invoices/dispatchers-hour" element={<div><h5>Dispatchers by Hour Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="accounting/invoices/drivers" element={<div><h5>Drivers Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
                 {/* Brokers */}
                 <Route path="brokers" element={<BrokersPage />} />
                 <Route path="brokers/create" element={<BrokerFormPage />} />
