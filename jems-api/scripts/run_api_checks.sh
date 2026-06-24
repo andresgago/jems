@@ -1198,17 +1198,18 @@ assert_status "category update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "category updated" "$(body "$resp")" "Medical Certificate"
 
 step "Accounting: record create"
-resp="$(post "/api/v1/accounting/records/" "{\"date\":\"2024-08-01\",\"account\":${ACCOUNT_ID},\"amount\":\"-350.00\",\"detail\":\"Diesel fill-up Houston\",\"type\":0,\"loadc\":${LOAD_ID},\"truck\":${TRUCK_ID},\"driver\":${DRIVER_ID}}")"
+resp="$(post "/api/v1/accounting/records/" "{\"date\":\"2024-08-01\",\"account\":${ACCOUNT_ID},\"amount\":\"-350.00\",\"detail\":\"Diesel fill-up Houston\",\"record_type\":2,\"load\":${LOAD_ID},\"truck\":${TRUCK_ID},\"driver\":${DRIVER_ID}}")"
 assert_status "record create" "201" "$(code "$resp")" "$(body "$resp")"
 RECORD_ID="$(body "$resp" | json_get_num id)"
 
-step "Accounting: record retrieve"
+step "Accounting: record retrieve (assert carrier field present)"
 resp="$(get "/api/v1/accounting/records/${RECORD_ID}/")"
 assert_status "record retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "record detail" "$(body "$resp")" "Houston"
+assert_contains "record has carrier field" "$(body "$resp")" '"carrier"'
 
-step "Accounting: record update"
-resp="$(put "/api/v1/accounting/records/${RECORD_ID}/" "{\"date\":\"2024-08-01\",\"account\":${ACCOUNT_ID},\"amount\":\"-400.00\",\"detail\":\"Updated Diesel fill-up\"}")"
+step "Accounting: record update (PATCH)"
+resp="$(patch "/api/v1/accounting/records/${RECORD_ID}/" "{\"amount\":\"-400.00\",\"detail\":\"Updated Diesel fill-up\"}")"
 assert_status "record update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "record updated" "$(body "$resp")" "Updated Diesel"
 

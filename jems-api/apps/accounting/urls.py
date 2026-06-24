@@ -28,7 +28,7 @@ category_detail = CategoryViewSet.as_view(
 # Records
 record_list = RecordViewSet.as_view({"get": "list", "post": "create"})
 record_detail = RecordViewSet.as_view(
-    {"get": "retrieve", "put": "update", "delete": "destroy"}
+    {"get": "retrieve", "put": "update", "patch": "update", "delete": "destroy"}
 )
 
 # Driver invoices

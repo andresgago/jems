@@ -88,6 +88,7 @@ class RecordSerializer(serializers.ModelSerializer):
             "dispatcher",
             "city",
             "card",
+            "carrier",
             "is_automatic",
             "progress",
             "follow",

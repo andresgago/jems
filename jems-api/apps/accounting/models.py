@@ -177,6 +177,13 @@ class Record(models.Model):
         blank=True,
         related_name="records",
     )
+    carrier = models.ForeignKey(
+        "carriers.Carrier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="records",
+    )
     is_automatic = models.BooleanField(default=False)
     progress = models.IntegerField(default=0)
     follow = models.IntegerField(default=0)
