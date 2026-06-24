@@ -254,3 +254,78 @@ class TestDriverDocuments:
         # second delete → gone
         again = client.delete(reverse("driver-document-detail", kwargs={"pk": doc_id}))
         assert again.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestDriverLastVehicle:
+    def test_unauthenticated_rejected(self, api_client):
+        from apps.drivers.tests.factories import DriverFactory
+
+        driver = DriverFactory()
+        response = api_client.get(
+            reverse("driver-last-vehicle", kwargs={"pk": driver.pk})
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_returns_empty_when_no_loads(self, auth_client):
+        from apps.drivers.tests.factories import DriverFactory
+
+        client, _ = auth_client
+        driver = DriverFactory()
+        response = client.get(reverse("driver-last-vehicle", kwargs={"pk": driver.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["last_truck_id"] is None
+        assert response.data["last_trailer_id"] is None
+        assert isinstance(response.data["trucks"], list)
+        assert isinstance(response.data["trailers"], list)
+
+    def test_returns_last_truck_and_trailer_from_most_recent_load(self, auth_client):
+        import datetime
+        from django.utils import timezone
+        from apps.drivers.tests.factories import DriverFactory
+        from apps.loads.tests.factories import (
+            LoadFactory,
+            TruckFactory,
+            TrailerFactory,
+        )
+        from apps.fleet.models import Truck, Trailer
+
+        client, _ = auth_client
+        driver = DriverFactory()
+        truck = TruckFactory(status=Truck.Status.ACTIVE)
+        trailer = TrailerFactory(status=Trailer.Status.ACTIVE, is_rented=False)
+
+        LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            dropoff_date=timezone.now() - datetime.timedelta(days=1),
+        )
+
+        response = client.get(reverse("driver-last-vehicle", kwargs={"pk": driver.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["last_truck_id"] == truck.pk
+        assert response.data["last_trailer_id"] == trailer.pk
+
+    def test_active_trucks_and_trailers_included(self, auth_client):
+        from apps.drivers.tests.factories import DriverFactory
+        from apps.loads.tests.factories import TruckFactory, TrailerFactory
+        from apps.fleet.models import Truck, Trailer
+
+        client, _ = auth_client
+        driver = DriverFactory()
+        TruckFactory(status=Truck.Status.ACTIVE)
+        TruckFactory(status=Truck.Status.INACTIVE)
+        TrailerFactory(status=Trailer.Status.ACTIVE, is_rented=False)
+        TrailerFactory(status=Trailer.Status.ACTIVE, is_rented=True)
+
+        response = client.get(reverse("driver-last-vehicle", kwargs={"pk": driver.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        truck_ids = [t["id"] for t in response.data["trucks"]]
+        trailer_ids = [t["id"] for t in response.data["trailers"]]
+        # inactive truck not included
+        inactive = Truck.objects.filter(status=Truck.Status.INACTIVE).first()
+        assert inactive.pk not in truck_ids
+        # rented trailer not included
+        rented = Trailer.objects.filter(is_rented=True).first()
+        assert rented.pk not in trailer_ids

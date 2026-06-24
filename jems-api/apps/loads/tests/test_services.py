@@ -371,3 +371,128 @@ class TestLoadStops:
         pk = stop.pk
         delete_load_stop(stop=stop)
         assert not LoadStop.objects.filter(pk=pk).exists()
+
+
+@pytest.mark.django_db
+class TestSendDriverInfo:
+    def test_sends_email_to_broker(self):
+        from unittest.mock import patch, MagicMock
+        from apps.loads.services import send_driver_info
+        from apps.loads.tests.factories import (
+            CarrierFactory,
+            DriverFactory,
+            TruckFactory,
+            TrailerFactory,
+        )
+        from apps.fleet.models import Truck, Trailer
+
+        carrier = CarrierFactory(
+            no_reply_email="noreply@test.com",
+            no_reply_password="secret",
+            cc_email=None,
+        )
+        driver = DriverFactory(first_name="John", last_name="Doe", phone="555-1234")
+        truck = TruckFactory(number="T-001", status=Truck.Status.ACTIVE)
+        trailer = TrailerFactory(number="TR-001", status=Trailer.Status.ACTIVE)
+
+        with patch("apps.loads.services.get_connection") as mock_conn, patch(
+            "apps.loads.services.EmailMessage"
+        ) as mock_msg_cls:
+            mock_connection = MagicMock()
+            mock_conn.return_value = mock_connection
+            mock_msg = MagicMock()
+            mock_msg_cls.return_value = mock_msg
+
+            send_driver_info(
+                carrier_id=carrier.pk,
+                driver_id=driver.pk,
+                truck_id=truck.pk,
+                trailer_id=trailer.pk,
+                broker_email="broker@example.com",
+            )
+
+        mock_conn.assert_called_once_with(
+            backend="django.core.mail.backends.smtp.EmailBackend",
+            host="smtp.gmail.com",
+            port=587,
+            username="noreply@test.com",
+            password="secret",
+            use_tls=True,
+            fail_silently=False,
+        )
+        mock_msg_cls.assert_called_once()
+        call_kwargs = mock_msg_cls.call_args.kwargs
+        assert call_kwargs["to"] == ["broker@example.com"]
+        assert call_kwargs["cc"] == []
+        mock_msg.send.assert_called_once()
+
+    def test_cc_email_included_when_set(self):
+        from unittest.mock import patch, MagicMock
+        from apps.loads.services import send_driver_info
+        from apps.loads.tests.factories import (
+            CarrierFactory,
+            DriverFactory,
+            TruckFactory,
+            TrailerFactory,
+        )
+        from apps.fleet.models import Truck, Trailer
+
+        carrier = CarrierFactory(
+            no_reply_email="noreply@test.com",
+            no_reply_password="secret",
+            cc_email="cc@test.com",
+        )
+        driver = DriverFactory()
+        truck = TruckFactory(status=Truck.Status.ACTIVE)
+        trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+
+        with patch("apps.loads.services.get_connection"), patch(
+            "apps.loads.services.EmailMessage"
+        ) as mock_msg_cls:
+            mock_msg_cls.return_value = MagicMock()
+            send_driver_info(
+                carrier_id=carrier.pk,
+                driver_id=driver.pk,
+                truck_id=truck.pk,
+                trailer_id=trailer.pk,
+                broker_email="broker@example.com",
+            )
+
+        call_kwargs = mock_msg_cls.call_args.kwargs
+        assert "cc@test.com" in call_kwargs["cc"]
+
+    def test_team_driver_name_in_email_body(self):
+        from unittest.mock import patch, MagicMock
+        from apps.loads.services import send_driver_info
+        from apps.loads.tests.factories import (
+            CarrierFactory,
+            DriverFactory,
+            TruckFactory,
+            TrailerFactory,
+        )
+        from apps.fleet.models import Truck, Trailer
+
+        carrier = CarrierFactory(no_reply_email="nr@t.com", no_reply_password="x")
+        team = DriverFactory(first_name="Jane", last_name="Smith")
+        driver = DriverFactory(first_name="John", last_name="Doe", team_driver=team)
+        truck = TruckFactory(status=Truck.Status.ACTIVE)
+        trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+
+        captured_body = {}
+
+        def capture(*args, **kwargs):
+            captured_body["body"] = kwargs.get("body", "")
+            return MagicMock()
+
+        with patch("apps.loads.services.get_connection"), patch(
+            "apps.loads.services.EmailMessage", side_effect=capture
+        ):
+            send_driver_info(
+                carrier_id=carrier.pk,
+                driver_id=driver.pk,
+                truck_id=truck.pk,
+                trailer_id=trailer.pk,
+                broker_email="b@b.com",
+            )
+
+        assert "Jane Smith" in captured_body["body"]

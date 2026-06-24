@@ -132,32 +132,40 @@ DRIVER_TYPES = [
 ]
 
 CARRIERS = [
-    (
-        1,
-        "041672",
-        "3035327",
-        "JOBEE EXPRESS LLC",
-        "Jobee Express",
-        "dispatch@jobeeexpress.com",
-        "(980) 298-1291",
-        "4401 E Independence Blvd",
-        "Charlotte",
-        34,
-        "28205",
-    ),
-    (
-        2,
-        "1447438",
-        "3916656",
-        "BEST WHEELS TRANSPORT LLC",
-        "BEST WHEELS",
-        "dispatch@bwheelstransport.com",
-        "(980) 298-4209",
-        "4401 E Independence Blvd Suite 206",
-        "Charlotte",
-        34,
-        "28205",
-    ),
+    {
+        "id": 1,
+        "mc": "041672",
+        "dot_number": "3035327",
+        "name": "JOBEE EXPRESS LLC",
+        "dba_name": "Jobee Express",
+        "email": "dispatch@jobeeexpress.com",
+        "phone": "(980) 298-1291",
+        "address": "4401 E Independence Blvd",
+        "city": "Charlotte",
+        "state_id": 34,
+        "zip": "28205",
+        "accounting_email": "accounting@jobeeexpress.com",
+        "no_reply_email": "noreply@jobeeexpress.com",
+        "cc_email": None,
+        "smtp_pass_env": "CARRIER_JE_SMTP_PASS",
+    },
+    {
+        "id": 2,
+        "mc": "1447438",
+        "dot_number": "3916656",
+        "name": "BEST WHEELS TRANSPORT LLC",
+        "dba_name": "BEST WHEELS",
+        "email": "dispatch@bwheelstransport.com",
+        "phone": "(980) 298-4209",
+        "address": "4401 E Independence Blvd Suite 206",
+        "city": "Charlotte",
+        "state_id": 34,
+        "zip": "28205",
+        "accounting_email": "accounting@bwheelstransport.com",
+        "no_reply_email": "noreply@bwheelstransport.com",
+        "cc_email": "dispatch@bwheelstransport.com",
+        "smtp_pass_env": "CARRIER_BWT_SMTP_PASS",
+    },
 ]
 
 CARDS = [
@@ -375,38 +383,33 @@ class Command(BaseCommand):
         self.stdout.write(f"  DriverTypes: {len(DRIVER_TYPES)} total, {created} new")
 
     def _seed_carriers(self):
+        import environ
         from apps.carriers.models import Carrier
         from apps.locations.models import State
 
+        env = environ.Env()
         created = 0
-        for (
-            pk,
-            mc,
-            dot,
-            name,
-            dba,
-            email,
-            phone,
-            address,
-            city,
-            state_id,
-            zip_code,
-        ) in CARRIERS:
-            state = State.objects.filter(pk=state_id).first()
+        for c in CARRIERS:
+            state = State.objects.filter(pk=c["state_id"]).first()
+            smtp_pass = env(c["smtp_pass_env"], default="")
             _, is_new = Carrier.objects.update_or_create(
-                id=pk,
+                id=c["id"],
                 defaults={
-                    "mc": mc,
-                    "dot_number": dot,
-                    "name": name,
-                    "dba_name": dba,
-                    "email": email,
-                    "phone": phone,
-                    "address": address,
-                    "city": city,
+                    "mc": c["mc"],
+                    "dot_number": c["dot_number"],
+                    "name": c["name"],
+                    "dba_name": c["dba_name"],
+                    "email": c["email"],
+                    "phone": c["phone"],
+                    "address": c["address"],
+                    "city": c["city"],
                     "state": state,
-                    "zip": zip_code,
+                    "zip": c["zip"],
                     "active": True,
+                    "accounting_email": c["accounting_email"],
+                    "no_reply_email": c["no_reply_email"],
+                    "no_reply_password": smtp_pass,
+                    "cc_email": c["cc_email"],
                 },
             )
             if is_new:

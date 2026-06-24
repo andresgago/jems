@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<body>
+<p style="font-size:12pt;font-family:Arial,sans-serif;color:#0a0a0a">
+  {{ greeting }}<br><br>
+  Please find the driver information below.
+</p>
+<br>
+<table style="border-collapse:collapse;border-spacing:0">
+  <thead>
+    <tr>
+      <th style="background-color:#efefef;border:1px solid #c0c0c0;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;padding:10px 15px;text-align:center">Driver | Phone</th>
+      <th style="background-color:#efefef;border:1px solid #c0c0c0;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;padding:10px 15px;text-align:center">Truck number</th>
+      <th style="background-color:#efefef;border:1px solid #c0c0c0;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;padding:10px 15px;text-align:center">Trailer number</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="border:1px solid #c0c0c0;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;padding:10px 15px;text-align:left;vertical-align:middle">
+        <p>{{ driver_name }} | {{ driver_phone }}</p>
+        {% if team_driver_name %}
+        <p>{{ team_driver_name }} | {{ team_driver_phone }}</p>
+        {% endif %}
+      </td>
+      <td style="border:1px solid #c0c0c0;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;padding:10px 15px;text-align:center;vertical-align:middle">{{ truck_number }}</td>
+      <td style="border:1px solid #c0c0c0;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;padding:10px 15px;text-align:center;vertical-align:middle">{{ trailer_number }}</td>
+    </tr>
+  </tbody>
+</table>
+<br>
+<p style="font-size:12pt;font-family:Arial,sans-serif;color:#0a0a0a">Best regards,</p>
+<p style="font-family:Arial,sans-serif;font-size:13px">
+  <strong>{{ carrier_name }}</strong><br>
+  MC# {{ carrier_mc }} | DOT# {{ carrier_dot }}
+</p>
+</body>
+</html>

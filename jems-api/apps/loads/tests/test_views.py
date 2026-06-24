@@ -933,3 +933,63 @@ class TestLoadDateValidation:
         }
         response = client.post(reverse("load-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.django_db
+class TestSendDriverInfoView:
+    def test_unauthenticated_rejected(self, api_client):
+        response = api_client.post(reverse("load-send-driver-info"), {})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_missing_fields_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(reverse("load-send-driver-info"), {})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Missing fields" in response.data["detail"]
+
+    def test_partial_fields_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("load-send-driver-info"),
+            {"carrier_id": 1, "driver_id": 1},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_valid_payload_sends_email(self, auth_client):
+        from unittest.mock import patch
+        from apps.loads.tests.factories import (
+            CarrierFactory,
+            DriverFactory,
+            TruckFactory,
+            TrailerFactory,
+        )
+        from apps.fleet.models import Truck, Trailer
+
+        client, _ = auth_client
+        carrier = CarrierFactory(
+            no_reply_email="nr@test.com", no_reply_password="pw", cc_email=None
+        )
+        driver = DriverFactory()
+        truck = TruckFactory(status=Truck.Status.ACTIVE)
+        trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+
+        with patch("apps.loads.services.get_connection"), patch(
+            "apps.loads.services.EmailMessage"
+        ) as mock_msg_cls:
+            from unittest.mock import MagicMock
+
+            mock_msg_cls.return_value = MagicMock()
+            response = client.post(
+                reverse("load-send-driver-info"),
+                {
+                    "carrier_id": carrier.pk,
+                    "driver_id": driver.pk,
+                    "truck_id": truck.pk,
+                    "trailer_id": trailer.pk,
+                    "broker_email": "broker@example.com",
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "sent successfully" in response.data["detail"]
+        mock_msg_cls.return_value.send.assert_called_once()

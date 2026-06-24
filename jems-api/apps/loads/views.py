@@ -21,6 +21,7 @@ from .services import (
     create_load_stop,
     delete_load,
     delete_load_stop,
+    send_driver_info,
     set_history,
     set_invoiced,
     set_load_status,
@@ -331,6 +332,29 @@ class LoadViewSet(ViewSet):
             **data,
         )
         return Response(LoadStopSerializer(stop).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="send-driver-info")
+    def send_driver_info_action(self, request):
+        required = ["carrier_id", "driver_id", "truck_id", "trailer_id", "broker_email"]
+        missing = [f for f in required if not request.data.get(f)]
+        if missing:
+            return Response(
+                {"detail": f"Missing fields: {', '.join(missing)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            send_driver_info(
+                carrier_id=request.data["carrier_id"],
+                driver_id=request.data["driver_id"],
+                truck_id=request.data["truck_id"],
+                trailer_id=request.data["trailer_id"],
+                broker_email=request.data["broker_email"],
+            )
+        except Exception as exc:
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        return Response({"detail": "Driver information sent successfully."})
 
 
 class LoadStopViewSet(ViewSet):

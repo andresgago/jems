@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunSQL(
-            sql="ALTER TABLE brokers ALTER COLUMN buy_status TYPE varchar(100) USING CASE WHEN buy_status THEN 'true' ELSE '' END;",
+            sql="ALTER TABLE brokers ALTER COLUMN buy_status TYPE varchar(100) USING buy_status::varchar;",
             reverse_sql="ALTER TABLE brokers ALTER COLUMN buy_status TYPE boolean USING (buy_status <> '');",
         ),
     ]

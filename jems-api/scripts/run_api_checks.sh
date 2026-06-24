@@ -933,6 +933,20 @@ step "Drivers: photo delete"
 resp="$(delete "/api/v1/drivers/${DRIVER_ID}/photo/")"
 assert_status "driver photo delete" "200" "$(code "$resp")" "$(body "$resp")"
 
+step "Drivers: last-vehicle endpoint (driver with no loads → nulls + empty lists)"
+resp="$(get "/api/v1/drivers/${DRIVER_ID}/last-vehicle/")"
+assert_status "driver last-vehicle" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "last-vehicle has last_truck_id" "$(body "$resp")" "last_truck_id"
+assert_contains "last-vehicle has last_trailer_id" "$(body "$resp")" "last_trailer_id"
+assert_contains "last-vehicle has trucks list" "$(body "$resp")" '"trucks"'
+assert_contains "last-vehicle has trailers list" "$(body "$resp")" '"trailers"'
+
+step "Drivers: last-vehicle returns null IDs when no matching load exists"
+if ! echo "$(body "$resp")" | grep -qF '"last_truck_id":null'; then
+  fail "last-vehicle last_truck_id should be null for new driver with no loads" "$(body "$resp")"
+fi
+pass "last_truck_id is null (no prior loads)"
+
 # ── Carriers ──────────────────────────────────────────────────────────────────
 step "Carriers: create"
 resp="$(post "/api/v1/carriers/" "{\"mc\":\"MC123456\",\"dot_number\":\"DOT654321\",\"name\":\"Jobee Express LLC\",\"dba_name\":\"Jobee\",\"email\":\"ops@jobee.com\",\"active\":true,\"state\":${STATE_ID}}")"
@@ -1239,6 +1253,11 @@ assert_status "load mark executed" "200" "$(code "$resp")" "$(body "$resp")"
 step "Loads: 404 on missing load"
 resp="$(get "/api/v1/loads/99999/")"
 assert_status "load 404" "404" "$(code "$resp")"
+
+step "Loads: send-driver-info missing fields → 400"
+resp="$(post "/api/v1/loads/send-driver-info/" '{"carrier_id":1}')"
+assert_status "send-driver-info missing fields" "400" "$(code "$resp")" "$(body "$resp")"
+assert_contains "send-driver-info error detail" "$(body "$resp")" "Missing fields"
 
 # ── Accounting ────────────────────────────────────────────────────────────────
 step "Accounting: account create"

@@ -33,4 +33,9 @@ urlpatterns = [
     path("<int:pk>/stops/", load_stops, name="load-stops"),
     path("<int:load_pk>/stops/<int:pk>/", stop_detail, name="load-stop-detail"),
     path("cities/search/", city_search, name="city-search"),
+    path(
+        "send-driver-info/",
+        LoadViewSet.as_view({"post": "send_driver_info_action"}),
+        name="load-send-driver-info",
+    ),
 ]

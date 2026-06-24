@@ -115,6 +115,44 @@ class DriverViewSet(ViewSet):
         documents = DriverDocument.objects.filter(driver_id=pk).order_by("-created_at")
         return Response(DriverDocumentSerializer(documents, many=True).data)
 
+    @action(detail=True, methods=["get"], url_path="last-vehicle")
+    def last_vehicle(self, request: Request, pk: int) -> Response:
+        from apps.fleet.models import Truck, Trailer
+        from apps.loads.models import Load
+
+        last_load = (
+            Load.objects.filter(driver_id=pk, truck__isnull=False)
+            .select_related("truck", "trailer")
+            .order_by("-dropoff_date")
+            .first()
+        )
+
+        trucks = list(
+            Truck.objects.filter(status=Truck.Status.ACTIVE)
+            .order_by("number")
+            .values("id", "number", "vin")
+        )
+        trailers = list(
+            Trailer.objects.filter(status=Trailer.Status.ACTIVE, is_rented=False)
+            .select_related("trailer_type")
+            .order_by("number")
+            .values("id", "number", "vin", "trailer_type__name")
+        )
+
+        last_truck_id = last_load.truck_id if last_load and last_load.truck_id else None
+        last_trailer_id = (
+            last_load.trailer_id if last_load and last_load.trailer_id else None
+        )
+
+        return Response(
+            {
+                "last_truck_id": last_truck_id,
+                "last_trailer_id": last_trailer_id,
+                "trucks": trucks,
+                "trailers": trailers,
+            }
+        )
+
 
 class DriverVacationViewSet(ViewSet):
     permission_classes = [IsAuthenticated]

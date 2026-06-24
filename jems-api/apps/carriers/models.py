@@ -10,6 +10,7 @@ class Carrier(models.Model):
     email = models.EmailField(max_length=50, unique=True, blank=True, null=True)
     phone = models.CharField(max_length=15, blank=True, default="")
     no_reply_email = models.EmailField(max_length=50, blank=True, null=True)
+    no_reply_password = models.CharField(max_length=100, blank=True, default="")
     cc_email = models.EmailField(max_length=50, blank=True, null=True)
     accounting_email = models.EmailField(max_length=50, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, default="")

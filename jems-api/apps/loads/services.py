@@ -3,10 +3,83 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError
+from django.core.mail import EmailMessage, get_connection
 from django.db import transaction
+from django.template.loader import render_to_string
+from django.utils import timezone
 
 from .exceptions import InvalidStatusTransition
 from .models import Load, LoadStop
+
+
+def send_driver_info(
+    carrier_id: int,
+    driver_id: int,
+    truck_id: int,
+    trailer_id: int,
+    broker_email: str,
+) -> None:
+    from apps.carriers.models import Carrier
+    from apps.drivers.models import Driver
+    from apps.fleet.models import Truck, Trailer
+
+    carrier = Carrier.objects.get(pk=carrier_id)
+    driver = Driver.objects.select_related("team_driver").get(pk=driver_id)
+    truck = Truck.objects.get(pk=truck_id)
+    trailer = Trailer.objects.get(pk=trailer_id)
+
+    hour = timezone.localtime(timezone.now()).hour
+    if hour < 12:
+        greeting = "Good morning,"
+    elif hour < 17:
+        greeting = "Good afternoon,"
+    else:
+        greeting = "Good evening,"
+
+    body = render_to_string(
+        "loads/driver_info_email.html",
+        {
+            "greeting": greeting,
+            "driver_name": driver.full_name,
+            "driver_phone": driver.phone,
+            "team_driver_name": (
+                driver.team_driver.full_name if driver.team_driver else None
+            ),
+            "team_driver_phone": (
+                driver.team_driver.phone if driver.team_driver else None
+            ),
+            "truck_number": truck.number,
+            "trailer_number": trailer.number,
+            "carrier_name": carrier.name,
+            "carrier_mc": carrier.mc,
+            "carrier_dot": carrier.dot_number,
+        },
+    )
+
+    connection = get_connection(
+        backend="django.core.mail.backends.smtp.EmailBackend",
+        host="smtp.gmail.com",
+        port=587,
+        username=carrier.no_reply_email,
+        password=carrier.no_reply_password,
+        use_tls=True,
+        fail_silently=False,
+    )
+
+    recipients = [broker_email]
+    cc = [carrier.cc_email] if carrier.cc_email else []
+
+    msg = EmailMessage(
+        subject="Driver information",
+        body=body,
+        from_email=f"{carrier.name} <{carrier.no_reply_email}>",
+        to=recipients,
+        cc=cc,
+        connection=connection,
+    )
+    msg.content_subtype = "html"
+    msg.send()
+
 
 # Maps PHP date('w') weekday (0=Sun…6=Sat) to TMS accounting_day (Tue=1…Mon=7, Sun=6).
 _ACCOUNTING_DAYS: dict[int, int] = {0: 6, 1: 7, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5}

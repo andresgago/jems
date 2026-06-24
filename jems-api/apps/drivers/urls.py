@@ -35,4 +35,9 @@ urlpatterns = [
         name="driver-vacation-detail",
     ),
     path("types/", type_list, name="driver-type-list"),
+    path(
+        "<int:pk>/last-vehicle/",
+        DriverViewSet.as_view({"get": "last_vehicle"}),
+        name="driver-last-vehicle",
+    ),
 ]
