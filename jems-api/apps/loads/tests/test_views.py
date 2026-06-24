@@ -98,7 +98,9 @@ class TestLoadList:
         assert response.data["count"] == 30
         assert len(response.data["results"]) == 30
         assert response.data["next"] is None
-        assert all(load["status"] == Load.Status.STARTED for load in response.data["results"])
+        assert all(
+            load["status"] == Load.Status.STARTED for load in response.data["results"]
+        )
 
     def test_filter_by_status(self, auth_client):
         client, _ = auth_client
@@ -106,7 +108,9 @@ class TestLoadList:
         LoadFactory(status=Load.Status.REGISTERED)
         response = client.get(reverse("load-list") + f"?status={Load.Status.STARTED}")
         assert response.status_code == status.HTTP_200_OK
-        assert all(load["status"] == Load.Status.STARTED for load in load_results(response))
+        assert all(
+            load["status"] == Load.Status.STARTED for load in load_results(response)
+        )
 
     def test_filter_by_history_flag(self, auth_client):
         client, _ = auth_client
@@ -123,7 +127,9 @@ class TestLoadList:
     def test_filter_by_broker_text_matches_name_dba_mc_and_carrier(self, auth_client):
         client, _ = auth_client
         carrier = CarrierFactory(name="Blue Carrier")
-        broker = BrokerFactory(name="Alpha Freight", dba_name="Road Runner", mc="MCROAD")
+        broker = BrokerFactory(
+            name="Alpha Freight", dba_name="Road Runner", mc="MCROAD"
+        )
         name_load = LoadFactory(broker=broker)
         carrier_load = LoadFactory(carrier=carrier)
         other_load = LoadFactory()
@@ -155,7 +161,9 @@ class TestLoadList:
         assert matching_load.number in numbers
         assert other_load.number not in numbers
 
-    def test_filter_by_driver_text_matches_driver_team_truck_and_trailer(self, auth_client):
+    def test_filter_by_driver_text_matches_driver_team_truck_and_trailer(
+        self, auth_client
+    ):
         client, _ = auth_client
         driver = DriverFactory(first_name="Alain", last_name="Reynier")
         team_driver = DriverFactory(first_name="Team", last_name="Mate")
