@@ -9,6 +9,8 @@ environ.Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("SECRET_KEY")
 
+APP_VERSION = "6.0"
+
 GDAL_LIBRARY_PATH = env("GDAL_LIBRARY_PATH", default=None)
 GEOS_LIBRARY_PATH = env("GEOS_LIBRARY_PATH", default=None)
 
