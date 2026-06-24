@@ -10,6 +10,9 @@ import LoadDetailPage from './pages/loads/LoadDetailPage';
 import DriversPage from './pages/drivers/DriversPage';
 import DriverFormPage from './pages/drivers/DriverFormPage';
 import DriverDetailPage from './pages/drivers/DriverDetailPage';
+import TrucksPage from './pages/fleet/TrucksPage';
+import TruckFormPage from './pages/fleet/TruckFormPage';
+import TruckDetailPage from './pages/fleet/TruckDetailPage';
 
 function AppRoutes() {
   return (
@@ -34,7 +37,10 @@ function AppRoutes() {
                 <Route path="drivers/:id" element={<DriverDetailPage />} />
                 <Route path="drivers/:id/edit" element={<DriverFormPage />} />
                 {/* Fleet */}
-                <Route path="fleet/trucks" element={<div><h5>Trucks</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="fleet/trucks" element={<TrucksPage />} />
+                <Route path="fleet/trucks/create" element={<TruckFormPage />} />
+                <Route path="fleet/trucks/:id" element={<TruckDetailPage />} />
+                <Route path="fleet/trucks/:id/edit" element={<TruckFormPage />} />
                 <Route path="fleet/trailers" element={<div><h5>Trailers</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/truck-maintenance" element={<div><h5>Truck Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/truck-maintenance/create" element={<div><h5>Create Truck Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />

@@ -16,6 +16,8 @@ const CRITICAL_ROUTES = [
   { path: '/loads/create', heading: /new load/i },
   { path: '/drivers', heading: /drivers/i },
   { path: '/drivers/create', heading: /new driver/i },
+  { path: '/fleet/trucks', heading: /trucks/i },
+  { path: '/fleet/trucks/create', heading: /new truck/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -233,4 +235,58 @@ test('can create and delete a driver via API (real)', async ({ page }) => {
 
   // DELETE is a soft delete (status → terminated); endpoint returns 204
   await apiDelete(page, token, `/drivers/${created.id}/`)
+})
+
+// ── Create + delete truck (round-trip) ────────────────────────────────────────
+
+test('can create and delete a truck via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const number = `E2E-T-${Date.now()}`
+  const created = await apiPost(page, token, '/fleet/trucks/', {
+    number,
+    status: 1,
+  })
+
+  expect(created.id).toBeTruthy()
+  expect(created.number).toBe(number)
+
+  // DELETE is a soft delete (status → inactive); endpoint returns 204
+  await apiDelete(page, token, `/fleet/trucks/${created.id}/`)
+})
+
+// ── Truck file upload (legacy-parity leased slot) ─────────────────────────────
+
+test('can upload and clear a truck document file via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const number = `E2E-TF-${Date.now()}`
+  const created = await apiPost(page, token, '/fleet/trucks/', { number, status: 1 })
+
+  // Upload a PDF to the "leased" slot (the slot added for legacy parity)
+  const uploadRes = await page.request.post(
+    `${API_BASE}/fleet/trucks/${created.id}/files/leased/`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      multipart: {
+        file: { name: 'lease.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake') },
+      },
+    }
+  )
+  expect(uploadRes.ok()).toBeTruthy()
+  const body = await uploadRes.json()
+  expect(body.leased_file).toBeTruthy()
+
+  // Clear it, then soft-delete the truck
+  const clearRes = await page.request.delete(
+    `${API_BASE}/fleet/trucks/${created.id}/files/leased/`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  expect(clearRes.ok()).toBeTruthy()
+
+  await apiDelete(page, token, `/fleet/trucks/${created.id}/`)
 })

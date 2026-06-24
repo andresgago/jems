@@ -63,6 +63,24 @@ const DRIVER_DETAIL = {
   contract: true, percent: 25, insurance: 50, documents: [], photo: null,
 }
 
+const TRUCK_TYPES = [
+  { id: 1, name: 'Sleeper', is_active: true },
+  { id: 2, name: 'Day Cab', is_active: true },
+]
+
+const TRUCKS = [
+  {
+    id: 1, number: 'T-100', truck_type: 1, truck_type_name: 'Sleeper',
+    plate: 'ABC123', vin: '1FUJ', year: 2022, status: 1,
+    avi_expiration: '2030-01-01', registration_expiration: '2030-01-01',
+  },
+]
+
+const TRUCK_DETAIL = {
+  ...TRUCKS[0], transponder: '', make: null, gross_weight: 35000,
+  is_leased: false, purchase_cost: 0, maintenance_records: [],
+}
+
 /**
  * Intercepts all /api/v1/ requests.
  * Throws on any unmocked endpoint to catch missing coverage immediately.
@@ -83,9 +101,14 @@ async function mockApi(page) {
       return json({ access: mockJWT() })
     }
     if (pathname.endsWith('/fleet/trailer-types/')) return json(TRAILER_TYPES)
+    if (pathname.endsWith('/fleet/truck-types/')) return json(TRUCK_TYPES)
     if (pathname.endsWith('/fleet/cards/')) return json([])
+    if (/\/fleet\/(makes|engine-types|cabin-types|transmission-types|tire-sizes|owners|loss-payees)\/$/.test(pathname)) return json([])
+    if (pathname.endsWith('/fleet/trucks/') && method === 'GET') return json(TRUCKS)
+    if (/\/fleet\/trucks\/\d+\/$/.test(pathname) && method === 'GET') return json(TRUCK_DETAIL)
     if (pathname.endsWith('/carriers/')) return json(CARRIERS)
     if (pathname.endsWith('/locations/states/')) return json(STATES)
+    if (pathname.endsWith('/users/') && method === 'GET') return json([])
     if (pathname.endsWith('/drivers/types/')) return json(DRIVER_TYPES)
     if (pathname.endsWith('/drivers/') && method === 'GET') return json(DRIVERS)
     if (/\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_DETAIL)
@@ -230,4 +253,39 @@ test('new driver form: submit button reads "Create Driver"', async ({ page }) =>
   await withAuth(page)
   await page.goto('/drivers/create')
   await expect(page.getByRole('button', { name: /create driver/i })).toBeVisible()
+})
+
+// ── Trucks ──────────────────────────────────────────────────────────────────
+
+test('trucks list renders a truck returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trucks')
+  await expect(page.getByRole('link', { name: 'T-100' })).toBeVisible()
+})
+
+test('truck detail renders header and resolves type name', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trucks/1')
+  await expect(page.getByRole('heading', { name: /Truck T-100/i })).toBeVisible()
+  await expect(page.getByText('Sleeper')).toBeVisible()
+})
+
+test('truck detail shows the Files section with the legacy-parity leased slot', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trucks/1')
+  await expect(page.getByRole('cell', { name: 'Leased Agreement' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'AVI' })).toBeVisible()
+})
+
+test('new truck form: Number label shows required asterisk', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trucks/create')
+  // anchor to avoid also matching "Serial Number"
+  await expect(page.locator('label').filter({ hasText: /^Number/ })).toContainText('*')
+})
+
+test('new truck form: submit button reads "Create Truck"', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trucks/create')
+  await expect(page.getByRole('button', { name: /create truck/i })).toBeVisible()
 })
