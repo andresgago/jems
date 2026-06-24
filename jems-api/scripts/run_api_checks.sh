@@ -373,8 +373,12 @@ resp="$(patch "/api/v1/users/positions/${POSITION_ID}/" '{"name":"Senior Dispatc
 assert_status "position update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "position updated" "$(body "$resp")" "Senior Dispatcher"
 
-# Locations has no API endpoints — states and cities are seeded above.
 # STATE_ID and CITY_ID are already set from the seed step.
+step "Locations: states list"
+resp="$(get "/api/v1/locations/states/")"
+assert_status "states list" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "states list has abbreviation" "$(body "$resp")" "abbreviation"
+assert_contains "states list includes TX" "$(body "$resp")" "TX"
 
 # ── Fleet catalogs ────────────────────────────────────────────────────────────
 step "Fleet catalogs: truck type"
@@ -732,6 +736,44 @@ assert_status "driver document delete" "204" "$(code "$resp")"
 step "Drivers: document deleted → 404"
 resp="$(delete "/api/v1/drivers/documents/${DRIVER_DOC_ID}/")"
 assert_status "driver document gone" "404" "$(code "$resp")"
+
+step "Drivers: legacy-parity document type (Social Security Card = 7)"
+_TMP_DOC="$(mktemp /tmp/jems_test_ssn.XXXXXX.pdf)"
+printf '%%PDF-1.4 fake' > "${_TMP_DOC}"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "document_type=7" \
+  -F "file=@${_TMP_DOC};type=application/pdf" \
+  "${API_URL}/api/v1/drivers/${DRIVER_ID}/documents/")"
+rm -f "${_TMP_DOC}"
+assert_status "parity document upload" "201" "$(code "$resp")" "$(body "$resp")"
+assert_contains "parity document type" "$(body "$resp")" "Social Security Card"
+
+step "Drivers: photo upload"
+_TMP_PHOTO="$(mktemp /tmp/jems_test_photo.XXXXXX).png"
+DATABASE_URL="postgis://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}" \
+  uv run python -c "from PIL import Image; Image.new('RGB', (1, 1)).save('${_TMP_PHOTO}')"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "photo=@${_TMP_PHOTO};type=image/png" \
+  "${API_URL}/api/v1/drivers/${DRIVER_ID}/photo/")"
+rm -f "${_TMP_PHOTO}"
+assert_status "driver photo upload" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "driver has photo" "$(body "$resp")" "/media/drivers/photos/"
+
+step "Drivers: photo non-image rejected"
+_TMP_BAD="$(mktemp /tmp/jems_test_bad.XXXXXX.txt)"
+printf 'not an image' > "${_TMP_BAD}"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "photo=@${_TMP_BAD};type=text/plain" \
+  "${API_URL}/api/v1/drivers/${DRIVER_ID}/photo/")"
+rm -f "${_TMP_BAD}"
+assert_status "driver photo rejects non-image" "400" "$(code "$resp")"
+
+step "Drivers: photo delete"
+resp="$(delete "/api/v1/drivers/${DRIVER_ID}/photo/")"
+assert_status "driver photo delete" "200" "$(code "$resp")" "$(body "$resp")"
 
 # ── Carriers ──────────────────────────────────────────────────────────────────
 step "Carriers: create"

@@ -12,6 +12,7 @@ driver_detail = DriverViewSet.as_view(
     {"get": "retrieve", "put": "update", "delete": "destroy"}
 )
 driver_toggle_status = DriverViewSet.as_view({"post": "toggle_status"})
+driver_photo = DriverViewSet.as_view({"post": "upload_photo", "delete": "delete_photo"})
 driver_documents = DriverViewSet.as_view(
     {"get": "list_documents", "post": "upload_document"}
 )
@@ -24,6 +25,7 @@ urlpatterns = [
     path("", driver_list, name="driver-list"),
     path("<int:pk>/", driver_detail, name="driver-detail"),
     path("<int:pk>/toggle-status/", driver_toggle_status, name="driver-toggle-status"),
+    path("<int:pk>/photo/", driver_photo, name="driver-photo"),
     path("<int:pk>/documents/", driver_documents, name="driver-documents"),
     path("documents/<int:pk>/", document_detail, name="driver-document-detail"),
     path("<int:driver_pk>/vacations/", vacation_list, name="driver-vacation-list"),

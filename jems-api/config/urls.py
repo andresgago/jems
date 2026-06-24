@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/v1/drivers/", include("apps.drivers.urls")),
     path("api/v1/fleet/", include("apps.fleet.urls")),
     path("api/v1/carriers/", include("apps.carriers.urls")),
+    path("api/v1/locations/", include("apps.locations.urls")),
     path("api/v1/brokers/", include("apps.brokers.urls")),
     path("api/v1/loads/", include("apps.loads.urls")),
     path("api/v1/accounting/", include("apps.accounting.urls")),

@@ -15,6 +15,7 @@ from .serializers import (
     DriverSerializer,
     DriverTypeSerializer,
     DriverVacationSerializer,
+    PhotoUploadSerializer,
 )
 
 
@@ -82,6 +83,22 @@ class DriverViewSet(ViewSet):
         driver = Driver.objects.get(pk=pk)
         driver = services.toggle_driver_status(driver=driver)
         return Response(DriverListSerializer(driver).data)
+
+    @action(detail=True, methods=["post"], url_path="photo")
+    def upload_photo(self, request: Request, pk: int) -> Response:
+        driver = Driver.objects.get(pk=pk)
+        serializer = PhotoUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        driver = services.set_photo(
+            driver=driver, photo=serializer.validated_data["photo"]
+        )
+        return Response(DriverSerializer(driver).data)
+
+    @action(detail=True, methods=["delete"], url_path="photo")
+    def delete_photo(self, request: Request, pk: int) -> Response:
+        driver = Driver.objects.get(pk=pk)
+        driver = services.remove_photo(driver=driver)
+        return Response(DriverSerializer(driver).data)
 
     @action(detail=True, methods=["post"], url_path="documents")
     def upload_document(self, request: Request, pk: int) -> Response:

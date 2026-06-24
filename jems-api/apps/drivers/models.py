@@ -160,6 +160,12 @@ class DriverDocument(models.Model):
         LICENSE = 1, "License"
         MEDICAL_CARD = 2, "Medical Card"
         MVR = 3, "MVR / Record"
+        # Legacy parity: residence card, application, lease agreement and social
+        # security card were dedicated file slots on the legacy Driver record.
+        RESIDENCE_CARD = 4, "Residence Card"
+        APPLICATION = 5, "Application"
+        LEASE_AGREEMENT = 6, "Lease Agreement"
+        SOCIAL_SECURITY = 7, "Social Security Card"
 
     driver = models.ForeignKey(
         Driver, on_delete=models.CASCADE, related_name="documents"

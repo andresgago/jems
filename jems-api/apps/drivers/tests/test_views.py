@@ -1,11 +1,22 @@
+import io
+
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.drivers.models import Driver
 from apps.drivers.tests.factories import DriverFactory, DriverTypeFactory
 from apps.users.tests.factories import AdminUserFactory, UserFactory
+
+
+def make_image_file(name="photo.png"):
+    buffer = io.BytesIO()
+    Image.new("RGB", (1, 1)).save(buffer, format="PNG")
+    buffer.seek(0)
+    return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
 
 
 @pytest.fixture
@@ -113,3 +124,133 @@ class TestDriverTypes:
         response = client.get(reverse("driver-type-list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 3
+
+
+@pytest.mark.django_db
+class TestDriverPhoto:
+    def test_upload_photo(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        response = client.post(
+            reverse("driver-photo", kwargs={"pk": driver.pk}),
+            {"photo": make_image_file()},
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["photo"]
+        driver.refresh_from_db()
+        assert driver.photo
+
+    def test_upload_rejects_non_image(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        bad = SimpleUploadedFile("x.txt", b"not an image", content_type="text/plain")
+        response = client.post(
+            reverse("driver-photo", kwargs={"pk": driver.pk}),
+            {"photo": bad},
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_upload_without_file_is_rejected(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        response = client.post(
+            reverse("driver-photo", kwargs={"pk": driver.pk}),
+            {},
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_delete_photo(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory(photo=make_image_file())
+        response = client.delete(reverse("driver-photo", kwargs={"pk": driver.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        driver.refresh_from_db()
+        assert not driver.photo
+
+    def test_delete_photo_is_noop_when_absent(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        response = client.delete(reverse("driver-photo", kwargs={"pk": driver.pk}))
+        assert response.status_code == status.HTTP_200_OK
+
+
+def make_pdf_file(name="doc.pdf"):
+    return SimpleUploadedFile(name, b"%PDF-1.4 fake", content_type="application/pdf")
+
+
+@pytest.mark.django_db
+class TestDriverDocuments:
+    def _upload(self, client, driver, document_type, **extra):
+        return client.post(
+            reverse("driver-documents", kwargs={"pk": driver.pk}),
+            {"document_type": document_type, "file": make_pdf_file(), **extra},
+            format="multipart",
+        )
+
+    def test_upload_document(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        response = self._upload(client, driver, 1, expiration_date="2030-01-01")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["document_type"] == 1
+        assert response.data["document_type_display"] == "License"
+        assert response.data["expiration_date"] == "2030-01-01"
+
+    def test_upload_legacy_parity_type(self, auth_client, settings, tmp_path):
+        # Type 7 (Social Security Card) was added for legacy parity — must work.
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        response = self._upload(client, driver, 7)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["document_type_display"] == "Social Security Card"
+
+    def test_upload_rejects_invalid_type(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        response = self._upload(client, driver, 99)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_upload_requires_file(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        response = client.post(
+            reverse("driver-documents", kwargs={"pk": driver.pk}),
+            {"document_type": 1},
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_list_documents(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        self._upload(client, driver, 1)
+        self._upload(client, driver, 2)
+        response = client.get(reverse("driver-documents", kwargs={"pk": driver.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 2
+
+    def test_delete_document(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        driver = DriverFactory()
+        doc_id = self._upload(client, driver, 1).data["id"]
+        response = client.delete(
+            reverse("driver-document-detail", kwargs={"pk": doc_id})
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        # second delete → gone
+        again = client.delete(reverse("driver-document-detail", kwargs={"pk": doc_id}))
+        assert again.status_code == status.HTTP_404_NOT_FOUND

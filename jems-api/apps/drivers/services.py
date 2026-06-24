@@ -30,6 +30,23 @@ def toggle_driver_status(*, driver: Driver) -> Driver:
     return driver
 
 
+def set_photo(*, driver: Driver, photo: UploadedFile) -> Driver:
+    # Remove the previous file from storage before replacing it.
+    if driver.photo:
+        driver.photo.delete(save=False)
+    driver.photo = photo
+    driver.save(update_fields=["photo", "updated_at"])
+    return driver
+
+
+def remove_photo(*, driver: Driver) -> Driver:
+    if driver.photo:
+        driver.photo.delete(save=False)
+        driver.photo = None
+        driver.save(update_fields=["photo", "updated_at"])
+    return driver
+
+
 def upload_document(
     *,
     driver: Driver,

@@ -154,3 +154,7 @@ class DocumentUploadSerializer(serializers.Serializer):
     document_type = serializers.ChoiceField(choices=DriverDocument.DocumentType.choices)
     file = serializers.FileField()
     expiration_date = serializers.DateField(required=False, allow_null=True)
+
+
+class PhotoUploadSerializer(serializers.Serializer):
+    photo = serializers.ImageField()
