@@ -147,6 +147,42 @@ const DRIVER_INVOICES = [
 
 const DRIVER_INVOICE_DETAIL = { ...DRIVER_INVOICES[0] }
 
+const DISPATCHERS = [
+  { id: 10, full_name: 'Lilian Hernandez', dispatcher_type: 1, color: '#00ffff' },
+  { id: 11, full_name: 'Pedro Cancino', dispatcher_type: 1, color: '#1c4587' },
+]
+
+const DISPATCH_WORK = [
+  {
+    id: 1, title: 'Morning shift', dispatcher: 10, dispatcher_name: 'Lilian Hernandez',
+    start: '2024-01-15T08:00:00Z', end: '2024-01-15T16:00:00Z',
+    is_finished: true, is_paid: false, duration_hours: 8.0,
+    invoice_percent: null, invoice_hour: null, session: '',
+  },
+]
+
+const PERCENT_INVOICES = [
+  {
+    id: 1, number: 201, dispatcher: 10, dispatcher_name: 'Lilian Hernandez',
+    date: '2024-01-31', start: '2024-01-01T00:00:00Z', end: '2024-01-31T23:59:59Z',
+    percent: '2.50', status: 1, record: null,
+    created_at: '2024-01-31T10:00:00Z', updated_at: '2024-01-31T10:00:00Z',
+  },
+]
+
+const PERCENT_INVOICE_DETAIL = { ...PERCENT_INVOICES[0] }
+
+const HOUR_INVOICES = [
+  {
+    id: 1, number: 301, dispatcher: 11, dispatcher_name: 'Pedro Cancino',
+    date: '2024-01-31', start: '2024-01-01T00:00:00Z', end: '2024-01-31T23:59:59Z',
+    pay_per_hour: '10.00', status: 1, record: null,
+    created_at: '2024-01-31T10:00:00Z', updated_at: '2024-01-31T10:00:00Z',
+  },
+]
+
+const HOUR_INVOICE_DETAIL = { ...HOUR_INVOICES[0] }
+
 const TRAILER_DETAIL = {
   ...TRAILERS[0],
   width: 8.5, height: 13.5, plate_state: 9, plate_state_name: 'Texas',
@@ -209,6 +245,16 @@ async function mockApi(page) {
     if (pathname.endsWith('/loads/cities/search/')) return json([])
     if (pathname.endsWith('/brokers/search/')) return json([])
     if (pathname.endsWith('/brokers/business/search/')) return json([])
+    // Dispatch
+    if (pathname.endsWith('/dispatch/dispatchers/')) return json(DISPATCHERS)
+    if (pathname.endsWith('/dispatch/work/') && method === 'GET') return json(DISPATCH_WORK)
+    if (/\/dispatch\/work\/\d+\/$/.test(pathname) && method === 'GET') return json(DISPATCH_WORK[0])
+    if (pathname.endsWith('/dispatch/invoices/percent/') && method === 'GET') return json(PERCENT_INVOICES)
+    if (/\/dispatch\/invoices\/percent\/\d+\/$/.test(pathname) && method === 'GET') return json(PERCENT_INVOICE_DETAIL)
+    if (/\/dispatch\/invoices\/percent\/\d+\/amount\/$/.test(pathname)) return json({ amount: '125.00' })
+    if (pathname.endsWith('/dispatch/invoices/hour/') && method === 'GET') return json(HOUR_INVOICES)
+    if (/\/dispatch\/invoices\/hour\/\d+\/$/.test(pathname) && method === 'GET') return json(HOUR_INVOICE_DETAIL)
+    if (/\/dispatch\/invoices\/hour\/\d+\/amount\/$/.test(pathname)) return json({ amount: '80.00' })
 
     throw new Error(`Unmocked API call: ${method} ${pathname}${url.search}`)
   })
@@ -499,4 +545,81 @@ test('driver invoice detail renders heading with invoice number and status', asy
   await page.goto('/accounting/invoices/drivers/1')
   await expect(page.getByRole('heading', { name: /Driver Invoice #101/i })).toBeVisible()
   await expect(page.getByRole('button', { name: /close invoice/i })).toBeVisible()
+})
+
+// ── Dispatch: Work Sessions ───────────────────────────────────────────────────
+
+test('dispatch calendar renders a work session', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/dispatch/calendar')
+  await expect(page.getByText('Morning shift')).toBeVisible()
+  await expect(page.getByText('Lilian Hernandez')).toBeVisible()
+})
+
+test('dispatch my-calendar renders heading', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/dispatch/my-calendar')
+  await expect(page.getByText('My Work Sessions')).toBeVisible()
+})
+
+test('dispatch calendar shows Done badge for finished session', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/dispatch/calendar')
+  await expect(page.getByText('Done')).toBeVisible()
+})
+
+test('new work session form has Create Session button', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/dispatch/work/create')
+  await expect(page.getByRole('button', { name: 'Create Session' })).toBeVisible()
+})
+
+test('new work session form renders dispatcher options', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/dispatch/work/create')
+  await expect(page.locator('option', { hasText: 'Lilian Hernandez' })).toHaveCount(1)
+})
+
+// ── Dispatch: Percent Invoices ────────────────────────────────────────────────
+
+test('percent invoices list renders an invoice', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/invoices/dispatchers-percent')
+  await expect(page.getByRole('link', { name: '#201' })).toBeVisible()
+  await expect(page.getByText('Lilian Hernandez')).toBeVisible()
+})
+
+test('percent invoice detail renders heading and computed amount', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/invoices/dispatchers-percent/1')
+  await expect(page.getByText(/Percent Invoice #201/)).toBeVisible()
+  await expect(page.getByText('$125')).toBeVisible()
+})
+
+test('new percent invoice form has Create Invoice button', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/invoices/dispatchers-percent/create')
+  await expect(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible()
+})
+
+// ── Dispatch: Hour Invoices ───────────────────────────────────────────────────
+
+test('hour invoices list renders an invoice', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/invoices/dispatchers-hour')
+  await expect(page.getByRole('link', { name: '#301' })).toBeVisible()
+  await expect(page.getByText('Pedro Cancino')).toBeVisible()
+})
+
+test('hour invoice detail renders heading and rate', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/invoices/dispatchers-hour/1')
+  await expect(page.getByText(/Hour Invoice #301/)).toBeVisible()
+  await expect(page.getByText('$10.00/h')).toBeVisible()
+})
+
+test('new hour invoice form has Create Invoice button', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/accounting/invoices/dispatchers-hour/create')
+  await expect(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible()
 })

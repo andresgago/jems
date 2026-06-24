@@ -24,6 +24,14 @@ import RecordDetailPage from './pages/accounting/RecordDetailPage';
 import RecordFormPage from './pages/accounting/RecordFormPage';
 import DriverInvoicesPage from './pages/accounting/DriverInvoicesPage';
 import DriverInvoiceDetailPage from './pages/accounting/DriverInvoiceDetailPage';
+import DispatchPercentInvoicesPage from './pages/accounting/DispatchPercentInvoicesPage';
+import DispatchPercentInvoiceDetailPage from './pages/accounting/DispatchPercentInvoiceDetailPage';
+import DispatchPercentInvoiceFormPage from './pages/accounting/DispatchPercentInvoiceFormPage';
+import DispatchHourInvoicesPage from './pages/accounting/DispatchHourInvoicesPage';
+import DispatchHourInvoiceDetailPage from './pages/accounting/DispatchHourInvoiceDetailPage';
+import DispatchHourInvoiceFormPage from './pages/accounting/DispatchHourInvoiceFormPage';
+import DispatchWorkPage from './pages/dispatch/DispatchWorkPage';
+import DispatchWorkFormPage from './pages/dispatch/DispatchWorkFormPage';
 
 function AppRoutes() {
   return (
@@ -69,18 +77,26 @@ function AppRoutes() {
                 <Route path="accounting/invoices/drivers" element={<DriverInvoicesPage />} />
                 <Route path="accounting/invoices/drivers/:id" element={<DriverInvoiceDetailPage />} />
                 <Route path="accounting/owner-operator" element={<div><h5>Owner Operator</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="accounting/dispatcher-percent" element={<div><h5>Dispatcher By Percent</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="accounting/dispatcher-hour" element={<div><h5>Dispatcher By Hour</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="accounting/invoices/dispatchers-percent" element={<div><h5>Dispatchers by Percent Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="accounting/invoices/dispatchers-hour" element={<div><h5>Dispatchers by Hour Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/dispatcher-percent" element={<DispatchPercentInvoicesPage />} />
+                <Route path="accounting/dispatcher-hour" element={<DispatchHourInvoicesPage />} />
+                <Route path="accounting/invoices/dispatchers-percent" element={<DispatchPercentInvoicesPage />} />
+                <Route path="accounting/invoices/dispatchers-percent/create" element={<DispatchPercentInvoiceFormPage />} />
+                <Route path="accounting/invoices/dispatchers-percent/:id" element={<DispatchPercentInvoiceDetailPage />} />
+                <Route path="accounting/invoices/dispatchers-percent/:id/edit" element={<DispatchPercentInvoiceFormPage />} />
+                <Route path="accounting/invoices/dispatchers-hour" element={<DispatchHourInvoicesPage />} />
+                <Route path="accounting/invoices/dispatchers-hour/create" element={<DispatchHourInvoiceFormPage />} />
+                <Route path="accounting/invoices/dispatchers-hour/:id" element={<DispatchHourInvoiceDetailPage />} />
+                <Route path="accounting/invoices/dispatchers-hour/:id/edit" element={<DispatchHourInvoiceFormPage />} />
                 {/* Brokers */}
                 <Route path="brokers" element={<BrokersPage />} />
                 <Route path="brokers/create" element={<BrokerFormPage />} />
                 <Route path="brokers/:id" element={<BrokerDetailPage />} />
                 <Route path="brokers/:id/edit" element={<BrokerFormPage />} />
                 {/* Dispatch */}
-                <Route path="dispatch/my-calendar" element={<div><h5>My Work Calendar</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="dispatch/calendar" element={<div><h5>Dispatchers Calendar</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="dispatch/my-calendar" element={<DispatchWorkPage selfOnly={true} />} />
+                <Route path="dispatch/calendar" element={<DispatchWorkPage />} />
+                <Route path="dispatch/work/create" element={<DispatchWorkFormPage />} />
+                <Route path="dispatch/work/:id/edit" element={<DispatchWorkFormPage />} />
                 {/* RTL */}
                 <Route path="rtl" element={<div><h5>RTL – Trucks / Drivers</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="rtl/ifta" element={<div><h5>IFTA</h5><p className="text-muted">Coming soon.</p></div>} />
