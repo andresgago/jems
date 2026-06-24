@@ -193,6 +193,35 @@ const CITY_DETAIL = {
   state_data: { id: 34, name: 'North Carolina', abbreviation: 'NC' },
 }
 
+const USERS = [
+  {
+    id: 1, username: 'lilian', first_name: 'Lilian', last_name: 'Hernandez',
+    full_name: 'Lilian Hernandez', email: 'lilian@example.com', phone: '704-264-7316',
+    status: 10, is_dispatcher: true, dispatcher_type: 0,
+    dispatcher_type_display: 'Main', contract: 0, contract_display: 'By Percent',
+    percent: 2.5, hours: 0, color: '#00ffff',
+  },
+]
+
+const USER_DETAIL = {
+  ...USERS[0],
+  start_hour: '08:00:00', end_hour: '17:00:00', address: '1 Dispatch Way',
+  social_security_number: '', position: null, position_name: null,
+  main_dispatcher: null, main_dispatcher_name: null,
+  carriers_access: [], dispatcher_access: [], carrier: 0,
+  photo: null, is_staff: true,
+}
+
+const SYSTEM_CONFIG = {
+  id: 1, start_hours_work_dispatcher: '08:00:00', end_hours_work_dispatcher: '17:00:00',
+  dispatcher_invoice_hour: 1000, dispatcher_invoice_percent: 1000,
+  driver_invoice: 1000, owner_invoice: 1000, carrier: 0,
+}
+
+const DISPLAY_OPTIONS = {
+  id: 1, truck: 'number,VIN', trailer: 'number,year', driver: 'name,phone',
+}
+
 const TRAILER_DETAIL = {
   ...TRAILERS[0],
   width: 8.5, height: 13.5, plate_state: 9, plate_state_name: 'Texas',
@@ -249,7 +278,14 @@ async function mockApi(page) {
     if (pathname.endsWith('/locations/cities/') && method === 'GET') return json({ count: 2, results: CITIES, next: null, previous: null })
     if (/\/locations\/cities\/\d+\/$/.test(pathname) && method === 'GET') return json(CITY_DETAIL)
     if (/\/locations\/cities\/\d+\/toggle-status\/$/.test(pathname) && method === 'POST') return json({ id: 1, active: false })
-    if (pathname.endsWith('/users/') && method === 'GET') return json([])
+    if (pathname.endsWith('/users/options/') && method === 'GET') return json(USERS.map((u) => ({ id: u.id, label: u.full_name, full_name: u.full_name })))
+    if (pathname.endsWith('/users/positions/') && method === 'GET') return json([])
+    if (pathname.endsWith('/users/settings/config/') && method === 'GET') return json(SYSTEM_CONFIG)
+    if (pathname.endsWith('/users/settings/config/') && method === 'PATCH') return json(SYSTEM_CONFIG)
+    if (pathname.endsWith('/users/settings/display-options/') && method === 'GET') return json(DISPLAY_OPTIONS)
+    if (pathname.endsWith('/users/settings/display-options/') && method === 'PATCH') return json(DISPLAY_OPTIONS)
+    if (/\/users\/\d+\/$/.test(pathname) && method === 'GET') return json(USER_DETAIL)
+    if (pathname.endsWith('/users/') && method === 'GET') return json(USERS)
     if (pathname.endsWith('/drivers/types/')) return json(DRIVER_TYPES)
     if (pathname.endsWith('/drivers/options/')) return json(DRIVERS)
     if (pathname.endsWith('/drivers/') && method === 'GET') return json(DRIVERS)
@@ -682,4 +718,39 @@ test('new city form: state options render in the select', async ({ page }) => {
   await page.goto('/settings/cities/create')
   await expect(page.locator('option', { hasText: 'Texas (TX)' })).toHaveCount(1)
   await expect(page.locator('option', { hasText: 'Alabama (AL)' })).toHaveCount(1)
+})
+
+// ── Settings: Users / System ─────────────────────────────────────────────────
+
+test('users list renders a user returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/users')
+  await expect(page.getByRole('link', { name: 'Lilian Hernandez' })).toBeVisible()
+  await expect(page.getByText('lilian@example.com')).toBeVisible()
+})
+
+test('user detail renders heading and dispatcher type', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/users/1')
+  await expect(page.getByRole('heading', { name: 'Lilian Hernandez' })).toBeVisible()
+  await expect(page.getByText('By Percent')).toBeVisible()
+})
+
+test('new user form has Create User button', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/users/create')
+  await expect(page.getByRole('button', { name: /Create User/i })).toBeVisible()
+})
+
+test('new user form: Username label shows required asterisk', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/users/create')
+  await expect(page.locator('label').filter({ hasText: /^Username/ })).toContainText('*')
+})
+
+test('system settings page renders invoice counters and display options', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/system')
+  await expect(page.getByRole('heading', { name: /System Settings/i })).toBeVisible()
+  await expect(page.locator('input[value="number,VIN"]')).toBeVisible()
 })

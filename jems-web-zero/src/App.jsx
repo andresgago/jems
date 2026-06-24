@@ -35,6 +35,10 @@ import DispatchWorkFormPage from './pages/dispatch/DispatchWorkFormPage';
 import CitiesPage from './pages/settings/CitiesPage';
 import CityDetailPage from './pages/settings/CityDetailPage';
 import CityFormPage from './pages/settings/CityFormPage';
+import UsersPage from './pages/settings/UsersPage';
+import UserDetailPage from './pages/settings/UserDetailPage';
+import UserFormPage from './pages/settings/UserFormPage';
+import SystemSettingsPage from './pages/settings/SystemSettingsPage';
 
 function AppRoutes() {
   return (
@@ -122,6 +126,11 @@ function AppRoutes() {
                 <Route path="settings/cities/create" element={<CityFormPage />} />
                 <Route path="settings/cities/:id" element={<CityDetailPage />} />
                 <Route path="settings/cities/:id/edit" element={<CityFormPage />} />
+                <Route path="settings/users" element={<UsersPage />} />
+                <Route path="settings/users/create" element={<UserFormPage />} />
+                <Route path="settings/users/:id" element={<UserDetailPage />} />
+                <Route path="settings/users/:id/edit" element={<UserFormPage />} />
+                <Route path="settings/system" element={<SystemSettingsPage />} />
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

@@ -133,6 +133,7 @@ export default function Navbar() {
                 <li><Link className="dropdown-item" to="/brokers/contacts">Brokers Contact</Link></li>
                 <li><Link className="dropdown-item" to="/settings/business">Business</Link></li>
                 <li><Link className="dropdown-item" to="/settings/cities">Cities</Link></li>
+                <li><Link className="dropdown-item" to="/settings/users">Users</Link></li>
               </ul>
             </li>
 
@@ -143,6 +144,7 @@ export default function Navbar() {
                 </a>
                 <ul className="dropdown-menu dropdown-menu-dark">
                   <li><Link className="dropdown-item" to="/settings/carriers">Carriers</Link></li>
+                  <li><Link className="dropdown-item" to="/settings/system">System Settings</Link></li>
                   <li><Link className="dropdown-item" to="/settings/truck-owners">Trucks Owners</Link></li>
                   <li><Link className="dropdown-item" to="/settings/loss-payees">Loss Payees</Link></li>
                   <li><hr className="dropdown-divider" /></li>

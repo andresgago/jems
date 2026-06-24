@@ -24,6 +24,9 @@ const CRITICAL_ROUTES = [
   { path: '/brokers/create', heading: /new broker/i },
   { path: '/settings/cities', heading: /cities/i },
   { path: '/settings/cities/create', heading: /create city/i },
+  { path: '/settings/users', heading: /users/i },
+  { path: '/settings/users/create', heading: /create user/i },
+  { path: '/settings/system', heading: /system settings/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -61,6 +64,23 @@ async function assertRealApiLoginWorks(page) {
   }
 }
 
+async function authenticateAsAdmin(page) {
+  const res = await page.request.post(`${API_BASE}/auth/login/`, {
+    data: { username: ADMIN_USER, password: ADMIN_PASS },
+    timeout: 5_000,
+  })
+  if (!res.ok()) {
+    const body = await res.text()
+    throw new Error(`Real E2E login failed for ${ADMIN_USER}. HTTP ${res.status()}: ${body}`)
+  }
+  const tokens = await res.json()
+  await page.addInitScript(({ access, refresh }) => {
+    localStorage.setItem('access_token', access)
+    localStorage.setItem('refresh_token', refresh)
+  }, tokens)
+  return tokens.access
+}
+
 async function getAccessToken(page) {
   await page.waitForFunction(() => !!localStorage.getItem('access_token'))
   return page.evaluate(() => localStorage.getItem('access_token'))
@@ -83,11 +103,24 @@ async function apiPost(page, token, path, data) {
   return res.json()
 }
 
+async function apiPatch(page, token, path, data) {
+  const res = await page.request.patch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data,
+  })
+  expect(res.ok()).toBeTruthy()
+  return res.json()
+}
+
 async function apiDelete(page, token, path) {
   const res = await page.request.delete(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   expect(res.ok()).toBeTruthy()
+}
+
+function fieldByLabel(page, label, selector = 'input, select, textarea') {
+  return page.locator('label').filter({ hasText: label }).locator('xpath=..').locator(selector).first()
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -432,6 +465,170 @@ test('can create and toggle a city via API (real)', async ({ page }) => {
   expect(patched.ok()).toBeTruthy()
   const patchedBody = await patched.json()
   expect(patchedBody.timezone).toBe('America/Denver')
+})
+
+// ── Users / Settings ────────────────────────────────────────────────────────
+
+test.describe('Users / Settings (real)', () => {
+test.describe.configure({ mode: 'serial' })
+
+test('users options endpoint returns dispatcher labels (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  const token = await authenticateAsAdmin(page)
+
+  const options = await apiGet(page, token, '/users/options/?dispatchers=1')
+  expect(Array.isArray(options)).toBeTruthy()
+  for (const option of options.slice(0, 3)) {
+    expect(option).toHaveProperty('id')
+    expect(option).toHaveProperty('label')
+  }
+})
+
+test('can create and delete a user via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  const token = await authenticateAsAdmin(page)
+
+  const stamp = Date.now()
+  const created = await apiPost(page, token, '/users/', {
+    username: `e2e_user_${stamp}`,
+    first_name: 'E2E',
+    last_name: 'User',
+    email: `e2e_user_${stamp}@example.com`,
+    password: `E2e!User#Pass-${stamp}`,
+    phone: '555-0100',
+    is_dispatcher: true,
+    dispatcher_type: 0,
+    contract: 0,
+    percent: 2.5,
+  })
+
+  expect(created.id).toBeTruthy()
+  expect(created.full_name).toContain('E2E')
+  expect(created.contract).toBe(0)
+
+  const patched = await page.request.patch(
+    `${API_BASE}/users/${created.id}/`,
+    {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: { phone: '555-0200', percent: 3 },
+    }
+  )
+  expect(patched.ok()).toBeTruthy()
+  const patchedBody = await patched.json()
+  expect(patchedBody.phone).toBe('555-0200')
+  expect(patchedBody.percent).toBe(3)
+
+  await apiDelete(page, token, `/users/${created.id}/`)
+})
+
+test('can create a user from the UI and open its detail page (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  const token = await authenticateAsAdmin(page)
+  const stamp = Date.now()
+  const username = `e2e_ui_${stamp}`
+  const password = `E2e!Ui#Pass-${stamp}`
+  let createdId
+
+  try {
+    await page.goto('/settings/users/create')
+    await fieldByLabel(page, /^Username/).fill(username)
+    await fieldByLabel(page, /^First Name/).fill('E2E')
+    await fieldByLabel(page, /^Last Name/).fill('UI User')
+    await fieldByLabel(page, /^Email/).fill(`${username}@example.com`)
+    await fieldByLabel(page, /^Password/).fill(password)
+    await fieldByLabel(page, /^Phone/).fill('555-0300')
+    await fieldByLabel(page, /^Dispatcher$/).check()
+    await fieldByLabel(page, /^Percent/).fill('2.5')
+
+    await page.getByRole('button', { name: /create user/i }).click()
+    await expect(page).toHaveURL(/\/settings\/users\/\d+$/)
+    createdId = Number(page.url().match(/\/settings\/users\/(\d+)$/)?.[1])
+    expect(createdId).toBeTruthy()
+
+    await expect(page.getByRole('heading', { name: /E2E UI User/i })).toBeVisible()
+    await expect(page.getByText(username, { exact: true })).toBeVisible()
+    await expect(page.getByText('By Percent', { exact: true })).toBeVisible()
+  } finally {
+    if (createdId) await apiDelete(page, token, `/users/${createdId}/`)
+  }
+})
+
+test('can toggle a user status from the UI list (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  const token = await authenticateAsAdmin(page)
+  const stamp = Date.now()
+  const created = await apiPost(page, token, '/users/', {
+    username: `e2e_toggle_${stamp}`,
+    first_name: 'E2E',
+    last_name: 'Toggle',
+    email: `e2e_toggle_${stamp}@example.com`,
+    password: `E2e!Toggle#Pass-${stamp}`,
+    status: 10,
+  })
+
+  try {
+    page.on('dialog', (dialog) => dialog.accept())
+    await page.goto('/settings/users')
+    await page.getByPlaceholder(/name, username, or email/i).fill(created.username)
+    await expect(page.getByRole('link', { name: 'E2E Toggle' })).toBeVisible()
+    await expect(page.locator('td > span.badge', { hasText: 'Active' })).toBeVisible()
+    await page.getByTitle('Toggle status').click()
+    await expect(page.locator('td > span.badge', { hasText: 'Inactive' })).toBeVisible()
+  } finally {
+    await apiDelete(page, token, `/users/${created.id}/`)
+  }
+})
+
+test('system settings endpoints can be read and patched (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  const token = await authenticateAsAdmin(page)
+
+  const config = await apiGet(page, token, '/users/settings/config/')
+  expect(config).toHaveProperty('driver_invoice')
+  const displayOptions = await apiGet(page, token, '/users/settings/display-options/')
+  expect(displayOptions).toHaveProperty('truck')
+
+  try {
+    const body = await apiPatch(page, token, '/users/settings/display-options/', {
+      driver: 'name,phone',
+    })
+    expect(body.driver).toBe('name,phone')
+  } finally {
+    await apiPatch(page, token, '/users/settings/display-options/', {
+      truck: displayOptions.truck,
+      trailer: displayOptions.trailer,
+      driver: displayOptions.driver,
+    })
+  }
+})
+
+test('can save display options from the system settings UI (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  const token = await authenticateAsAdmin(page)
+  const original = await apiGet(page, token, '/users/settings/display-options/')
+  const nextDriverFields = `name,phone,e2e_${Date.now()}`
+
+  try {
+    await page.goto('/settings/system')
+    const driverFields = fieldByLabel(page, /^Driver Fields/)
+    await driverFields.selectText()
+    await driverFields.press('Backspace')
+    await driverFields.pressSequentially(nextDriverFields)
+    await expect(driverFields).toHaveValue(nextDriverFields)
+    await page.getByRole('button', { name: /save settings/i }).click()
+    await expect(page.getByText('Saved')).toBeVisible()
+
+    const updated = await apiGet(page, token, '/users/settings/display-options/')
+    expect(updated.driver).toBe(nextDriverFields)
+  } finally {
+    await apiPatch(page, token, '/users/settings/display-options/', {
+      truck: original.truck,
+      trailer: original.trailer,
+      driver: original.driver,
+    })
+  }
+})
+
 })
 
 // ── Truck file upload (legacy-parity leased slot) ─────────────────────────────
