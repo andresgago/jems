@@ -13,12 +13,13 @@ class State(models.Model):
 
 
 class City(models.Model):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=200)
     zip = models.CharField(max_length=10, blank=True, default="")
     state = models.ForeignKey(
         State, on_delete=models.SET_NULL, null=True, blank=True, related_name="cities"
     )
     active = models.BooleanField(default=True)
+    timezone = models.CharField(max_length=100, blank=True, default="")
 
     class Meta:
         db_table = "cities"

@@ -385,6 +385,48 @@ assert_status "states list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "states list has abbreviation" "$(body "$resp")" "abbreviation"
 assert_contains "states list includes TX" "$(body "$resp")" "TX"
 
+step "Locations: cities list (paginated)"
+resp="$(get "/api/v1/locations/cities/?active=1")"
+assert_status "cities list" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "cities list has count" "$(body "$resp")" "count"
+assert_contains "cities list has results" "$(body "$resp")" "results"
+
+step "Locations: city retrieve"
+resp="$(get "/api/v1/locations/cities/${CITY_ID}/")"
+assert_status "city retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "city has name" "$(body "$resp")" "Houston"
+assert_contains "city has zip" "$(body "$resp")" "77001"
+assert_contains "city has state_data" "$(body "$resp")" "state_data"
+
+step "Locations: city PATCH (timezone)"
+resp="$(patch "/api/v1/locations/cities/${CITY_ID}/" '{"timezone":"America/Chicago"}')"
+assert_status "city patch" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "city patch timezone" "$(body "$resp")" "America/Chicago"
+
+step "Locations: city PATCH restore timezone"
+resp="$(patch "/api/v1/locations/cities/${CITY_ID}/" '{"timezone":""}')"
+assert_status "city patch restore" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Locations: city toggle-status (active → inactive)"
+resp="$(post "/api/v1/locations/cities/${CITY_ID}/toggle-status/" '{}')"
+assert_status "city toggle to inactive" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "city is now inactive" "$(body "$resp")" "false"
+
+step "Locations: city toggle-status (inactive → active)"
+resp="$(post "/api/v1/locations/cities/${CITY_ID}/toggle-status/" '{}')"
+assert_status "city toggle to active" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "city is now active" "$(body "$resp")" "true"
+
+step "Locations: cities list filter by q=Hous"
+resp="$(get "/api/v1/locations/cities/?q=Hous")"
+assert_status "cities filter q" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "cities filter q has Houston" "$(body "$resp")" "Houston"
+
+step "Locations: city create"
+resp="$(post "/api/v1/locations/cities/" "{\"name\":\"Smoke Test City\",\"zip\":\"99999\",\"state\":${STATE_ID}}")"
+assert_status "city create" "201" "$(code "$resp")" "$(body "$resp")"
+assert_contains "city create has state_data" "$(body "$resp")" "state_data"
+
 # ── Fleet catalogs ────────────────────────────────────────────────────────────
 step "Fleet catalogs: truck type"
 resp="$(post "/api/v1/fleet/truck-types/" '{"name":"Dry Van","is_active":true}')"
