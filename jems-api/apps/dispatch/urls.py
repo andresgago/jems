@@ -5,6 +5,7 @@ from .views import (
     DispatcherWorkFinishView,
     DispatcherWorkListView,
     DispatcherWorkMarkPaidView,
+    DispatchersOptionsView,
     InvoiceByHourAmountView,
     InvoiceByHourCloseView,
     InvoiceByHourDetailView,
@@ -18,6 +19,8 @@ from .views import (
 )
 
 urlpatterns = [
+    # Dispatchers options (must be before any pk patterns)
+    path("dispatchers/", DispatchersOptionsView.as_view(), name="dispatch-dispatchers"),
     # Dispatcher Work
     path("work/", DispatcherWorkListView.as_view(), name="dispatcher-work-list"),
     path(

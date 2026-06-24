@@ -1599,6 +1599,118 @@ step "Integrations: unauthenticated RTL blocked"
 resp="$(curl -s -w "\n%{http_code}" "${API_URL}/api/v1/integrations/rtl/drivers/")"
 assert_status "rtl unauth" "401" "$(code "$resp")"
 
+# ── Dispatch ──────────────────────────────────────────────────────────────────
+
+step "Dispatch: list dispatchers options"
+resp="$(get "/api/v1/dispatch/dispatchers/")"
+assert_status "dispatchers list" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Dispatch: list work sessions (empty is OK)"
+resp="$(get "/api/v1/dispatch/work/")"
+assert_status "work list" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Dispatch: create work session"
+resp="$(post "/api/v1/dispatch/work/" "{\"title\":\"Smoke test session\",\"start\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"end\":\"$(date -u -v+1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+1 hour' +%Y-%m-%dT%H:%M:%SZ)\"}")"
+assert_status "work create" "201" "$(code "$resp")" "$(body "$resp")"
+WORK_ID="$(body "$resp" | json_get_num id)"
+
+step "Dispatch: retrieve work session"
+resp="$(get "/api/v1/dispatch/work/${WORK_ID}/")"
+assert_status "work retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "work has title" "$(body "$resp")" '"title"'
+assert_contains "work has is_finished" "$(body "$resp")" '"is_finished"'
+assert_contains "work has duration_hours" "$(body "$resp")" '"duration_hours"'
+
+step "Dispatch: patch work session title"
+resp="$(patch "/api/v1/dispatch/work/${WORK_ID}/" '{"title":"Updated session"}')"
+assert_status "work patch" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "work patch updated" "$(body "$resp")" '"Updated session"'
+
+step "Dispatch: finish work session"
+resp="$(post "/api/v1/dispatch/work/${WORK_ID}/finish/" '{}')"
+assert_status "work finish" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "work is finished" "$(body "$resp")" '"is_finished":true'
+
+step "Dispatch: finish already-finished session (→ 400)"
+resp="$(post "/api/v1/dispatch/work/${WORK_ID}/finish/" '{}')"
+assert_status "work finish again" "400" "$(code "$resp")"
+
+step "Dispatch: mark work session paid"
+resp="$(post "/api/v1/dispatch/work/${WORK_ID}/mark-paid/" '{}')"
+assert_status "work mark-paid" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "work is paid" "$(body "$resp")" '"is_paid":true'
+
+step "Dispatch: list percent invoices (empty is OK)"
+resp="$(get "/api/v1/dispatch/invoices/percent/")"
+assert_status "percent invoices list" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Dispatch: create percent invoice"
+resp="$(post "/api/v1/dispatch/invoices/percent/" '{"date":"2024-01-31","start":"2024-01-01T00:00:00Z","end":"2024-01-31T23:59:59Z","percent":"2.50"}')"
+assert_status "percent invoice create" "201" "$(code "$resp")" "$(body "$resp")"
+PCT_INV_ID="$(body "$resp" | json_get_num id)"
+
+step "Dispatch: retrieve percent invoice"
+resp="$(get "/api/v1/dispatch/invoices/percent/${PCT_INV_ID}/")"
+assert_status "percent invoice retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "pct inv has number" "$(body "$resp")" '"number"'
+assert_contains "pct inv has percent" "$(body "$resp")" '"percent"'
+
+step "Dispatch: percent invoice amount"
+resp="$(get "/api/v1/dispatch/invoices/percent/${PCT_INV_ID}/amount/")"
+assert_status "percent invoice amount" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "amount field present" "$(body "$resp")" '"amount"'
+
+step "Dispatch: close percent invoice"
+resp="$(post "/api/v1/dispatch/invoices/percent/${PCT_INV_ID}/close/" '{}')"
+assert_status "pct inv close" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "pct inv closed" "$(body "$resp")" '"status":0'
+
+step "Dispatch: close already-closed percent invoice (→ 400)"
+resp="$(post "/api/v1/dispatch/invoices/percent/${PCT_INV_ID}/close/" '{}')"
+assert_status "pct inv close again" "400" "$(code "$resp")"
+
+step "Dispatch: reopen percent invoice"
+resp="$(post "/api/v1/dispatch/invoices/percent/${PCT_INV_ID}/open/" '{}')"
+assert_status "pct inv reopen" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "pct inv reopened" "$(body "$resp")" '"status":1'
+
+step "Dispatch: list hour invoices (empty is OK)"
+resp="$(get "/api/v1/dispatch/invoices/hour/")"
+assert_status "hour invoices list" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Dispatch: create hour invoice"
+resp="$(post "/api/v1/dispatch/invoices/hour/" '{"date":"2024-01-31","start":"2024-01-01T00:00:00Z","end":"2024-01-31T23:59:59Z","pay_per_hour":"15.00"}')"
+assert_status "hour invoice create" "201" "$(code "$resp")" "$(body "$resp")"
+HOUR_INV_ID="$(body "$resp" | json_get_num id)"
+
+step "Dispatch: retrieve hour invoice"
+resp="$(get "/api/v1/dispatch/invoices/hour/${HOUR_INV_ID}/")"
+assert_status "hour invoice retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "hour inv has pay_per_hour" "$(body "$resp")" '"pay_per_hour"'
+
+step "Dispatch: hour invoice amount"
+resp="$(get "/api/v1/dispatch/invoices/hour/${HOUR_INV_ID}/amount/")"
+assert_status "hour invoice amount" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "hour amount field present" "$(body "$resp")" '"amount"'
+
+step "Dispatch: close hour invoice"
+resp="$(post "/api/v1/dispatch/invoices/hour/${HOUR_INV_ID}/close/" '{}')"
+assert_status "hour inv close" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "hour inv closed" "$(body "$resp")" '"status":0'
+
+step "Dispatch: reopen hour invoice"
+resp="$(post "/api/v1/dispatch/invoices/hour/${HOUR_INV_ID}/open/" '{}')"
+assert_status "hour inv reopen" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "hour inv reopened" "$(body "$resp")" '"status":1'
+
+step "Dispatch: delete work session"
+resp="$(delete "/api/v1/dispatch/work/${WORK_ID}/")"
+assert_status "work delete" "204" "$(code "$resp")"
+
+step "Dispatch: deleted work session → 404"
+resp="$(get "/api/v1/dispatch/work/${WORK_ID}/")"
+assert_status "work gone" "404" "$(code "$resp")"
+
 # ── AI ────────────────────────────────────────────────────────────────────────
 step "AI: create conversation"
 resp="$(post "/api/v1/ai/conversations/" '{"topic":"Load planning for Q3"}')"

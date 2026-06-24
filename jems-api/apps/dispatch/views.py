@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -32,6 +33,8 @@ from .services import (
     update_invoice_by_hour,
     update_invoice_by_percent,
 )
+
+User = get_user_model()
 
 # ── Dispatcher Work ───────────────────────────────────────────────────────────
 
@@ -226,3 +229,27 @@ class InvoiceByHourAmountView(APIView):
         invoice = get_object_or_404(DispatcherWorkInvoiceByHour, pk=pk)
         amount = calculate_amount_by_hour(invoice=invoice)
         return Response({"amount": amount})
+
+
+# ── Dispatchers Options ───────────────────────────────────────────────────────
+
+
+class DispatchersOptionsView(APIView):
+    """Return all users flagged as dispatchers for dropdown use."""
+
+    def get(self, request: Request) -> Response:
+        dispatchers = (
+            User.objects.filter(is_dispatcher=True)
+            .order_by("first_name", "last_name")
+            .values("id", "first_name", "last_name", "dispatcher_type", "color")
+        )
+        data = [
+            {
+                "id": d["id"],
+                "full_name": f"{d['first_name']} {d['last_name']}".strip(),
+                "dispatcher_type": d["dispatcher_type"],
+                "color": d["color"],
+            }
+            for d in dispatchers
+        ]
+        return Response(data)
