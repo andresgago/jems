@@ -1157,6 +1157,23 @@ assert_contains "load number" "$(body "$resp")" "${LOAD_NUMBER}"
 step "Loads: list"
 resp="$(get "/api/v1/loads/")"
 assert_status "load list" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "load list has count" "$(body "$resp")" '"count"'
+assert_contains "load list has results" "$(body "$resp")" '"results"'
+assert_contains "load list includes created load" "$(body "$resp")" "${LOAD_ID}"
+
+step "Loads: list paginated page_size"
+resp="$(get "/api/v1/loads/?page=1&page_size=1")"
+assert_status "load list paginated" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "load paginated count" "$(body "$resp")" '"count"'
+assert_contains "load paginated results" "$(body "$resp")" '"results"'
+
+step "Loads: list all filtered rows"
+resp="$(get "/api/v1/loads/?dispatcher=${DISPATCHER_USER_ID}&all=true")"
+assert_status "load list all rows" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "load all count" "$(body "$resp")" '"count"'
+assert_contains "load all next null" "$(body "$resp")" '"next":null'
+assert_contains "load all previous null" "$(body "$resp")" '"previous":null'
+assert_contains "load all preserves dispatcher filter" "$(body "$resp")" "${LOAD_ID}"
 
 step "Loads: load stop create"
 resp="$(post "/api/v1/loads/${LOAD_ID}/stops/" "{\"stop_type\":1,\"city\":${CITY_ID},\"address\":\"789 Stop Ave\",\"from_date\":\"2024-08-01\",\"to_date\":\"2024-08-01\"}")"

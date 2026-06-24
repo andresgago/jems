@@ -1,6 +1,12 @@
+from datetime import datetime, time
+
+from django.db.models import Q
+from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
@@ -24,8 +30,41 @@ from .services import (
 )
 
 
+def _datetime_bound(value, *, end=False):
+    parsed_datetime = parse_datetime(value)
+    if parsed_datetime:
+        if timezone.is_naive(parsed_datetime):
+            return timezone.make_aware(parsed_datetime, timezone.get_current_timezone())
+        return parsed_datetime
+
+    parsed_date = parse_date(value)
+    if parsed_date:
+        bound_time = time.max if end else time.min
+        return timezone.make_aware(
+            datetime.combine(parsed_date, bound_time),
+            timezone.get_current_timezone(),
+        )
+
+    return value
+
+
+class LoadPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 500
+
+
 class LoadViewSet(ViewSet):
-    permission_classes = [IsAuthenticated]
+    class IsAdminOrDispatcher(BasePermission):
+        def has_permission(self, request, view):
+            user = request.user
+            return bool(
+                user
+                and user.is_authenticated
+                and (user.is_superuser or user.is_staff or user.is_dispatcher)
+            )
+
+    permission_classes = [IsAdminOrDispatcher]
 
     def _base_queryset(self):
         return Load.objects.select_related(
@@ -35,9 +74,12 @@ class LoadViewSet(ViewSet):
             "team_driver",
             "truck",
             "trailer",
+            "trailer__trailer_type",
             "trailer_type",
             "pickup_city",
+            "pickup_city__state",
             "dropoff_city",
+            "dropoff_city__state",
             "shipper",
             "receiver",
             "carrier",
@@ -46,32 +88,108 @@ class LoadViewSet(ViewSet):
     def list(self, request):
         qs = self._base_queryset()
         # Filters
+        history = request.query_params.get("history")
+        if history is not None:
+            qs = qs.filter(history=str(history).lower() == "true")
         s = request.query_params.get("status")
         if s:
             qs = qs.filter(status=s)
+        number = request.query_params.get("number")
+        if number:
+            qs = qs.filter(number__icontains=number)
         broker = request.query_params.get("broker")
         if broker:
-            qs = qs.filter(broker_id=broker)
+            broker_filter = (
+                Q(broker__name__icontains=broker)
+                | Q(broker__dba_name__icontains=broker)
+                | Q(broker__mc__icontains=broker)
+                | Q(carrier__name__icontains=broker)
+            )
+            if broker.isdigit():
+                broker_filter |= Q(broker_id=broker)
+            qs = qs.filter(broker_filter)
         dispatcher = request.query_params.get("dispatcher")
         if dispatcher:
-            qs = qs.filter(dispatcher_id=dispatcher)
+            if dispatcher.isdigit():
+                qs = qs.filter(dispatcher_id=dispatcher)
+            else:
+                qs = qs.filter(
+                    Q(dispatcher__first_name__icontains=dispatcher)
+                    | Q(dispatcher__last_name__icontains=dispatcher)
+                    | Q(dispatcher__username__icontains=dispatcher)
+                )
         driver = request.query_params.get("driver")
         if driver:
-            qs = qs.filter(driver_id=driver)
+            driver_filter = (
+                Q(driver__first_name__icontains=driver)
+                | Q(driver__last_name__icontains=driver)
+                | Q(team_driver__first_name__icontains=driver)
+                | Q(team_driver__last_name__icontains=driver)
+                | Q(truck__number__icontains=driver)
+                | Q(trailer__number__icontains=driver)
+            )
+            if driver.isdigit():
+                driver_filter |= Q(driver_id=driver)
+            qs = qs.filter(driver_filter)
+        pickup_city = request.query_params.get("pickup_city")
+        if pickup_city:
+            pickup_city_filter = (
+                Q(pickup_city__name__icontains=pickup_city)
+                | Q(pickup_city__zip__icontains=pickup_city)
+                | Q(pickup_city__state__abbreviation__icontains=pickup_city)
+            )
+            if pickup_city.isdigit():
+                pickup_city_filter |= Q(pickup_city_id=pickup_city)
+            qs = qs.filter(pickup_city_filter)
+        dropoff_city = request.query_params.get("dropoff_city")
+        if dropoff_city:
+            dropoff_city_filter = (
+                Q(dropoff_city__name__icontains=dropoff_city)
+                | Q(dropoff_city__zip__icontains=dropoff_city)
+                | Q(dropoff_city__state__abbreviation__icontains=dropoff_city)
+            )
+            if dropoff_city.isdigit():
+                dropoff_city_filter |= Q(dropoff_city_id=dropoff_city)
+            qs = qs.filter(dropoff_city_filter)
         invoiced = request.query_params.get("invoiced")
         if invoiced is not None:
             qs = qs.filter(invoiced=invoiced.lower() == "true")
         paid = request.query_params.get("paid")
         if paid is not None:
             qs = qs.filter(paid=paid.lower() == "true")
+        date_type = request.query_params.get("date_type", "pickup")
+        date_field = {
+            "pickup": "pickup_date",
+            "pickup_date": "pickup_date",
+            "dropoff": "dropoff_date",
+            "dropoff_date": "dropoff_date",
+            "created": "created_at",
+            "created_at": "created_at",
+            "all": None,
+            "ignore": None,
+        }.get(date_type, "pickup_date")
         date_from = request.query_params.get("date_from")
-        if date_from:
-            qs = qs.filter(pickup_date__gte=date_from)
         date_to = request.query_params.get("date_to")
-        if date_to:
-            qs = qs.filter(pickup_date__lte=date_to)
-        serializer = LoadListSerializer(qs, many=True)
-        return Response(serializer.data)
+        if date_field and date_from:
+            qs = qs.filter(**{f"{date_field}__gte": _datetime_bound(date_from)})
+        if date_field and date_to:
+            qs = qs.filter(**{f"{date_field}__lte": _datetime_bound(date_to, end=True)})
+        qs = qs.order_by("-pickup_date", "-id")
+        if request.query_params.get("all", "").lower() in {"1", "true", "yes"}:
+            serializer = LoadListSerializer(qs, many=True, context={"request": request})
+            return Response(
+                {
+                    "count": qs.count(),
+                    "next": None,
+                    "previous": None,
+                    "results": serializer.data,
+                }
+            )
+
+        paginator = LoadPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = LoadListSerializer(page, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)
 
     def create(self, request):
         serializer = LoadSerializer(data=request.data)
