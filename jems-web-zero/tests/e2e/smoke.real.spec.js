@@ -27,6 +27,8 @@ const CRITICAL_ROUTES = [
   { path: '/settings/users', heading: /users/i },
   { path: '/settings/users/create', heading: /create user/i },
   { path: '/settings/system', heading: /system settings/i },
+  { path: '/rtl', heading: /rtl/i },
+  { path: '/rtl/ifta', heading: /ifta/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -663,4 +665,90 @@ test('can upload and clear a truck document file via API (real)', async ({ page 
   expect(clearRes.ok()).toBeTruthy()
 
   await apiDelete(page, token, `/fleet/trucks/${created.id}/`)
+})
+
+test('can sync and retrieve an RTL driver via API (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await authenticateAsAdmin(page)
+  await page.goto('/')
+  const token = await getAccessToken(page)
+
+  const rtlId = `e2e-drv-${Date.now()}`
+  const syncRes = await page.request.post(`${API_BASE}/integrations/rtl/sync/`, {
+    data: {
+      drivers: [
+        {
+          _id: rtlId,
+          firstName: 'E2E',
+          lastName: 'Driver',
+          email: `e2e-${Date.now()}@example.com`,
+          active: true,
+          driverInfoLicenseNumber: `E2E-LIC-${Date.now()}`,
+          driverInfoLicenseState: 'TX',
+        },
+      ],
+    },
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(syncRes.ok()).toBeTruthy()
+  const syncBody = await syncRes.json()
+  expect(syncBody.synced.drivers).toBe(1)
+
+  // Verify driver appears in list
+  const listRes = await page.request.get(`${API_BASE}/integrations/rtl/drivers/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(listRes.ok()).toBeTruthy()
+  const drivers = await listRes.json()
+  const created = drivers.find((d) => d.rtl_id === rtlId)
+  expect(created).toBeTruthy()
+  expect(created.first_name).toBe('E2E')
+
+  // Retrieve detail
+  const detailRes = await page.request.get(`${API_BASE}/integrations/rtl/drivers/${created.id}/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(detailRes.ok()).toBeTruthy()
+  const detail = await detailRes.json()
+  expect(detail.license_state).toBe('TX')
+})
+
+test('can sync an RTL truck and retrieve it via API (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await authenticateAsAdmin(page)
+  await page.goto('/')
+  const token = await getAccessToken(page)
+
+  const rtlId = `e2e-trk-${Date.now()}`
+  const vin = `E2EVIN${Date.now().toString().slice(-10)}`
+  const syncRes = await page.request.post(`${API_BASE}/integrations/rtl/sync/`, {
+    data: {
+      trucks: [
+        {
+          _id: rtlId,
+          name: `E2E-${rtlId.slice(-6)}`,
+          vin,
+          make: 'International',
+          model: 'LT',
+          year: 2022,
+          plateNumber: 'E2E001',
+          active: true,
+        },
+      ],
+    },
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(syncRes.ok()).toBeTruthy()
+  const syncBody = await syncRes.json()
+  expect(syncBody.synced.trucks).toBe(1)
+
+  // Verify truck in list
+  const listRes = await page.request.get(`${API_BASE}/integrations/rtl/trucks/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(listRes.ok()).toBeTruthy()
+  const trucks = await listRes.json()
+  const created = trucks.find((t) => t.rtl_id === rtlId)
+  expect(created).toBeTruthy()
+  expect(created.vin).toBe(vin)
 })

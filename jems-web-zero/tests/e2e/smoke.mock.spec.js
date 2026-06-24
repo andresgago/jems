@@ -222,6 +222,55 @@ const DISPLAY_OPTIONS = {
   id: 1, truck: 'number,VIN', trailer: 'number,year', driver: 'name,phone',
 }
 
+const RTL_DRIVERS = [
+  {
+    id: 1, rtl_id: 'rtl-drv-001', company_id: 'comp-1',
+    first_name: 'Mike', last_name: 'Driver',
+    email: 'mike@example.com', phone_num: '555-9001',
+    license_number: 'DRV001', license_state: 'TX',
+    active: true, synced_at: '2024-01-01T00:00:00Z',
+    latest_status: {
+      hos_event_code: 'DS_D', location_state: 'TX',
+      location_lat: 29.76, location_lon: -95.36,
+      vehicle_vin: '1HTMKAAR3BH000001', daily_hours_driven: 4.5,
+      daily_hours_on_duty: 5.0, eta: '', synced_at: '2024-01-01T00:00:00Z',
+    },
+  },
+]
+
+const RTL_DRIVER_DETAIL = {
+  ...RTL_DRIVERS[0],
+  latest_status: RTL_DRIVERS[0].latest_status,
+}
+
+const RTL_TRUCKS = [
+  {
+    id: 1, rtl_id: 'rtl-trk-001', company_id: 'comp-1',
+    name: 'ELD-100', vin: '1HTMKAAR3BH000001', year: '2022',
+    make: 'International', model: 'LT', plate_number: 'TX001',
+    eld_serial_number: 'SN001', active: true, synced_at: '2024-01-01T00:00:00Z',
+    latest_status: {
+      speed: 62.5, odometer: 150000, lat: 29.76, lon: -95.36,
+      calculated_location: 'Houston, TX', timestamp: '2024-01-01T12:00:00Z',
+      vin: '1HTMKAAR3BH000001', synced_at: '2024-01-01T12:00:00Z',
+    },
+  },
+]
+
+const RTL_TRUCK_DETAIL = { ...RTL_TRUCKS[0] }
+
+const RTL_IFTA = [
+  {
+    id: 1, rtl_id: 'ifta-001', company_id: 'comp-1',
+    type_id: 'IftaReport', status_id: 'READY',
+    time_submitted: '2024-04-01T00:00:00Z', time_generated: '2024-04-01T01:00:00Z',
+    url: 'https://example.com/ifta-001.pdf', csv_url: 'https://example.com/ifta-001.csv',
+    from_date: '2024-01-01', to_date: '2024-03-31',
+    vehicle_vin: '1HTMKAAR3BH000001', vehicle_id: 'rtl-trk-001', vehicle_name: 'ELD-100',
+    synced_at: '2024-04-01T01:00:00Z',
+  },
+]
+
 const TRAILER_DETAIL = {
   ...TRAILERS[0],
   width: 8.5, height: 13.5, plate_state: 9, plate_state_name: 'Texas',
@@ -286,6 +335,14 @@ async function mockApi(page) {
     if (pathname.endsWith('/users/settings/display-options/') && method === 'PATCH') return json(DISPLAY_OPTIONS)
     if (/\/users\/\d+\/$/.test(pathname) && method === 'GET') return json(USER_DETAIL)
     if (pathname.endsWith('/users/') && method === 'GET') return json(USERS)
+    // Integrations — RTL / ELD (must come before generic /drivers/ checks)
+    if (pathname.endsWith('/integrations/rtl/drivers/') && method === 'GET') return json(RTL_DRIVERS)
+    if (/\/integrations\/rtl\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(RTL_DRIVER_DETAIL)
+    if (pathname.endsWith('/integrations/rtl/trucks/') && method === 'GET') return json(RTL_TRUCKS)
+    if (/\/integrations\/rtl\/trucks\/\d+\/$/.test(pathname) && method === 'GET') return json(RTL_TRUCK_DETAIL)
+    if (pathname.endsWith('/integrations/rtl/ifta/') && method === 'GET') return json(RTL_IFTA)
+    if (/\/integrations\/rtl\/ifta\/\d+\/$/.test(pathname) && method === 'GET') return json(RTL_IFTA[0])
+    if (pathname.endsWith('/integrations/ifta-reports/') && method === 'GET') return json([])
     if (pathname.endsWith('/drivers/types/')) return json(DRIVER_TYPES)
     if (pathname.endsWith('/drivers/options/')) return json(DRIVERS)
     if (pathname.endsWith('/drivers/') && method === 'GET') return json(DRIVERS)
@@ -753,4 +810,44 @@ test('system settings page renders invoice counters and display options', async 
   await page.goto('/settings/system')
   await expect(page.getByRole('heading', { name: /System Settings/i })).toBeVisible()
   await expect(page.locator('input[value="number,VIN"]')).toBeVisible()
+})
+
+// ── RTL / ELD ─────────────────────────────────────────────────────────────────
+
+test('RTL page renders drivers tab by default with HOS status', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/rtl')
+  await expect(page.getByText('Mike Driver')).toBeVisible()
+  await expect(page.getByText('Driving')).toBeVisible()
+})
+
+test('RTL page switches to trucks tab and shows speed', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/rtl')
+  await page.getByRole('button', { name: /trucks/i }).click()
+  await expect(page.getByText('ELD-100')).toBeVisible()
+  await expect(page.getByText('63 mph')).toBeVisible()
+})
+
+test('RTL driver detail renders name and HOS event code', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/rtl/drivers/1')
+  await expect(page.getByRole('heading', { name: /Mike Driver/i })).toBeVisible()
+  await expect(page.getByText('Driving')).toBeVisible()
+})
+
+test('RTL truck detail renders truck name and GPS status', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/rtl/trucks/1')
+  await expect(page.getByRole('heading', { name: /ELD-100/i })).toBeVisible()
+  await expect(page.getByText('63 mph')).toBeVisible()
+  await expect(page.getByText('Houston, TX')).toBeVisible()
+})
+
+test('IFTA page renders report list with status badge', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/rtl/ifta')
+  await expect(page.getByRole('heading', { name: /IFTA Reports/i })).toBeVisible()
+  await expect(page.getByText('ELD-100')).toBeVisible()
+  await expect(page.getByText('READY')).toBeVisible()
 })

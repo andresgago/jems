@@ -39,6 +39,10 @@ import UsersPage from './pages/settings/UsersPage';
 import UserDetailPage from './pages/settings/UserDetailPage';
 import UserFormPage from './pages/settings/UserFormPage';
 import SystemSettingsPage from './pages/settings/SystemSettingsPage';
+import RtlPage from './pages/integrations/RtlPage';
+import RtlDriverDetailPage from './pages/integrations/RtlDriverDetailPage';
+import RtlTruckDetailPage from './pages/integrations/RtlTruckDetailPage';
+import IftaPage from './pages/integrations/IftaPage';
 
 function AppRoutes() {
   return (
@@ -105,8 +109,10 @@ function AppRoutes() {
                 <Route path="dispatch/work/create" element={<DispatchWorkFormPage />} />
                 <Route path="dispatch/work/:id/edit" element={<DispatchWorkFormPage />} />
                 {/* RTL */}
-                <Route path="rtl" element={<div><h5>RTL – Trucks / Drivers</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="rtl/ifta" element={<div><h5>IFTA</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="rtl" element={<RtlPage />} />
+                <Route path="rtl/drivers/:id" element={<RtlDriverDetailPage />} />
+                <Route path="rtl/trucks/:id" element={<RtlTruckDetailPage />} />
+                <Route path="rtl/ifta" element={<IftaPage />} />
                 {/* Reports */}
                 <Route path="reports/financial" element={<div><h5>Profit and Loss</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="reports/invoice" element={<div><h5>Profit and Loss By Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
