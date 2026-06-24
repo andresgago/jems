@@ -13,6 +13,12 @@ import DriverDetailPage from './pages/drivers/DriverDetailPage';
 import TrucksPage from './pages/fleet/TrucksPage';
 import TruckFormPage from './pages/fleet/TruckFormPage';
 import TruckDetailPage from './pages/fleet/TruckDetailPage';
+import TrailersPage from './pages/fleet/TrailersPage';
+import TrailerFormPage from './pages/fleet/TrailerFormPage';
+import TrailerDetailPage from './pages/fleet/TrailerDetailPage';
+import BrokersPage from './pages/brokers/BrokersPage';
+import BrokerFormPage from './pages/brokers/BrokerFormPage';
+import BrokerDetailPage from './pages/brokers/BrokerDetailPage';
 
 function AppRoutes() {
   return (
@@ -41,7 +47,10 @@ function AppRoutes() {
                 <Route path="fleet/trucks/create" element={<TruckFormPage />} />
                 <Route path="fleet/trucks/:id" element={<TruckDetailPage />} />
                 <Route path="fleet/trucks/:id/edit" element={<TruckFormPage />} />
-                <Route path="fleet/trailers" element={<div><h5>Trailers</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="fleet/trailers" element={<TrailersPage />} />
+                <Route path="fleet/trailers/create" element={<TrailerFormPage />} />
+                <Route path="fleet/trailers/:id" element={<TrailerDetailPage />} />
+                <Route path="fleet/trailers/:id/edit" element={<TrailerFormPage />} />
                 <Route path="fleet/truck-maintenance" element={<div><h5>Truck Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/truck-maintenance/create" element={<div><h5>Create Truck Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/trailer-maintenance" element={<div><h5>Trailer Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
@@ -57,8 +66,10 @@ function AppRoutes() {
                 <Route path="accounting/invoices/dispatchers-hour" element={<div><h5>Dispatchers by Hour Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/invoices/drivers" element={<div><h5>Drivers Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
                 {/* Brokers */}
-                <Route path="brokers" element={<div><h5>Brokers</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="brokers/contacts" element={<div><h5>Broker Contacts</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="brokers" element={<BrokersPage />} />
+                <Route path="brokers/create" element={<BrokerFormPage />} />
+                <Route path="brokers/:id" element={<BrokerDetailPage />} />
+                <Route path="brokers/:id/edit" element={<BrokerFormPage />} />
                 {/* Dispatch */}
                 <Route path="dispatch/my-calendar" element={<div><h5>My Work Calendar</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="dispatch/calendar" element={<div><h5>Dispatchers Calendar</h5><p className="text-muted">Coming soon.</p></div>} />

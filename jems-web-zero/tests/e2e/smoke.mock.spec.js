@@ -81,6 +81,46 @@ const TRUCK_DETAIL = {
   is_leased: false, purchase_cost: 0, maintenance_records: [],
 }
 
+const TRAILERS = [
+  {
+    id: 1, number: 'TRL-100', trailer_type: 1, trailer_type_name: '53ft Dry Van',
+    vin: 'VIN001', year: 2021, status: 1, plate_number: 'TX-001',
+    annual_inspection_expiration: '2030-06-01', is_rented: false,
+  },
+]
+
+const BROKERS = [
+  {
+    id: 1, name: 'Sunrise Freight LLC', mc: 'MC001', dba_name: 'Sunrise',
+    email: 'sunrise@example.com', phone: '555-0001',
+    status: 1, carrier: 1, carrier_name: 'Jobee Express LLC', checked_at: null,
+    created_at: '2024-01-01T00:00:00Z',
+  },
+]
+
+const BROKER_DETAIL = {
+  ...BROKERS[0],
+  accounting_email: null, setup_packet_file: null,
+  factor_company: '', factor_account_id: '', buy_status: '', debtor_buy_status: '',
+  details: '', physical_address: '123 Main St', mailing_address: '',
+  city: null, city_name: null, state: null, state_name: null, zip: '75001',
+  usdot_number: '1234567', safer_operating_status: 'AUTHORIZED',
+  created_by: null, updated_by: null, updated_at: '2024-01-01T00:00:00Z',
+  contacts: [
+    { id: 1, broker: 1, name: 'John Smith', email: 'john@sunrise.com', phone: '555-0002', team: false, confirmed: true, is_scam: false, details: '', created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' },
+  ],
+}
+
+const TRAILER_DETAIL = {
+  ...TRAILERS[0],
+  width: 8.5, height: 13.5, plate_state: 9, plate_state_name: 'Texas',
+  annual_inspection_file: null, registration_file: null, agreement_file: null,
+  purchase_date: null, purchase_cost: 0, loss_payee: '',
+  owner: null, owner_name: null, carrier: 1, carrier_name: 'Jobee Express LLC',
+  carrier_start_date: '2023-01-01', carrier_end_date: null, carrier_end_reason: '',
+  maintenance_records: [],
+}
+
 /**
  * Intercepts all /api/v1/ requests.
  * Throws on any unmocked endpoint to catch missing coverage immediately.
@@ -106,6 +146,14 @@ async function mockApi(page) {
     if (/\/fleet\/(makes|engine-types|cabin-types|transmission-types|tire-sizes|owners|loss-payees)\/$/.test(pathname)) return json([])
     if (pathname.endsWith('/fleet/trucks/') && method === 'GET') return json(TRUCKS)
     if (/\/fleet\/trucks\/\d+\/$/.test(pathname) && method === 'GET') return json(TRUCK_DETAIL)
+    if (pathname.endsWith('/brokers/options/')) return json(BROKERS.map((b) => ({ id: b.id, label: b.name })))
+    if (pathname.endsWith('/brokers/search/')) return json(BROKERS)
+    if (/\/brokers\/\d+\/contacts\/$/.test(pathname)) return json(BROKER_DETAIL.contacts)
+    if (/\/brokers\/\d+\/$/.test(pathname) && method === 'GET') return json(BROKER_DETAIL)
+    if (pathname.endsWith('/brokers/') && method === 'GET') return json(BROKERS)
+    if (pathname.endsWith('/fleet/trailers/options/')) return json(TRAILERS)
+    if (pathname.endsWith('/fleet/trailers/') && method === 'GET') return json(TRAILERS)
+    if (/\/fleet\/trailers\/\d+\/$/.test(pathname) && method === 'GET') return json(TRAILER_DETAIL)
     if (pathname.endsWith('/carriers/')) return json(CARRIERS)
     if (pathname.endsWith('/locations/states/')) return json(STATES)
     if (pathname.endsWith('/users/') && method === 'GET') return json([])
@@ -288,4 +336,76 @@ test('new truck form: submit button reads "Create Truck"', async ({ page }) => {
   await withAuth(page)
   await page.goto('/fleet/trucks/create')
   await expect(page.getByRole('button', { name: /create truck/i })).toBeVisible()
+})
+
+// ── Trailers ─────────────────────────────────────────────────────────────────
+
+test('trailers list renders a trailer returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trailers')
+  await expect(page.getByRole('link', { name: 'TRL-100' })).toBeVisible()
+})
+
+test('trailer detail renders header and resolves type name', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trailers/1')
+  await expect(page.getByRole('heading', { name: /Trailer TRL-100/i })).toBeVisible()
+  await expect(page.getByText('53ft Dry Van')).toBeVisible()
+})
+
+test('trailer detail shows Files section with 3 document slots (no Photo)', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trailers/1')
+  await expect(page.getByRole('cell', { name: 'Annual Inspection' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Registration' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Agreement' })).toBeVisible()
+})
+
+test('new trailer form: Number label shows required asterisk', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trailers/create')
+  await expect(page.locator('label').filter({ hasText: /^Number/ })).toContainText('*')
+})
+
+test('new trailer form: submit button reads "Create Trailer"', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trailers/create')
+  await expect(page.getByRole('button', { name: /create trailer/i })).toBeVisible()
+})
+
+// ── Brokers ──────────────────────────────────────────────────────────────────
+
+test('brokers list renders a broker returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/brokers')
+  await expect(page.getByRole('link', { name: 'Sunrise Freight LLC' })).toBeVisible()
+})
+
+test('broker detail renders name, MC and carrier', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/brokers/1')
+  await expect(page.getByRole('heading', { name: /Sunrise Freight LLC/i })).toBeVisible()
+  await expect(page.getByText('MC001')).toBeVisible()
+  await expect(page.getByText('Jobee Express LLC')).toBeVisible()
+})
+
+test('broker detail shows Contacts section with contact name', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/brokers/1')
+  await expect(page.getByText('John Smith')).toBeVisible()
+  await expect(page.getByText('john@sunrise.com')).toBeVisible()
+  // confirmed badge is a span inside a td
+  await expect(page.locator('td > span.badge', { hasText: 'Confirmed' })).toBeVisible()
+})
+
+test('new broker form: MC label shows required asterisk', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/brokers/create')
+  await expect(page.locator('label').filter({ hasText: /^MC/ })).toContainText('*')
+})
+
+test('new broker form: submit button reads "Create Broker"', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/brokers/create')
+  await expect(page.getByRole('button', { name: /create broker/i })).toBeVisible()
 })

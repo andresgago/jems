@@ -18,6 +18,10 @@ const CRITICAL_ROUTES = [
   { path: '/drivers/create', heading: /new driver/i },
   { path: '/fleet/trucks', heading: /trucks/i },
   { path: '/fleet/trucks/create', heading: /new truck/i },
+  { path: '/fleet/trailers', heading: /trailers/i },
+  { path: '/fleet/trailers/create', heading: /new trailer/i },
+  { path: '/brokers', heading: /brokers/i },
+  { path: '/brokers/create', heading: /new broker/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -255,6 +259,108 @@ test('can create and delete a truck via API (real)', async ({ page }) => {
 
   // DELETE is a soft delete (status → inactive); endpoint returns 204
   await apiDelete(page, token, `/fleet/trucks/${created.id}/`)
+})
+
+// ── Create + delete trailer (round-trip) ─────────────────────────────────────
+
+test('can create and delete a trailer via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const number = `E2E-TRL-${Date.now()}`
+  const created = await apiPost(page, token, '/fleet/trailers/', {
+    number,
+    status: 1,
+  })
+
+  expect(created.id).toBeTruthy()
+  expect(created.number).toBe(number)
+
+  // DELETE is a soft delete (status → inactive); endpoint returns 204
+  await apiDelete(page, token, `/fleet/trailers/${created.id}/`)
+})
+
+test('can upload and clear a trailer document file via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const number = `E2E-TRLF-${Date.now()}`
+  const created = await apiPost(page, token, '/fleet/trailers/', { number, status: 1 })
+
+  // Upload a PDF to the "annual_inspection" slot
+  const uploadRes = await page.request.post(
+    `${API_BASE}/fleet/trailers/${created.id}/files/annual_inspection/`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      multipart: {
+        file: { name: 'ai.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake') },
+      },
+    }
+  )
+  expect(uploadRes.ok()).toBeTruthy()
+  const body = await uploadRes.json()
+  expect(body.annual_inspection_file).toBeTruthy()
+
+  // Clear it, then soft-delete the trailer
+  const clearRes = await page.request.delete(
+    `${API_BASE}/fleet/trailers/${created.id}/files/annual_inspection/`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  expect(clearRes.ok()).toBeTruthy()
+
+  await apiDelete(page, token, `/fleet/trailers/${created.id}/`)
+})
+
+// ── Create + delete broker (round-trip) ──────────────────────────────────────
+
+test('can create and delete a broker via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const mc = `E2E-MC-${Date.now()}`
+  const created = await apiPost(page, token, '/brokers/', {
+    mc,
+    name: `E2E Broker ${mc}`,
+  })
+
+  expect(created.id).toBeTruthy()
+  expect(created.mc).toBe(mc)
+
+  // Soft delete (toggle status → Inactive)
+  await apiDelete(page, token, `/brokers/${created.id}/`)
+})
+
+test('can upload and clear a broker setup packet via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const mc = `E2E-BF-${Date.now()}`
+  const created = await apiPost(page, token, '/brokers/', { mc, name: `E2E Broker ${mc}` })
+
+  const uploadRes = await page.request.post(
+    `${API_BASE}/brokers/${created.id}/files/setup-packet/`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      multipart: {
+        file: { name: 'packet.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake') },
+      },
+    }
+  )
+  expect(uploadRes.ok()).toBeTruthy()
+  const body = await uploadRes.json()
+  expect(body.setup_packet_file).toBeTruthy()
+
+  const clearRes = await page.request.delete(
+    `${API_BASE}/brokers/${created.id}/files/setup-packet/`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  expect(clearRes.ok()).toBeTruthy()
+
+  await apiDelete(page, token, `/brokers/${created.id}/`)
 })
 
 // ── Truck file upload (legacy-parity leased slot) ─────────────────────────────
