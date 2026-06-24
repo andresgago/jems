@@ -319,19 +319,44 @@ assert_status "user list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "user list" "$(body "$resp")" "admin"
 
 step "Users: create"
-resp="$(post "/api/v1/users/" '{"username":"newuser1","email":"newuser1@jems.test","password":"Xk9!mPq2#rLv","first_name":"New","last_name":"User"}')"
+resp="$(post "/api/v1/users/" '{"username":"newuser1","email":"newuser1@jems.test","password":"Xk9!mPq2#rLv","first_name":"New","last_name":"User","is_dispatcher":false,"dispatcher_type":0,"contract":0,"percent":2.5,"hours":0,"color":"#00ffff","address":"1 Main St"}')"
 assert_status "user create" "201" "$(code "$resp")" "$(body "$resp")"
 NEW_USER_ID="$(body "$resp" | json_get_num id)"
 assert_contains "user created" "$(body "$resp")" "newuser1"
+assert_contains "user created has contract" "$(body "$resp")" '"contract":0'
 
 step "Users: retrieve"
 resp="$(get "/api/v1/users/${NEW_USER_ID}/")"
 assert_status "user retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "user retrieve has dispatcher display" "$(body "$resp")" "dispatcher_type_display"
+assert_contains "user retrieve has address" "$(body "$resp")" "1 Main St"
 
-step "Users: update"
-resp="$(put "/api/v1/users/${NEW_USER_ID}/" '{"first_name":"Updated","last_name":"User","email":"newuser1-upd@jems.test"}')"
+step "Users: update via PATCH"
+resp="$(patch "/api/v1/users/${NEW_USER_ID}/" '{"first_name":"Updated","last_name":"User","email":"newuser1-upd@jems.test","percent":3}')"
 assert_status "user update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "user updated" "$(body "$resp")" "Updated"
+assert_contains "user updated percent" "$(body "$resp")" '"percent":3'
+
+step "Users: options endpoint"
+resp="$(get "/api/v1/users/options/?dispatchers=1")"
+assert_status "user options" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "user options has label" "$(body "$resp")" "label"
+
+step "Users: system config retrieve and patch"
+resp="$(get "/api/v1/users/settings/config/")"
+assert_status "system config retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "system config has driver invoice" "$(body "$resp")" "driver_invoice"
+resp="$(patch "/api/v1/users/settings/config/" '{"driver_invoice":1500}')"
+assert_status "system config patch" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "system config patched" "$(body "$resp")" '"driver_invoice":1500'
+
+step "Users: display options retrieve and patch"
+resp="$(get "/api/v1/users/settings/display-options/")"
+assert_status "display options retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "display options has truck fields" "$(body "$resp")" "number"
+resp="$(patch "/api/v1/users/settings/display-options/" '{"driver":"name,phone"}')"
+assert_status "display options patch" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "display options patched" "$(body "$resp")" "name,phone"
 
 step "Users: change password"
 resp="$(post "/api/v1/users/${NEW_USER_ID}/change-password/" '{"password":"Tz7@nWq5!kBv","password_confirm":"Tz7@nWq5!kBv"}')"

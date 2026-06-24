@@ -1,7 +1,7 @@
 import factory
 from factory.django import DjangoModelFactory
 
-from apps.users.models import User
+from apps.users.models import Position, User
 
 
 class UserFactory(DjangoModelFactory):
@@ -33,5 +33,18 @@ class AdminUserFactory(UserFactory):
 
 class DispatcherFactory(UserFactory):
     is_dispatcher = True
-    dispatcher_type = User.DispatcherType.BY_PERCENT
+    dispatcher_type = User.DispatcherType.MAIN
+    contract = User.Contract.BY_PERCENT
     percent = 5.0
+
+
+class AssistantDispatcherFactory(DispatcherFactory):
+    dispatcher_type = User.DispatcherType.ASSISTANT
+
+
+class PositionFactory(DjangoModelFactory):
+    class Meta:
+        model = Position
+
+    name = factory.Sequence(lambda n: f"Position {n}")
+    is_active = True
