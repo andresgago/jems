@@ -22,6 +22,8 @@ const CRITICAL_ROUTES = [
   { path: '/fleet/trailers/create', heading: /new trailer/i },
   { path: '/brokers', heading: /brokers/i },
   { path: '/brokers/create', heading: /new broker/i },
+  { path: '/settings/cities', heading: /cities/i },
+  { path: '/settings/cities/create', heading: /create city/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -361,6 +363,75 @@ test('can upload and clear a broker setup packet via API (real)', async ({ page 
   expect(clearRes.ok()).toBeTruthy()
 
   await apiDelete(page, token, `/brokers/${created.id}/`)
+})
+
+// ── Cities (create + toggle, no hard-delete endpoint) ────────────────────────
+
+test('cities list endpoint returns paginated results with count (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const data = await apiGet(page, token, '/locations/cities/?active=1&page_size=5')
+  expect(data).toHaveProperty('count')
+  expect(data).toHaveProperty('results')
+  expect(Array.isArray(data.results)).toBeTruthy()
+  if (data.results.length > 0) {
+    const city = data.results[0]
+    expect(city).toHaveProperty('id')
+    expect(city).toHaveProperty('name')
+    expect(city).toHaveProperty('zip')
+    expect(city).toHaveProperty('state_abbreviation')
+    expect(city).toHaveProperty('timezone')
+    expect(city).toHaveProperty('active')
+  }
+})
+
+test('can create and toggle a city via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  // Get a state to use as FK
+  const states = await apiGet(page, token, '/locations/states/')
+  const state = states.find((s) => s.abbreviation === 'TX')
+  expect(state).toBeTruthy()
+
+  const cityName = `E2E City ${Date.now()}`
+  const created = await apiPost(page, token, '/locations/cities/', {
+    name: cityName,
+    zip: '99001',
+    state: state.id,
+    timezone: 'America/Chicago',
+  })
+
+  expect(created.id).toBeTruthy()
+  expect(created.name).toBe(cityName)
+  expect(created.zip).toBe('99001')
+  expect(created.timezone).toBe('America/Chicago')
+  expect(created.active).toBe(true)
+  expect(created.state_data).toBeTruthy()
+  expect(created.state_data.abbreviation).toBe('TX')
+
+  // Toggle status: active → inactive
+  const toggled = await apiPost(page, token, `/locations/cities/${created.id}/toggle-status/`, {})
+  expect(toggled.active).toBe(false)
+
+  // Toggle back: inactive → active
+  const restored = await apiPost(page, token, `/locations/cities/${created.id}/toggle-status/`, {})
+  expect(restored.active).toBe(true)
+
+  // PATCH to update timezone
+  const patched = await page.request.patch(
+    `${API_BASE}/locations/cities/${created.id}/`,
+    {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: { timezone: 'America/Denver' },
+    }
+  )
+  expect(patched.ok()).toBeTruthy()
+  const patchedBody = await patched.json()
+  expect(patchedBody.timezone).toBe('America/Denver')
 })
 
 // ── Truck file upload (legacy-parity leased slot) ─────────────────────────────

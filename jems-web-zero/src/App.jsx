@@ -32,6 +32,9 @@ import DispatchHourInvoiceDetailPage from './pages/accounting/DispatchHourInvoic
 import DispatchHourInvoiceFormPage from './pages/accounting/DispatchHourInvoiceFormPage';
 import DispatchWorkPage from './pages/dispatch/DispatchWorkPage';
 import DispatchWorkFormPage from './pages/dispatch/DispatchWorkFormPage';
+import CitiesPage from './pages/settings/CitiesPage';
+import CityDetailPage from './pages/settings/CityDetailPage';
+import CityFormPage from './pages/settings/CityFormPage';
 
 function AppRoutes() {
   return (
@@ -115,7 +118,10 @@ function AppRoutes() {
                 <Route path="settings/trailer-types" element={<div><h5>Trailer Types</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/truck-types" element={<div><h5>Truck Types</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/business" element={<div><h5>Business</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="settings/cities" element={<div><h5>Cities</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/cities" element={<CitiesPage />} />
+                <Route path="settings/cities/create" element={<CityFormPage />} />
+                <Route path="settings/cities/:id" element={<CityDetailPage />} />
+                <Route path="settings/cities/:id/edit" element={<CityFormPage />} />
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

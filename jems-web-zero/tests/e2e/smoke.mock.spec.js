@@ -183,6 +183,16 @@ const HOUR_INVOICES = [
 
 const HOUR_INVOICE_DETAIL = { ...HOUR_INVOICES[0] }
 
+const CITIES = [
+  { id: 1, name: 'Charlotte', zip: '28201', state: 34, state_name: 'North Carolina', state_abbreviation: 'NC', active: true, timezone: 'America/New_York' },
+  { id: 2, name: 'Houston', zip: '77001', state: 44, state_name: 'Texas', state_abbreviation: 'TX', active: false, timezone: 'America/Chicago' },
+]
+
+const CITY_DETAIL = {
+  ...CITIES[0],
+  state_data: { id: 34, name: 'North Carolina', abbreviation: 'NC' },
+}
+
 const TRAILER_DETAIL = {
   ...TRAILERS[0],
   width: 8.5, height: 13.5, plate_state: 9, plate_state_name: 'Texas',
@@ -236,6 +246,9 @@ async function mockApi(page) {
     if (/\/fleet\/trailers\/\d+\/$/.test(pathname) && method === 'GET') return json(TRAILER_DETAIL)
     if (pathname.endsWith('/carriers/')) return json(CARRIERS)
     if (pathname.endsWith('/locations/states/')) return json(STATES)
+    if (pathname.endsWith('/locations/cities/') && method === 'GET') return json({ count: 2, results: CITIES, next: null, previous: null })
+    if (/\/locations\/cities\/\d+\/$/.test(pathname) && method === 'GET') return json(CITY_DETAIL)
+    if (/\/locations\/cities\/\d+\/toggle-status\/$/.test(pathname) && method === 'POST') return json({ id: 1, active: false })
     if (pathname.endsWith('/users/') && method === 'GET') return json([])
     if (pathname.endsWith('/drivers/types/')) return json(DRIVER_TYPES)
     if (pathname.endsWith('/drivers/options/')) return json(DRIVERS)
@@ -622,4 +635,51 @@ test('new hour invoice form has Create Invoice button', async ({ page }) => {
   await withAuth(page)
   await page.goto('/accounting/invoices/dispatchers-hour/create')
   await expect(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible()
+})
+
+// ── Settings: Cities ──────────────────────────────────────────────────────────
+
+test('cities list renders city rows returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/cities')
+  await expect(page.getByRole('link', { name: 'Charlotte' })).toBeVisible()
+  await expect(page.getByText('28201')).toBeVisible()
+})
+
+test('cities list shows Create City button', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/cities')
+  await expect(page.getByRole('link', { name: /Create City/i })).toBeVisible()
+})
+
+test('city detail renders name and state', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/cities/1')
+  await expect(page.getByRole('heading', { name: /Charlotte, NC 28201/i })).toBeVisible()
+  await expect(page.getByText(/North Carolina \(NC\)/)).toBeVisible()
+})
+
+test('city detail shows timezone', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/cities/1')
+  await expect(page.getByText('America/New_York')).toBeVisible()
+})
+
+test('new city form has Create City button', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/cities/create')
+  await expect(page.getByRole('button', { name: /Create City/i })).toBeVisible()
+})
+
+test('new city form: Name label shows required asterisk', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/cities/create')
+  await expect(page.locator('label').filter({ hasText: /Name/ }).first()).toContainText('*')
+})
+
+test('new city form: state options render in the select', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/cities/create')
+  await expect(page.locator('option', { hasText: 'Texas (TX)' })).toHaveCount(1)
+  await expect(page.locator('option', { hasText: 'Alabama (AL)' })).toHaveCount(1)
 })
