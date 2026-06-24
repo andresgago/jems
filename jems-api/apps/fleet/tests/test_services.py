@@ -2,9 +2,11 @@ import pytest
 
 from apps.fleet.models import Trailer, Truck, TruckOwner
 from apps.fleet.services import (
+    clear_truck_file,
     create_trailer,
     create_truck,
     create_truck_owner,
+    set_truck_file,
     toggle_trailer_status,
     toggle_truck_owner_status,
     toggle_truck_status,
@@ -16,6 +18,7 @@ from apps.fleet.tests.factories import (
     TruckFactory,
     TruckTypeFactory,
 )
+from apps.fleet.tests.test_views import make_pdf_file
 
 
 @pytest.mark.django_db
@@ -149,3 +152,31 @@ class TestCreateAccident:
         )
         assert picture.pk is not None
         assert picture.accident == accident
+
+
+@pytest.mark.django_db
+class TestTruckFileServices:
+    def test_set_truck_file_assigns_slot(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        truck = TruckFactory()
+        updated = set_truck_file(truck=truck, slot="leased", file=make_pdf_file())
+        assert updated.leased_file
+
+    def test_set_truck_file_replaces_previous(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        truck = TruckFactory(avi_file=make_pdf_file("old.pdf"))
+        old_name = truck.avi_file.name
+        updated = set_truck_file(truck=truck, slot="avi", file=make_pdf_file("new.pdf"))
+        assert updated.avi_file.name != old_name
+
+    def test_clear_truck_file_removes_it(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        truck = TruckFactory(registration_file=make_pdf_file())
+        updated = clear_truck_file(truck=truck, slot="registration")
+        assert not updated.registration_file
+
+    def test_clear_truck_file_is_noop_when_absent(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        truck = TruckFactory()
+        updated = clear_truck_file(truck=truck, slot="agreement")
+        assert not updated.agreement_file

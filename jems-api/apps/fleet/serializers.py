@@ -149,6 +149,7 @@ class TruckSerializer(serializers.ModelSerializer):
             "registration_file",
             "registration_expiration",
             "agreement_file",
+            "leased_file",
             "photo",
             "purchase_date",
             "purchase_cost",
@@ -174,6 +175,14 @@ class TruckSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at"]
+
+
+class TruckFileUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
+
+
+class TruckPhotoUploadSerializer(serializers.Serializer):
+    file = serializers.ImageField()
 
 
 class TruckCreateUpdateSerializer(serializers.ModelSerializer):

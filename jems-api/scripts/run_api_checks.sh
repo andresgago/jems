@@ -105,15 +105,20 @@ json_get_num() {
   grep -o "\"${key}\":[[:space:]]*[0-9]*" | head -1 | grep -o '[0-9]*$'
 }
 
+# Shared curl options: bound hangs (--max-time) and auto-recover from a
+# momentary connection blip / server restart (--retry --retry-connrefused) so a
+# transient failure surfaces as a clear HTTP error rather than a silent set -e exit.
+_CURL_OPTS=(-s --max-time 60 --retry 2 --retry-connrefused -w "\n%{http_code}")
+
 # GET wrapper
 get() {
-  curl -s -w "\n%{http_code}" -H "Authorization: Bearer ${TOKEN}" \
+  curl "${_CURL_OPTS[@]}" -H "Authorization: Bearer ${TOKEN}" \
     "${API_URL}${1}"
 }
 
 # POST wrapper (JSON body)
 post() {
-  curl -s -w "\n%{http_code}" \
+  curl "${_CURL_OPTS[@]}" \
     -H "Authorization: Bearer ${TOKEN}" \
     -H "Content-Type: application/json" \
     -X POST "${API_URL}${1}" \
@@ -122,7 +127,7 @@ post() {
 
 # POST without auth
 post_anon() {
-  curl -s -w "\n%{http_code}" \
+  curl "${_CURL_OPTS[@]}" \
     -H "Content-Type: application/json" \
     -X POST "${API_URL}${1}" \
     -d "${2:-$_EMPTY_BODY}"
@@ -130,7 +135,7 @@ post_anon() {
 
 # PATCH wrapper
 patch() {
-  curl -s -w "\n%{http_code}" \
+  curl "${_CURL_OPTS[@]}" \
     -H "Authorization: Bearer ${TOKEN}" \
     -H "Content-Type: application/json" \
     -X PATCH "${API_URL}${1}" \
@@ -139,7 +144,7 @@ patch() {
 
 # PUT wrapper
 put() {
-  curl -s -w "\n%{http_code}" \
+  curl "${_CURL_OPTS[@]}" \
     -H "Authorization: Bearer ${TOKEN}" \
     -H "Content-Type: application/json" \
     -X PUT "${API_URL}${1}" \
@@ -148,7 +153,7 @@ put() {
 
 # DELETE wrapper
 delete() {
-  curl -s -w "\n%{http_code}" \
+  curl "${_CURL_OPTS[@]}" \
     -H "Authorization: Bearer ${TOKEN}" \
     -X DELETE "${API_URL}${1}"
 }
@@ -545,6 +550,52 @@ TRUCK_MAINT_ID="$(body "$resp" | json_get_num id)"
 step "Fleet: truck maintenance list"
 resp="$(get "/api/v1/fleet/trucks/${TRUCK_ID}/maintenance/")"
 assert_status "truck maintenance list" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Fleet: truck file upload (document slots)"
+_TMP_DOC="$(mktemp /tmp/jems_truck_doc.XXXXXX.pdf)"
+printf '%%PDF-1.4 fake' > "${_TMP_DOC}"
+for slot in avi registration agreement leased; do
+  resp="$(curl -s -w "\n%{http_code}" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -F "file=@${_TMP_DOC};type=application/pdf" \
+    "${API_URL}/api/v1/fleet/trucks/${TRUCK_ID}/files/${slot}/")"
+  assert_status "truck ${slot} file upload" "200" "$(code "$resp")" "$(body "$resp")"
+  assert_contains "truck has ${slot}_file" "$(body "$resp")" "/media/trucks/"
+done
+rm -f "${_TMP_DOC}"
+
+step "Fleet: truck photo upload"
+_TMP_PHOTO="$(mktemp /tmp/jems_truck_photo.XXXXXX).png"
+DATABASE_URL="postgis://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}" \
+  uv run python -c "from PIL import Image; Image.new('RGB', (1, 1)).save('${_TMP_PHOTO}')"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "file=@${_TMP_PHOTO};type=image/png" \
+  "${API_URL}/api/v1/fleet/trucks/${TRUCK_ID}/files/photo/")"
+rm -f "${_TMP_PHOTO}"
+assert_status "truck photo upload" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "truck has photo" "$(body "$resp")" "/media/trucks/photos/"
+
+step "Fleet: truck photo non-image rejected"
+_TMP_BAD="$(mktemp /tmp/jems_truck_bad.XXXXXX.txt)"
+printf 'not an image' > "${_TMP_BAD}"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "file=@${_TMP_BAD};type=text/plain" \
+  "${API_URL}/api/v1/fleet/trucks/${TRUCK_ID}/files/photo/")"
+rm -f "${_TMP_BAD}"
+assert_status "truck photo rejects non-image" "400" "$(code "$resp")"
+
+step "Fleet: truck unknown file slot rejected"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "file=@/dev/null" \
+  "${API_URL}/api/v1/fleet/trucks/${TRUCK_ID}/files/bogus/")"
+assert_status "truck unknown slot" "400" "$(code "$resp")"
+
+step "Fleet: truck file clear"
+resp="$(delete "/api/v1/fleet/trucks/${TRUCK_ID}/files/avi/")"
+assert_status "truck file clear" "200" "$(code "$resp")" "$(body "$resp")"
 
 step "Fleet: miles reset create"
 resp="$(post "/api/v1/fleet/miles-resets/" "{\"truck\":${TRUCK_ID},\"date\":\"2024-01-01\"}")"

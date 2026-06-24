@@ -196,6 +196,9 @@ class Truck(models.Model):
     agreement_file = models.FileField(
         upload_to="trucks/agreements/", null=True, blank=True
     )
+    # Legacy parity: the contract (agreement_file) and the leased agreement
+    # were distinct file slots on the legacy truck record.
+    leased_file = models.FileField(upload_to="trucks/leased/", null=True, blank=True)
     photo = models.ImageField(upload_to="trucks/photos/", null=True, blank=True)
 
     # Purchase / Financing

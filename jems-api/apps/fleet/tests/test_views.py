@@ -1,5 +1,9 @@
+import io
+
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -12,6 +16,17 @@ from apps.fleet.tests.factories import (
     TruckTypeFactory,
 )
 from apps.users.tests.factories import UserFactory
+
+
+def make_image_file(name="photo.png"):
+    buffer = io.BytesIO()
+    Image.new("RGB", (1, 1)).save(buffer, format="PNG")
+    buffer.seek(0)
+    return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
+
+
+def make_pdf_file(name="doc.pdf"):
+    return SimpleUploadedFile(name, b"%PDF-1.4 fake", content_type="application/pdf")
 
 
 @pytest.fixture
@@ -102,6 +117,74 @@ class TestTruckMaintenance:
         client, _ = auth_client
         truck = TruckFactory()
         response = client.get(reverse("truck-maintenance", kwargs={"pk": truck.pk}))
+        assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.django_db
+class TestTruckFiles:
+    def _url(self, truck, slot):
+        return reverse("truck-file", kwargs={"pk": truck.pk, "slot": slot})
+
+    @pytest.mark.parametrize("slot", ["avi", "registration", "agreement", "leased"])
+    def test_upload_document_slots(self, auth_client, settings, tmp_path, slot):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        truck = TruckFactory()
+        response = client.post(
+            self._url(truck, slot), {"file": make_pdf_file()}, format="multipart"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data[f"{slot}_file"]
+
+    def test_upload_photo_slot(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        truck = TruckFactory()
+        response = client.post(
+            self._url(truck, "photo"), {"file": make_image_file()}, format="multipart"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["photo"]
+
+    def test_photo_slot_rejects_non_image(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        truck = TruckFactory()
+        response = client.post(
+            self._url(truck, "photo"), {"file": make_pdf_file()}, format="multipart"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unknown_slot_is_rejected(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        truck = TruckFactory()
+        response = client.post(
+            self._url(truck, "bogus"), {"file": make_pdf_file()}, format="multipart"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_upload_requires_file(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        truck = TruckFactory()
+        response = client.post(self._url(truck, "avi"), {}, format="multipart")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_clear_file(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        truck = TruckFactory(avi_file=make_pdf_file())
+        response = client.delete(self._url(truck, "avi"))
+        assert response.status_code == status.HTTP_200_OK
+        truck.refresh_from_db()
+        assert not truck.avi_file
+
+    def test_clear_is_noop_when_absent(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        truck = TruckFactory()
+        response = client.delete(self._url(truck, "agreement"))
         assert response.status_code == status.HTTP_200_OK
 
 

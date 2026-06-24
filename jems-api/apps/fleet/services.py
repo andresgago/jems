@@ -36,6 +36,37 @@ def toggle_truck_status(*, truck: Truck) -> Truck:
     return truck
 
 
+# Maps the public file "slot" to the Truck model field. Each slot mirrors a
+# legacy truck file column (avi, registration, contract, leased agreement, photo).
+TRUCK_FILE_SLOTS = {
+    "avi": "avi_file",
+    "registration": "registration_file",
+    "agreement": "agreement_file",
+    "leased": "leased_file",
+    "photo": "photo",
+}
+
+
+def set_truck_file(*, truck: Truck, slot: str, file) -> Truck:
+    field = TRUCK_FILE_SLOTS[slot]
+    existing = getattr(truck, field)
+    if existing:
+        existing.delete(save=False)
+    setattr(truck, field, file)
+    truck.save(update_fields=[field, "updated_at"])
+    return truck
+
+
+def clear_truck_file(*, truck: Truck, slot: str) -> Truck:
+    field = TRUCK_FILE_SLOTS[slot]
+    existing = getattr(truck, field)
+    if existing:
+        existing.delete(save=False)
+        setattr(truck, field, None)
+        truck.save(update_fields=[field, "updated_at"])
+    return truck
+
+
 def add_truck_maintenance(*, truck: Truck, **fields) -> TruckMaintenance:
     record = TruckMaintenance(truck=truck, **fields)
     record.full_clean()

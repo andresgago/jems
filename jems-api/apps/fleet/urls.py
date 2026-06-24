@@ -24,6 +24,7 @@ truck_detail = TruckViewSet.as_view(
 )
 truck_toggle_status = TruckViewSet.as_view({"post": "toggle_status"})
 truck_maintenance = TruckViewSet.as_view({"get": "maintenance", "post": "maintenance"})
+truck_file = TruckViewSet.as_view({"post": "set_file", "delete": "clear_file"})
 
 # Trailers
 trailer_list = TrailerViewSet.as_view({"get": "list", "post": "create"})
@@ -83,6 +84,7 @@ urlpatterns = [
         name="truck-toggle-status",
     ),
     path("trucks/<int:pk>/maintenance/", truck_maintenance, name="truck-maintenance"),
+    path("trucks/<int:pk>/files/<str:slot>/", truck_file, name="truck-file"),
     path("trailers/", trailer_list, name="trailer-list"),
     path("trailers/<int:pk>/", trailer_detail, name="trailer-detail"),
     path(

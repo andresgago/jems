@@ -45,10 +45,12 @@ from .serializers import (
     TrailerSerializer,
     TrailerTypeSerializer,
     TruckCreateUpdateSerializer,
+    TruckFileUploadSerializer,
     TruckListSerializer,
     TruckMaintenanceSerializer,
     TruckOwnerCreateUpdateSerializer,
     TruckOwnerSerializer,
+    TruckPhotoUploadSerializer,
     TruckSerializer,
     TruckTypeSerializer,
 )
@@ -218,6 +220,35 @@ class TruckViewSet(ViewSet):
         return Response(
             TruckMaintenanceSerializer(record).data, status=status.HTTP_201_CREATED
         )
+
+    @action(detail=True, methods=["post"], url_path=r"files/(?P<slot>[^/.]+)")
+    def set_file(self, request: Request, pk: int, slot: str) -> Response:
+        if slot not in services.TRUCK_FILE_SLOTS:
+            return Response(
+                {"error": f"Unknown file slot '{slot}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        truck = Truck.objects.get(pk=pk)
+        serializer_class = (
+            TruckPhotoUploadSerializer if slot == "photo" else TruckFileUploadSerializer
+        )
+        serializer = serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        truck = services.set_truck_file(
+            truck=truck, slot=slot, file=serializer.validated_data["file"]
+        )
+        return Response(TruckSerializer(truck).data)
+
+    @action(detail=True, methods=["delete"], url_path=r"files/(?P<slot>[^/.]+)")
+    def clear_file(self, request: Request, pk: int, slot: str) -> Response:
+        if slot not in services.TRUCK_FILE_SLOTS:
+            return Response(
+                {"error": f"Unknown file slot '{slot}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        truck = Truck.objects.get(pk=pk)
+        truck = services.clear_truck_file(truck=truck, slot=slot)
+        return Response(TruckSerializer(truck).data)
 
 
 class TrailerViewSet(ViewSet):
