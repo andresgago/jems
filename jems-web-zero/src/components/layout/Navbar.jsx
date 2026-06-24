@@ -17,7 +17,7 @@ export default function Navbar() {
     <nav className="navbar navbar-expand-lg navbar-dark fixed-top navbar-custom">
       <div className="container-fluid">
         <Link className="navbar-brand py-0" to="/">
-          <img src="/logow.png" alt="JEMS" height="40" className="logo-main" />
+          <img src="/logow.png" alt="JEMS" height="40" style={{ filter: 'brightness(0) invert(1)' }} />
         </Link>
         <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
           <span className="navbar-toggler-icon" />

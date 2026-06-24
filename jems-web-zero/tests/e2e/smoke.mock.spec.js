@@ -294,6 +294,9 @@ async function mockApi(page) {
     const json = (data, status = 200) =>
       route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) })
 
+    if (pathname.endsWith('/version/') && method === 'GET') {
+      return json({ version: '6.0' })
+    }
     if (pathname.endsWith('/auth/login/') && method === 'POST') {
       return json({ access: mockJWT(), refresh: 'test-refresh-token' })
     }

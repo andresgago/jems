@@ -42,6 +42,7 @@ api.interceptors.response.use(
 export const authService = {
   login: (credentials) => api.post('/auth/login/', credentials),
   logout: () => { localStorage.clear(); window.location.href = '/login'; },
+  getVersion: () => api.get('/version/'),
 };
 
 export default api;

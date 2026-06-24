@@ -37,13 +37,7 @@ body {
   border-color: white;
 }
 
-/* Logo in navbar — matches TMS .logo-main */
-.logo-main {
-  background-color: white;
-  padding: 4px 8px;
-  border: 1px solid lightsteelblue;
-  border-radius: 4px;
-}
+
 
 /* ── Layout ── */
 .main-content {
