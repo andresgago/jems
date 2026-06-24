@@ -29,12 +29,14 @@ truck_file = TruckViewSet.as_view({"post": "set_file", "delete": "clear_file"})
 # Trailers
 trailer_list = TrailerViewSet.as_view({"get": "list", "post": "create"})
 trailer_detail = TrailerViewSet.as_view(
-    {"get": "retrieve", "put": "update", "delete": "destroy"}
+    {"get": "retrieve", "put": "update", "patch": "update", "delete": "destroy"}
 )
 trailer_toggle_status = TrailerViewSet.as_view({"post": "toggle_status"})
 trailer_maintenance = TrailerViewSet.as_view(
     {"get": "maintenance", "post": "maintenance"}
 )
+trailer_options = TrailerViewSet.as_view({"get": "options"})
+trailer_file = TrailerViewSet.as_view({"post": "set_file", "delete": "clear_file"})
 
 # Truck owners
 owner_list = TruckOwnerViewSet.as_view({"get": "list", "post": "create"})
@@ -86,6 +88,7 @@ urlpatterns = [
     path("trucks/<int:pk>/maintenance/", truck_maintenance, name="truck-maintenance"),
     path("trucks/<int:pk>/files/<str:slot>/", truck_file, name="truck-file"),
     path("trailers/", trailer_list, name="trailer-list"),
+    path("trailers/options/", trailer_options, name="trailer-options"),
     path("trailers/<int:pk>/", trailer_detail, name="trailer-detail"),
     path(
         "trailers/<int:pk>/toggle-status/",
@@ -97,6 +100,7 @@ urlpatterns = [
         trailer_maintenance,
         name="trailer-maintenance",
     ),
+    path("trailers/<int:pk>/files/<str:slot>/", trailer_file, name="trailer-file"),
     path("owners/", owner_list, name="truck-owner-list"),
     path("owners/<int:pk>/", owner_detail, name="truck-owner-detail"),
     path(

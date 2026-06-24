@@ -7,7 +7,7 @@ from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.fleet.models import Truck
+from apps.fleet.models import Trailer, Truck
 from apps.fleet.tests.factories import (
     TrailerFactory,
     TrailerTypeFactory,
@@ -192,10 +192,16 @@ class TestTruckFiles:
 class TestTrailerList:
     def test_lists_active_trailers(self, auth_client):
         client, _ = auth_client
-        TrailerFactory.create_batch(2)
+        TrailerFactory.create_batch(2, status=Trailer.Status.ACTIVE)
+        TrailerFactory(status=Trailer.Status.INACTIVE)
         response = client.get(reverse("trailer-list"))
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) >= 2
+        for trailer in response.data:
+            assert trailer["status"] == Trailer.Status.ACTIVE
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.get(reverse("trailer-list"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.django_db
@@ -207,6 +213,136 @@ class TestTrailerCreate:
         response = client.post(reverse("trailer-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["number"] == "TRL-8888"
+
+    def test_duplicate_number_rejected(self, auth_client):
+        client, _ = auth_client
+        TrailerFactory(number="TRL-DUP")
+        response = client.post(reverse("trailer-list"), {"number": "TRL-DUP"})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestTrailerRetrieve:
+    def test_retrieve_includes_maintenance(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        response = client.get(reverse("trailer-detail", kwargs={"pk": trailer.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert "maintenance_records" in response.data
+
+    def test_retrieve_includes_carrier_owner_fields(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        response = client.get(reverse("trailer-detail", kwargs={"pk": trailer.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        for field in ("carrier", "owner", "carrier_start_date", "carrier_end_date"):
+            assert field in response.data
+
+
+@pytest.mark.django_db
+class TestTrailerToggleStatus:
+    def test_toggle_active_to_inactive(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+        response = client.post(
+            reverse("trailer-toggle-status", kwargs={"pk": trailer.pk})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == Trailer.Status.INACTIVE
+
+
+@pytest.mark.django_db
+class TestTrailerDestroy:
+    def test_soft_deletes_trailer(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+        response = client.delete(reverse("trailer-detail", kwargs={"pk": trailer.pk}))
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        trailer.refresh_from_db()
+        assert trailer.status == Trailer.Status.INACTIVE
+
+
+@pytest.mark.django_db
+class TestTrailerOptions:
+    def test_returns_active_non_rented(self, auth_client):
+        client, _ = auth_client
+        TrailerFactory(status=Trailer.Status.ACTIVE, is_rented=False)
+        TrailerFactory(status=Trailer.Status.ACTIVE, is_rented=True)
+        TrailerFactory(status=Trailer.Status.INACTIVE, is_rented=False)
+        response = client.get(reverse("trailer-options"))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert response.data[0]["id"] is not None
+
+
+@pytest.mark.django_db
+class TestTrailerMaintenance:
+    def test_add_maintenance_record(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        payload = {"date": "2024-06-01", "miles": 50000, "detail": "Oil change"}
+        response = client.post(
+            reverse("trailer-maintenance", kwargs={"pk": trailer.pk}), payload
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_list_maintenance_records(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        response = client.get(reverse("trailer-maintenance", kwargs={"pk": trailer.pk}))
+        assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.django_db
+class TestTrailerFiles:
+    def _url(self, trailer, slot):
+        return reverse("trailer-file", kwargs={"pk": trailer.pk, "slot": slot})
+
+    @pytest.mark.parametrize("slot", ["annual_inspection", "registration", "agreement"])
+    def test_upload_document_slots(self, auth_client, settings, tmp_path, slot):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        response = client.post(
+            self._url(trailer, slot), {"file": make_pdf_file()}, format="multipart"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        field = f"{slot}_file"
+        assert response.data[field]
+
+    def test_unknown_slot_is_rejected(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        response = client.post(
+            self._url(trailer, "bogus"), {"file": make_pdf_file()}, format="multipart"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_upload_requires_file(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        response = client.post(
+            self._url(trailer, "registration"), {}, format="multipart"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_clear_file(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        trailer = TrailerFactory(agreement_file=make_pdf_file())
+        response = client.delete(self._url(trailer, "agreement"))
+        assert response.status_code == status.HTTP_200_OK
+        trailer.refresh_from_db()
+        assert not trailer.agreement_file
+
+    def test_clear_is_noop_when_absent(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        response = client.delete(self._url(trailer, "registration"))
+        assert response.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.django_db

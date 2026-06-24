@@ -106,6 +106,35 @@ def add_trailer_maintenance(*, trailer: Trailer, **fields) -> TrailerMaintenance
     return record
 
 
+# Maps the public file "slot" to the Trailer model field. Mirrors legacy slots:
+# aifile (annual_inspection), registrationfile, agreementfile.
+TRAILER_FILE_SLOTS = {
+    "annual_inspection": "annual_inspection_file",
+    "registration": "registration_file",
+    "agreement": "agreement_file",
+}
+
+
+def set_trailer_file(*, trailer: Trailer, slot: str, file) -> Trailer:
+    field = TRAILER_FILE_SLOTS[slot]
+    existing = getattr(trailer, field)
+    if existing:
+        existing.delete(save=False)
+    setattr(trailer, field, file)
+    trailer.save(update_fields=[field, "updated_at"])
+    return trailer
+
+
+def clear_trailer_file(*, trailer: Trailer, slot: str) -> Trailer:
+    field = TRAILER_FILE_SLOTS[slot]
+    existing = getattr(trailer, field)
+    if existing:
+        existing.delete(save=False)
+        setattr(trailer, field, None)
+        trailer.save(update_fields=[field, "updated_at"])
+    return trailer
+
+
 def create_truck_owner(**fields) -> TruckOwner:
     owner = TruckOwner(**fields)
     owner.full_clean()

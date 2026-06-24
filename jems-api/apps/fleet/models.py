@@ -339,6 +339,25 @@ class Trailer(models.Model):
     is_rented = models.BooleanField(default=False)
     loss_payee = models.CharField(max_length=200, blank=True, default="")
 
+    # Ownership & carrier assignment (legacy parity: owner + carrier_* columns)
+    owner = models.ForeignKey(
+        TruckOwner,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="owned_trailers",
+    )
+    carrier = models.ForeignKey(
+        "carriers.Carrier",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trailers",
+    )
+    carrier_start_date = models.DateField(null=True, blank=True)
+    carrier_end_date = models.DateField(null=True, blank=True)
+    carrier_end_reason = models.CharField(max_length=100, blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

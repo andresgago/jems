@@ -2,14 +2,17 @@ import pytest
 
 from apps.fleet.models import Trailer, Truck, TruckOwner
 from apps.fleet.services import (
+    clear_trailer_file,
     clear_truck_file,
     create_trailer,
     create_truck,
     create_truck_owner,
+    set_trailer_file,
     set_truck_file,
     toggle_trailer_status,
     toggle_truck_owner_status,
     toggle_truck_status,
+    update_trailer,
     update_truck,
 )
 from apps.fleet.tests.factories import (
@@ -66,6 +69,23 @@ class TestCreateTrailer:
         assert trailer.pk is not None
         assert trailer.status == Trailer.Status.ACTIVE
 
+    def test_duplicate_number_raises(self):
+        TrailerFactory(number="TRL-DUP")
+        with pytest.raises(Exception):
+            create_trailer(number="TRL-DUP")
+
+    def test_creates_with_is_rented_false_by_default(self):
+        trailer = create_trailer(number="TRL-RENT")
+        assert trailer.is_rented is False
+
+
+@pytest.mark.django_db
+class TestUpdateTrailer:
+    def test_updates_fields(self):
+        trailer = TrailerFactory(plate_number="OLD-001")
+        updated = update_trailer(trailer=trailer, plate_number="NEW-999")
+        assert updated.plate_number == "NEW-999"
+
 
 @pytest.mark.django_db
 class TestToggleTrailerStatus:
@@ -73,6 +93,43 @@ class TestToggleTrailerStatus:
         trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
         updated = toggle_trailer_status(trailer=trailer)
         assert updated.status == Trailer.Status.INACTIVE
+
+    def test_inactive_becomes_active(self):
+        trailer = TrailerFactory(status=Trailer.Status.INACTIVE)
+        updated = toggle_trailer_status(trailer=trailer)
+        assert updated.status == Trailer.Status.ACTIVE
+
+
+@pytest.mark.django_db
+class TestTrailerFileServices:
+    def test_set_trailer_file_assigns_slot(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        trailer = TrailerFactory()
+        updated = set_trailer_file(
+            trailer=trailer, slot="annual_inspection", file=make_pdf_file()
+        )
+        assert updated.annual_inspection_file
+
+    def test_set_trailer_file_replaces_previous(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        trailer = TrailerFactory(registration_file=make_pdf_file("old.pdf"))
+        old_name = trailer.registration_file.name
+        updated = set_trailer_file(
+            trailer=trailer, slot="registration", file=make_pdf_file("new.pdf")
+        )
+        assert updated.registration_file.name != old_name
+
+    def test_clear_trailer_file_removes_it(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        trailer = TrailerFactory(agreement_file=make_pdf_file())
+        updated = clear_trailer_file(trailer=trailer, slot="agreement")
+        assert not updated.agreement_file
+
+    def test_clear_trailer_file_is_noop_when_absent(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        trailer = TrailerFactory()
+        updated = clear_trailer_file(trailer=trailer, slot="registration")
+        assert not updated.registration_file
 
 
 @pytest.mark.django_db

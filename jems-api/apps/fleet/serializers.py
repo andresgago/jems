@@ -269,6 +269,9 @@ class TrailerSerializer(serializers.ModelSerializer):
     trailer_type_name = serializers.CharField(
         source="trailer_type.name", read_only=True
     )
+    plate_state_name = serializers.CharField(source="plate_state.name", read_only=True)
+    owner_name = serializers.CharField(source="owner.name", read_only=True)
+    carrier_name = serializers.CharField(source="carrier.name", read_only=True)
     maintenance_records = TrailerMaintenanceSerializer(many=True, read_only=True)
 
     class Meta:
@@ -285,6 +288,7 @@ class TrailerSerializer(serializers.ModelSerializer):
             "trailer_type_name",
             "plate_number",
             "plate_state",
+            "plate_state_name",
             "annual_inspection_file",
             "annual_inspection_expiration",
             "registration_file",
@@ -293,6 +297,13 @@ class TrailerSerializer(serializers.ModelSerializer):
             "purchase_cost",
             "is_rented",
             "loss_payee",
+            "owner",
+            "owner_name",
+            "carrier",
+            "carrier_name",
+            "carrier_start_date",
+            "carrier_end_date",
+            "carrier_end_reason",
             "maintenance_records",
             "created_at",
             "updated_at",
@@ -318,7 +329,16 @@ class TrailerCreateUpdateSerializer(serializers.ModelSerializer):
             "purchase_cost",
             "is_rented",
             "loss_payee",
+            "owner",
+            "carrier",
+            "carrier_start_date",
+            "carrier_end_date",
+            "carrier_end_reason",
         ]
+
+
+class TrailerFileUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
 
 
 class AccidentPictureSerializer(serializers.ModelSerializer):

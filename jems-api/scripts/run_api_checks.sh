@@ -616,13 +616,29 @@ resp="$(post "/api/v1/fleet/trailers/" "{\"number\":\"TRL-001\",\"year\":2021,\"
 assert_status "trailer create" "201" "$(code "$resp")" "$(body "$resp")"
 TRAILER_ID="$(body "$resp" | json_get_num id)"
 
+step "Fleet: trailer list"
+resp="$(get "/api/v1/fleet/trailers/")"
+assert_status "trailer list" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Fleet: trailer options (active, not rented)"
+resp="$(get "/api/v1/fleet/trailers/options/")"
+assert_status "trailer options" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "trailer in options" "$(body "$resp")" "TRL-001"
+
 step "Fleet: trailer retrieve"
 resp="$(get "/api/v1/fleet/trailers/${TRAILER_ID}/")"
 assert_status "trailer retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "trailer number" "$(body "$resp")" "TRL-001"
+assert_contains "trailer has carrier field" "$(body "$resp")" '"carrier"'
 
-step "Fleet: trailer update"
+step "Fleet: trailer update (PATCH)"
+resp="$(patch "/api/v1/fleet/trailers/${TRAILER_ID}/" '{"plate_number":"TX-12345"}')"
+assert_status "trailer update patch" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "trailer patched" "$(body "$resp")" "TX-12345"
+
+step "Fleet: trailer update (PUT)"
 resp="$(put "/api/v1/fleet/trailers/${TRAILER_ID}/" "{\"number\":\"TRL-001\",\"year\":2022,\"trailer_type\":${TRAILER_TYPE_ID},\"status\":1}")"
-assert_status "trailer update" "200" "$(code "$resp")" "$(body "$resp")"
+assert_status "trailer update put" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "trailer updated year" "$(body "$resp")" "2022"
 
 step "Fleet: trailer toggle status (deactivate)"
@@ -641,6 +657,30 @@ step "Fleet: trailer maintenance list"
 resp="$(get "/api/v1/fleet/trailers/${TRAILER_ID}/maintenance/")"
 assert_status "trailer maintenance list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "trailer maintenance listed" "$(body "$resp")" "Brake inspection"
+
+step "Fleet: trailer file upload (3 slots)"
+_TMP_TDOC="$(mktemp /tmp/jems_trailer_doc.XXXXXX.pdf)"
+printf '%%PDF-1.4 fake' > "${_TMP_TDOC}"
+for slot in annual_inspection registration agreement; do
+  resp="$(curl -s -w "\n%{http_code}" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -F "file=@${_TMP_TDOC};type=application/pdf" \
+    "${API_URL}/api/v1/fleet/trailers/${TRAILER_ID}/files/${slot}/")"
+  assert_status "trailer ${slot} file upload" "200" "$(code "$resp")" "$(body "$resp")"
+  assert_contains "trailer has ${slot}_file" "$(body "$resp")" "/media/trailers/"
+done
+rm -f "${_TMP_TDOC}"
+
+step "Fleet: trailer unknown file slot rejected"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "file=@/dev/null" \
+  "${API_URL}/api/v1/fleet/trailers/${TRAILER_ID}/files/bogus/")"
+assert_status "trailer unknown slot" "400" "$(code "$resp")"
+
+step "Fleet: trailer file clear"
+resp="$(delete "/api/v1/fleet/trailers/${TRAILER_ID}/files/registration/")"
+assert_status "trailer file clear" "200" "$(code "$resp")" "$(body "$resp")"
 
 # ── Accident ──────────────────────────────────────────────────────────────────
 step "Fleet: accident create"

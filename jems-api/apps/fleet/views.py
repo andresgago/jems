@@ -40,6 +40,7 @@ from .serializers import (
     TransmissionTypeSerializer,
     TruckMilesResetSerializer,
     TrailerCreateUpdateSerializer,
+    TrailerFileUploadSerializer,
     TrailerListSerializer,
     TrailerMaintenanceSerializer,
     TrailerSerializer,
@@ -254,6 +255,15 @@ class TruckViewSet(ViewSet):
 class TrailerViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
+    def _get_trailer_detail(self, pk: int) -> Trailer:
+        return (
+            Trailer.objects.select_related(
+                "trailer_type", "plate_state", "owner", "carrier"
+            )
+            .prefetch_related("maintenance_records")
+            .get(pk=pk)
+        )
+
     def list(self, request: Request) -> Response:
         trailers = (
             Trailer.objects.filter(status=Trailer.Status.ACTIVE)
@@ -263,12 +273,7 @@ class TrailerViewSet(ViewSet):
         return Response(TrailerListSerializer(trailers, many=True).data)
 
     def retrieve(self, request: Request, pk: int) -> Response:
-        trailer = (
-            Trailer.objects.select_related("trailer_type", "plate_state")
-            .prefetch_related("maintenance_records")
-            .get(pk=pk)
-        )
-        return Response(TrailerSerializer(trailer).data)
+        return Response(TrailerSerializer(self._get_trailer_detail(pk)).data)
 
     def create(self, request: Request) -> Response:
         serializer = TrailerCreateUpdateSerializer(data=request.data)
@@ -293,6 +298,24 @@ class TrailerViewSet(ViewSet):
         trailer.save(update_fields=["status", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=False, methods=["get"], url_path="options")
+    def options(self, request: Request) -> Response:
+        trailers = (
+            Trailer.objects.filter(status=Trailer.Status.ACTIVE, is_rented=False)
+            .select_related("trailer_type")
+            .order_by("number")
+        )
+        data = [
+            {
+                "id": t.id,
+                "number": t.number,
+                "vin": t.vin,
+                "trailer_type_name": t.trailer_type.name if t.trailer_type else "",
+            }
+            for t in trailers
+        ]
+        return Response(data)
+
     @action(detail=True, methods=["post"], url_path="toggle-status")
     def toggle_status(self, request: Request, pk: int) -> Response:
         trailer = Trailer.objects.get(pk=pk)
@@ -313,6 +336,42 @@ class TrailerViewSet(ViewSet):
         return Response(
             TrailerMaintenanceSerializer(record).data, status=status.HTTP_201_CREATED
         )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"files/(?P<slot>[^/.]+)",
+        url_name="file-set",
+    )
+    def set_file(self, request: Request, pk: int, slot: str) -> Response:
+        trailer = Trailer.objects.get(pk=pk)
+        if slot not in services.TRAILER_FILE_SLOTS:
+            return Response(
+                {"detail": f"Unknown slot '{slot}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = TrailerFileUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        trailer = services.set_trailer_file(
+            trailer=trailer, slot=slot, file=serializer.validated_data["file"]
+        )
+        return Response(TrailerSerializer(trailer).data)
+
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"files/(?P<slot>[^/.]+)",
+        url_name="file-clear",
+    )
+    def clear_file(self, request: Request, pk: int, slot: str) -> Response:
+        trailer = Trailer.objects.get(pk=pk)
+        if slot not in services.TRAILER_FILE_SLOTS:
+            return Response(
+                {"detail": f"Unknown slot '{slot}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        services.clear_trailer_file(trailer=trailer, slot=slot)
+        return Response(TrailerSerializer(trailer).data)
 
 
 class AccidentViewSet(ViewSet):
