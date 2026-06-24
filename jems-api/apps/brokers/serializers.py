@@ -115,6 +115,29 @@ class BrokerFileUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
 
 
+class BrokerStatusLastLoadSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    number = serializers.CharField()
+    pickup_city = serializers.CharField()
+    dropoff_city = serializers.CharField()
+    payment = serializers.CharField()
+    pickup_date = serializers.CharField(allow_null=True)
+
+
+class BrokerStatusSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    mc = serializers.CharField()
+    name = serializers.CharField()
+    dba_name = serializers.CharField()
+    status = serializers.IntegerField()
+    buy_status = serializers.CharField()
+    debtor_buy_status = serializers.CharField()
+    safer_operating_status = serializers.CharField()
+    factor_company = serializers.CharField()
+    checked_at = serializers.CharField(allow_null=True)
+    last_load = BrokerStatusLastLoadSerializer(allow_null=True)
+
+
 class BusinessSerializer(serializers.ModelSerializer):
     city_display = serializers.SerializerMethodField()
 

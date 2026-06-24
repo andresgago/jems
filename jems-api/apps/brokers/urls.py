@@ -9,6 +9,7 @@ broker_detail = BrokerViewSet.as_view(
 )
 broker_toggle_status = BrokerViewSet.as_view({"post": "toggle_status"})
 broker_search = BrokerViewSet.as_view({"get": "search"})
+broker_status_search = BrokerViewSet.as_view({"get": "status_search"})
 broker_options = BrokerViewSet.as_view({"get": "options_list"})
 broker_file = BrokerViewSet.as_view({"post": "file", "delete": "file"})
 # Broker Contacts (nested under broker)
@@ -28,6 +29,7 @@ urlpatterns = [
     path("business/<int:pk>/", business_detail, name="business-detail"),
     path("", broker_list, name="broker-list"),
     path("search/", broker_search, name="broker-search"),
+    path("status-search/", broker_status_search, name="broker-status-search"),
     path("options/", broker_options, name="broker-options"),
     path("<int:pk>/", broker_detail, name="broker-detail"),
     path("<int:pk>/toggle-status/", broker_toggle_status, name="broker-toggle-status"),

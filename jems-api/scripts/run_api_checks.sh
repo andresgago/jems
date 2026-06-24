@@ -1039,6 +1039,23 @@ step "Brokers: search empty query returns empty"
 resp="$(get "/api/v1/brokers/search/")"
 assert_status "broker search empty" "200" "$(code "$resp")"
 
+step "Brokers: status-search by name"
+resp="$(get "/api/v1/brokers/status-search/?q=Echo")"
+assert_status "broker status-search" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "broker name in status-search" "$(body "$resp")" "Echo"
+assert_contains "status-search has debtor_buy_status" "$(body "$resp")" "debtor_buy_status"
+assert_contains "status-search has safer_operating_status" "$(body "$resp")" "safer_operating_status"
+assert_contains "status-search has last_load key" "$(body "$resp")" "last_load"
+
+step "Brokers: status-search by MC"
+resp="$(get "/api/v1/brokers/status-search/?q=MC999888")"
+assert_status "broker status-search by mc" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "broker mc in status-search" "$(body "$resp")" "MC999888"
+
+step "Brokers: status-search without q returns 400"
+resp="$(get "/api/v1/brokers/status-search/")"
+assert_status "broker status-search no-q" "400" "$(code "$resp")"
+
 step "Brokers: options list"
 resp="$(get "/api/v1/brokers/options/")"
 assert_status "broker options" "200" "$(code "$resp")" "$(body "$resp")"

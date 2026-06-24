@@ -231,3 +231,69 @@ class TestBrokerFileUpload:
         response = client.delete(url)
         assert response.status_code == status.HTTP_200_OK
         assert not response.data["setup_packet_file"]
+
+
+@pytest.mark.django_db
+class TestBrokerStatusSearch:
+    def test_requires_authentication(self, api_client):
+        response = api_client.get(reverse("broker-status-search"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_missing_q_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.get(reverse("broker-status-search"))
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "error" in response.data
+
+    def test_empty_q_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.get(reverse("broker-status-search"), {"q": "   "})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_returns_matching_brokers(self, auth_client):
+        client, _ = auth_client
+        BrokerFactory(name="Zephyr Transport", mc="MC777")
+        BrokerFactory(name="Other Carrier", mc="MC888")
+        response = client.get(reverse("broker-status-search"), {"q": "Zephyr"})
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert response.data[0]["name"] == "Zephyr Transport"
+
+    def test_response_contains_status_fields(self, auth_client):
+        client, _ = auth_client
+        BrokerFactory(
+            name="Status Test Broker",
+            mc="MC999",
+            debtor_buy_status="Approved For Purchases",
+            safer_operating_status="AUTHORIZED",
+            checked_at=None,
+        )
+        response = client.get(reverse("broker-status-search"), {"q": "Status Test"})
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        data = response.data[0]
+        assert "debtor_buy_status" in data
+        assert data["debtor_buy_status"] == "Approved For Purchases"
+        assert data["safer_operating_status"] == "AUTHORIZED"
+        assert data["last_load"] is None
+
+    def test_last_load_included_when_present(self, auth_client):
+        from apps.loads.tests.factories import LoadFactory
+
+        client, _ = auth_client
+        broker = BrokerFactory(name="Broker With Load", mc="MC101")
+        LoadFactory(broker=broker, number="LD-TEST-01")
+        response = client.get(
+            reverse("broker-status-search"), {"q": "Broker With Load"}
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data[0]["last_load"] is not None
+        assert response.data[0]["last_load"]["number"] == "LD-TEST-01"
+
+    def test_searches_by_mc(self, auth_client):
+        client, _ = auth_client
+        BrokerFactory(name="MC Search Broker", mc="MCSEARCH01")
+        response = client.get(reverse("broker-status-search"), {"q": "MCSEARCH"})
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert response.data[0]["mc"] == "MCSEARCH01"

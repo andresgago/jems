@@ -2,6 +2,7 @@ import os
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 
 from .models import Broker, BrokerContact, Business
 
@@ -97,6 +98,64 @@ def update_broker_contact(*, contact: BrokerContact, **kwargs: Any) -> BrokerCon
 
 def delete_broker_contact(*, contact: BrokerContact) -> None:
     contact.delete()
+
+
+def search_brokers_status(*, query: str) -> list[dict[str, Any]]:
+    """
+    Search brokers by name or MC (all statuses) and return their stored
+    TAFS/SAFER status fields plus the most recent load using each broker.
+    """
+    from apps.loads.models import Load
+
+    brokers = Broker.objects.filter(
+        Q(name__icontains=query) | Q(mc__icontains=query)
+    ).order_by("name")[:20]
+
+    results: list[dict[str, Any]] = []
+    for broker in brokers:
+        last_load = (
+            Load.objects.filter(broker=broker)
+            .select_related("pickup_city", "dropoff_city", "driver")
+            .order_by("-pickup_date")
+            .first()
+        )
+
+        last_load_data: dict[str, Any] | None = None
+        if last_load is not None:
+            last_load_data = {
+                "id": last_load.id,
+                "number": last_load.number,
+                "pickup_city": (
+                    str(last_load.pickup_city) if last_load.pickup_city else ""
+                ),
+                "dropoff_city": (
+                    str(last_load.dropoff_city) if last_load.dropoff_city else ""
+                ),
+                "payment": str(last_load.payment),
+                "pickup_date": (
+                    last_load.pickup_date.isoformat() if last_load.pickup_date else None
+                ),
+            }
+
+        results.append(
+            {
+                "id": broker.id,
+                "mc": broker.mc,
+                "name": broker.name,
+                "dba_name": broker.dba_name,
+                "status": broker.status,
+                "buy_status": broker.buy_status,
+                "debtor_buy_status": broker.debtor_buy_status,
+                "safer_operating_status": broker.safer_operating_status,
+                "factor_company": broker.factor_company,
+                "checked_at": (
+                    broker.checked_at.isoformat() if broker.checked_at else None
+                ),
+                "last_load": last_load_data,
+            }
+        )
+
+    return results
 
 
 def create_business(*, name: str, **kwargs: Any) -> Business:

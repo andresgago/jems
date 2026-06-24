@@ -8,6 +8,7 @@ from apps.brokers.services import (
     clear_broker_file,
     create_broker,
     create_broker_contact,
+    search_brokers_status,
     set_broker_file,
     toggle_broker_status,
     update_broker,
@@ -113,3 +114,70 @@ class TestBrokerFileServices:
 
     def test_broker_file_slots_constant(self):
         assert "setup-packet" in BROKER_FILE_SLOTS
+
+
+@pytest.mark.django_db
+class TestSearchBrokersStatus:
+    def test_returns_matching_brokers_by_name(self):
+        BrokerFactory(name="Acme Freight LLC", mc="MC111")
+        BrokerFactory(name="Other Corp", mc="MC999")
+        results = search_brokers_status(query="Acme")
+        assert len(results) == 1
+        assert results[0]["name"] == "Acme Freight LLC"
+
+    def test_returns_matching_brokers_by_mc(self):
+        BrokerFactory(name="Broker Alpha", mc="MC55500")
+        BrokerFactory(name="Broker Beta", mc="MC99900")
+        results = search_brokers_status(query="555")
+        assert len(results) == 1
+        assert results[0]["mc"] == "MC55500"
+
+    def test_returns_both_active_and_inactive(self):
+        BrokerFactory(name="Active Broker", mc="MC001", status=Broker.Status.ACTIVE)
+        BrokerFactory(
+            name="Active Broker Inc", mc="MC002", status=Broker.Status.INACTIVE
+        )
+        results = search_brokers_status(query="Active Broker")
+        assert len(results) == 2
+
+    def test_result_contains_status_fields(self):
+        BrokerFactory(
+            name="Status Broker",
+            mc="MC300",
+            buy_status="1",
+            debtor_buy_status="Approved For Purchases",
+            safer_operating_status="AUTHORIZED",
+            factor_company="tafs",
+        )
+        results = search_brokers_status(query="Status Broker")
+        assert len(results) == 1
+        r = results[0]
+        assert r["debtor_buy_status"] == "Approved For Purchases"
+        assert r["safer_operating_status"] == "AUTHORIZED"
+        assert r["factor_company"] == "tafs"
+
+    def test_last_load_is_none_when_broker_has_no_loads(self):
+        BrokerFactory(name="No Loads Broker", mc="MC400")
+        results = search_brokers_status(query="No Loads Broker")
+        assert results[0]["last_load"] is None
+
+    def test_last_load_populated_when_broker_has_loads(self):
+        from apps.loads.tests.factories import LoadFactory
+
+        broker = BrokerFactory(name="With Loads Broker", mc="MC500")
+        load = LoadFactory(broker=broker, number="LD-99999")
+        results = search_brokers_status(query="With Loads Broker")
+        assert results[0]["last_load"] is not None
+        assert results[0]["last_load"]["number"] == "LD-99999"
+        assert results[0]["last_load"]["id"] == load.id
+
+    def test_empty_query_returns_empty_list(self):
+        BrokerFactory(name="Some Broker", mc="MC600")
+        results = search_brokers_status(query="ZZZNONEXISTENT")
+        assert results == []
+
+    def test_capped_at_20_results(self):
+        for i in range(25):
+            BrokerFactory(name=f"Cap Broker {i:02d}", mc=f"MCCAP{i:04d}")
+        results = search_brokers_status(query="Cap Broker")
+        assert len(results) == 20

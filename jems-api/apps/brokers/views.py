@@ -10,6 +10,7 @@ from .serializers import (
     BrokerFileUploadSerializer,
     BrokerListSerializer,
     BrokerSerializer,
+    BrokerStatusSerializer,
     BusinessSerializer,
 )
 from .services import (
@@ -19,6 +20,7 @@ from .services import (
     create_broker_contact,
     create_business,
     delete_broker_contact,
+    search_brokers_status,
     set_broker_file,
     toggle_broker_status,
     update_broker,
@@ -119,6 +121,17 @@ class BrokerViewSet(ViewSet):
         ).order_by("name")[:20]
         serializer = BrokerListSerializer(brokers, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="status-search")
+    def status_search(self, request):
+        q = request.query_params.get("q", "").strip()
+        if not q:
+            return Response(
+                {"error": "Query parameter 'q' is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        results = search_brokers_status(query=q)
+        return Response(BrokerStatusSerializer(results, many=True).data)
 
     @action(detail=False, methods=["get"], url_path="options")
     def options_list(self, request):
