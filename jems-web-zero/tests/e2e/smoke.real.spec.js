@@ -794,3 +794,41 @@ test('can sync an RTL truck and retrieve it via API (real)', async ({ page }) =>
   expect(created).toBeTruthy()
   expect(created.vin).toBe(vin)
 })
+
+test('broker status-search returns results for a known MC (real)', async ({ page }) => {
+  await authenticateAsAdmin(page)
+  await page.goto('/')
+  const token = await getAccessToken(page)
+
+  // Create a broker to search for
+  const mc = `E2EMC${Date.now().toString().slice(-6)}`
+  const created = await apiPost(page, token, '/brokers/', {
+    mc,
+    name: `E2E Status Broker ${mc}`,
+    debtor_buy_status: 'Approved For Purchases',
+    safer_operating_status: 'AUTHORIZED',
+  })
+  expect(created.id).toBeTruthy()
+
+  // Search by MC
+  const results = await apiGet(page, token, `/brokers/status-search/?q=${mc}`)
+  expect(Array.isArray(results)).toBe(true)
+  expect(results.length).toBe(1)
+  expect(results[0].mc).toBe(mc)
+  expect(results[0].debtor_buy_status).toBe('Approved For Purchases')
+  expect(results[0].safer_operating_status).toBe('AUTHORIZED')
+  expect(results[0].last_load).toBeNull()
+
+  await apiDelete(page, token, `/brokers/${created.id}/`)
+})
+
+test('broker status-search returns 400 when q is missing (real)', async ({ page }) => {
+  await authenticateAsAdmin(page)
+  await page.goto('/')
+  const token = await getAccessToken(page)
+
+  const res = await page.request.get(`${API_BASE}/brokers/status-search/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(res.status()).toBe(400)
+})

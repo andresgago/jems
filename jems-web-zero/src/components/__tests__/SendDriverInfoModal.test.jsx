@@ -34,7 +34,7 @@ const LAST_VEHICLE = {
   ],
 };
 
-function setup(onClose = vi.fn()) {
+async function setup(onClose = vi.fn()) {
   api.get.mockImplementation((url) => {
     if (url === '/carriers/') return Promise.resolve({ data: CARRIERS });
     if (url === '/drivers/') return Promise.resolve({ data: DRIVERS });
@@ -43,7 +43,10 @@ function setup(onClose = vi.fn()) {
   });
   api.post.mockResolvedValue({ data: { detail: 'Driver information sent successfully.' } });
 
-  return render(<SendDriverInfoModal onClose={onClose} />);
+  const result = render(<SendDriverInfoModal onClose={onClose} />);
+  // Drain the initial carriers + drivers fetch so no pending act() warnings
+  await waitFor(() => screen.getByRole('option', { name: 'Jobee Express LLC' }));
+  return result;
 }
 
 describe('SendDriverInfoModal', () => {
@@ -52,7 +55,7 @@ describe('SendDriverInfoModal', () => {
   });
 
   it('renders the modal title', async () => {
-    setup();
+    await setup();
     expect(screen.getByText('Send driver information')).toBeInTheDocument();
   });
 
@@ -174,7 +177,7 @@ describe('SendDriverInfoModal', () => {
 
   it('Close button calls onClose', async () => {
     const onClose = vi.fn();
-    setup(onClose);
+    await setup(onClose);
     fireEvent.click(screen.getByRole('button', { name: /close/i }));
     expect(onClose).toHaveBeenCalledOnce();
   });

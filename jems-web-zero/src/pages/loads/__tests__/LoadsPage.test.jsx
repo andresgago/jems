@@ -99,8 +99,9 @@ beforeEach(() => {
 });
 
 describe('LoadsPage', () => {
-  it('marks denied brokers with the TMS denied styling', () => {
+  it('marks denied brokers with the TMS denied styling', async () => {
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
 
     const broker = screen.getByRole('link', { name: /Local Jobee/i });
     expect(broker).toHaveClass('broker-denied');
@@ -156,6 +157,7 @@ describe('LoadsPage', () => {
 
   it('switches the grid counter between Showing and Total copy', async () => {
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
 
     expect(screen.getByText('Showing 1-1 of 1 item.')).toBeInTheDocument();
 
@@ -192,8 +194,9 @@ describe('LoadsPage', () => {
     });
   });
 
-  it('Reset Grid clears the visible table until Search is pressed again', () => {
+  it('Reset Grid clears the visible table until Search is pressed again', async () => {
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
 
     expect(screen.getByRole('link', { name: /Local Jobee/i })).toBeInTheDocument();
 
@@ -207,10 +210,11 @@ describe('LoadsPage', () => {
     expect(screen.getByRole('link', { name: /Local Jobee/i })).toBeInTheDocument();
   });
 
-  it('shows Total 0 items when All mode has no matching rows', () => {
+  it('shows Total 0 items when All mode has no matching rows', async () => {
     mockLoadsReturn({ loads: [], count: 0 });
 
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button', { name: /^All$/i }));
 
     expect(screen.getByText('Total 0 items.')).toBeInTheDocument();

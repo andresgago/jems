@@ -118,6 +118,28 @@ const BROKER_DETAIL = {
   ],
 }
 
+const BROKER_STATUS_RESULTS = [
+  {
+    id: 1, mc: 'MC001', name: 'Sunrise Freight LLC', dba_name: 'Sunrise',
+    status: 1, buy_status: '1',
+    debtor_buy_status: 'Approved For Purchases',
+    safer_operating_status: 'AUTHORIZED',
+    factor_company: 'tafs', checked_at: '2025-01-15',
+    last_load: {
+      id: 42, number: 'LD-00042',
+      pickup_city: 'Charlotte, NC', dropoff_city: 'Atlanta, GA',
+      payment: '1500.00', pickup_date: '2025-01-10T08:00:00Z',
+    },
+  },
+  {
+    id: 2, mc: 'MC002', name: 'Denied Carrier Inc', dba_name: '',
+    status: 1, buy_status: '0',
+    debtor_buy_status: 'No Buy - Denied For Purchases',
+    safer_operating_status: '', factor_company: 'tafs', checked_at: null,
+    last_load: null,
+  },
+]
+
 const ACCOUNTS = [
   { id: 1, code: '90010', name: 'Rate', is_active: true, is_main: false, is_assistant: false, no_tax: false },
   { id: 2, code: '80030', name: 'Fuel', is_active: true, is_main: false, is_assistant: false, no_tax: false },
@@ -325,6 +347,7 @@ async function mockApi(page) {
     if (pathname.endsWith('/fleet/trucks/') && method === 'GET') return json(TRUCKS)
     if (/\/fleet\/trucks\/\d+\/$/.test(pathname) && method === 'GET') return json(TRUCK_DETAIL)
     if (pathname.endsWith('/brokers/options/')) return json(BROKERS.map((b) => ({ id: b.id, label: b.name })))
+    if (pathname.endsWith('/brokers/status-search/') && method === 'GET') return json(BROKER_STATUS_RESULTS)
     if (pathname.endsWith('/brokers/search/')) return json(BROKERS)
     if (/\/brokers\/\d+\/contacts\/$/.test(pathname)) return json(BROKER_DETAIL.contacts)
     if (/\/brokers\/\d+\/$/.test(pathname) && method === 'GET') return json(BROKER_DETAIL)
@@ -922,4 +945,73 @@ test('Driver info modal: Close button dismisses the modal', async ({ page }) => 
   await expect(page.getByText('Send driver information')).toBeVisible()
   await page.getByRole('button', { name: /close/i }).click()
   await expect(page.getByText('Send driver information')).not.toBeVisible()
+})
+
+// ── Brokers Status Modal ───────────────────────────────────────────────────────
+
+test('Brokers status button opens Find broker modal', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /brokers status/i }).click()
+  const modal = page.locator('.modal-content')
+  await expect(modal.getByText('Find broker')).toBeVisible()
+})
+
+test('Brokers status modal: has search input and Search button', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /brokers status/i }).click()
+  const modal = page.locator('.modal-content')
+  await expect(modal.locator('input[placeholder*="Search"]')).toBeVisible()
+  await expect(modal.getByRole('button', { name: /^search$/i })).toBeVisible()
+})
+
+test('Brokers status modal: Search button disabled when input is empty', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /brokers status/i }).click()
+  const modal = page.locator('.modal-content')
+  await expect(modal.getByRole('button', { name: /^search$/i })).toBeDisabled()
+})
+
+test('Brokers status modal: shows broker results after search', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /brokers status/i }).click()
+  const modal = page.locator('.modal-content')
+  await modal.locator('input[placeholder*="Search"]').fill('Sunrise')
+  await modal.getByRole('button', { name: /^search$/i }).click()
+  await expect(modal.getByText('Sunrise Freight LLC')).toBeVisible()
+  await expect(modal.getByText('Denied Carrier Inc')).toBeVisible()
+})
+
+test('Brokers status modal: shows debtor buy status in results', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /brokers status/i }).click()
+  const modal = page.locator('.modal-content')
+  await modal.locator('input[placeholder*="Search"]').fill('freight')
+  await modal.getByRole('button', { name: /^search$/i }).click()
+  await expect(modal.getByText('Approved For Purchases')).toBeVisible()
+  await expect(modal.getByText('No Buy - Denied For Purchases')).toBeVisible()
+})
+
+test('Brokers status modal: shows last load number in results', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /brokers status/i }).click()
+  const modal = page.locator('.modal-content')
+  await modal.locator('input[placeholder*="Search"]').fill('freight')
+  await modal.getByRole('button', { name: /^search$/i }).click()
+  await expect(modal.getByText('#LD-00042')).toBeVisible()
+})
+
+test('Brokers status modal: Close button dismisses the modal', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /brokers status/i }).click()
+  const modal = page.locator('.modal-content')
+  await expect(modal.getByText('Find broker')).toBeVisible()
+  await modal.getByRole('button', { name: /^close$/i }).click()
+  await expect(page.getByText('Find broker')).not.toBeVisible()
 })
