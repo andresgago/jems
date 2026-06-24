@@ -14,6 +14,8 @@ const ADMIN_PASS = process.env.E2E_PASSWORD || 'admin1234'
 const CRITICAL_ROUTES = [
   { path: '/loads', heading: /loads/i },
   { path: '/loads/create', heading: /new load/i },
+  { path: '/drivers', heading: /drivers/i },
+  { path: '/drivers/create', heading: /new driver/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -194,4 +196,41 @@ test('can create and delete a load via API (real)', async ({ page }) => {
   expect(created.number).toBe(number)
 
   await apiDelete(page, token, `/loads/${created.id}/`)
+})
+
+// ── Locations: states endpoint ────────────────────────────────────────────────
+
+test('states endpoint returns id/name/abbreviation (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const states = await apiGet(page, token, '/locations/states/')
+  expect(Array.isArray(states)).toBeTruthy()
+  expect(states.length).toBeGreaterThan(0)
+  for (const s of states.slice(0, 5)) {
+    expect(s).toHaveProperty('id')
+    expect(s).toHaveProperty('name')
+    expect(s.abbreviation.length).toBeGreaterThan(0)
+  }
+})
+
+// ── Create + delete driver (round-trip) ───────────────────────────────────────
+
+test('can create and delete a driver via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const created = await apiPost(page, token, '/drivers/', {
+    first_name: 'E2E',
+    last_name: `Driver ${Date.now()}`,
+    status: 1,
+  })
+
+  expect(created.id).toBeTruthy()
+  expect(created.full_name).toContain('E2E')
+
+  // DELETE is a soft delete (status → terminated); endpoint returns 204
+  await apiDelete(page, token, `/drivers/${created.id}/`)
 })

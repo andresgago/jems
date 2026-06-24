@@ -38,6 +38,31 @@ const CARRIERS = [
   { id: 2, name: 'Best Wheels Transport LLC' },
 ]
 
+const STATES = [
+  { id: 9, name: 'Texas', abbreviation: 'TX' },
+  { id: 10, name: 'Alabama', abbreviation: 'AL' },
+]
+
+const DRIVER_TYPES = [
+  { id: 1, name: 'Company Driver', is_active: true },
+  { id: 2, name: 'Owner Operator', is_active: true },
+]
+
+const DRIVERS = [
+  {
+    id: 1, first_name: 'John', last_name: 'Doe', full_name: 'John Doe',
+    driver_type: 1, driver_type_name: 'Company Driver', status: 1,
+    phone: '5551234', email: 'john@example.com',
+    license_expiration: '2030-01-01', medical_card_expiration: '2030-01-01',
+    on_vacation: false, carrier: 1,
+  },
+]
+
+const DRIVER_DETAIL = {
+  ...DRIVERS[0], address: '1 Main St', license_state: 9, license_number: 'D123',
+  contract: true, percent: 25, insurance: 50, documents: [], photo: null,
+}
+
 /**
  * Intercepts all /api/v1/ requests.
  * Throws on any unmocked endpoint to catch missing coverage immediately.
@@ -58,7 +83,12 @@ async function mockApi(page) {
       return json({ access: mockJWT() })
     }
     if (pathname.endsWith('/fleet/trailer-types/')) return json(TRAILER_TYPES)
+    if (pathname.endsWith('/fleet/cards/')) return json([])
     if (pathname.endsWith('/carriers/')) return json(CARRIERS)
+    if (pathname.endsWith('/locations/states/')) return json(STATES)
+    if (pathname.endsWith('/drivers/types/')) return json(DRIVER_TYPES)
+    if (pathname.endsWith('/drivers/') && method === 'GET') return json(DRIVERS)
+    if (/\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_DETAIL)
     if (pathname.endsWith('/loads/') && method === 'GET') return json({ results: [], count: 0 })
     if (pathname.endsWith('/loads/cities/search/')) return json([])
     if (pathname.endsWith('/brokers/search/')) return json([])
@@ -164,4 +194,40 @@ test('new load form: submit button reads "Create Load"', async ({ page }) => {
   await withAuth(page)
   await page.goto('/loads/create')
   await expect(page.getByRole('button', { name: /create load/i })).toBeVisible()
+})
+
+// ── Drivers ─────────────────────────────────────────────────────────────────
+
+test('drivers list renders a driver returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/drivers')
+  await expect(page.getByRole('link', { name: 'John Doe' })).toBeVisible()
+})
+
+test('driver detail renders sections and resolves carrier/state names', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/drivers/1')
+  await expect(page.getByRole('heading', { name: 'John Doe' })).toBeVisible()
+  // carrier id 1 resolved via /carriers/, state id 9 via /locations/states/
+  await expect(page.getByText('Jobee Express LLC')).toBeVisible()
+  await expect(page.getByText('Texas (TX)')).toBeVisible()
+})
+
+test('new driver form: First Name label shows required asterisk', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/drivers/create')
+  await expect(page.locator('label', { hasText: 'First Name' })).toContainText('*')
+})
+
+test('new driver form: driver types render in the type select', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/drivers/create')
+  await expect(page.locator('option', { hasText: 'Company Driver' })).toHaveCount(1)
+  await expect(page.locator('option', { hasText: 'Owner Operator' })).toHaveCount(1)
+})
+
+test('new driver form: submit button reads "Create Driver"', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/drivers/create')
+  await expect(page.getByRole('button', { name: /create driver/i })).toBeVisible()
 })

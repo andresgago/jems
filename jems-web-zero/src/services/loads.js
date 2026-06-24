@@ -15,6 +15,8 @@ export const loadsService = {
   update:    (id, data) => api.patch(`/loads/${id}/`, data),
   destroy:   (id)     => api.delete(`/loads/${id}/`),
   setStatus: (id, status) => api.post(`/loads/${id}/set-status/`, { status }),
+  toggleInvoiced:(id) => api.post(`/loads/${id}/set-invoiced/`),
+  togglePaid:(id)     => api.post(`/loads/${id}/set-paid/`),
   setHistory:(id)     => api.post(`/loads/${id}/set-history/`),
   assign:    (id, data) => api.post(`/loads/${id}/assign/`, data),
 };

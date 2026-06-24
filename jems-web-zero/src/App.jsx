@@ -6,6 +6,10 @@ import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import LoadsPage from './pages/loads/LoadsPage';
 import LoadFormPage from './pages/loads/LoadFormPage';
+import LoadDetailPage from './pages/loads/LoadDetailPage';
+import DriversPage from './pages/drivers/DriversPage';
+import DriverFormPage from './pages/drivers/DriverFormPage';
+import DriverDetailPage from './pages/drivers/DriverDetailPage';
 
 function AppRoutes() {
   return (
@@ -21,10 +25,14 @@ function AppRoutes() {
                 {/* Loads */}
                 <Route path="loads" element={<LoadsPage />} />
                 <Route path="loads/create" element={<LoadFormPage />} />
+                <Route path="loads/:id" element={<LoadDetailPage />} />
                 <Route path="loads/:id/edit" element={<LoadFormPage />} />
                 <Route path="loads/history" element={<div><h5>Load History</h5><p className="text-muted">Coming soon.</p></div>} />
                 {/* Drivers */}
-                <Route path="drivers" element={<div><h5>Drivers</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="drivers" element={<DriversPage />} />
+                <Route path="drivers/create" element={<DriverFormPage />} />
+                <Route path="drivers/:id" element={<DriverDetailPage />} />
+                <Route path="drivers/:id/edit" element={<DriverFormPage />} />
                 {/* Fleet */}
                 <Route path="fleet/trucks" element={<div><h5>Trucks</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/trailers" element={<div><h5>Trailers</h5><p className="text-muted">Coming soon.</p></div>} />

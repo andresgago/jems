@@ -1,3 +1,6 @@
+# Test coverage artifacts
+coverage/
+
 # Logs
 logs
 *.log
