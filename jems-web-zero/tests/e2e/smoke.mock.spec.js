@@ -63,6 +63,13 @@ const DRIVER_DETAIL = {
   contract: true, percent: 25, insurance: 50, documents: [], photo: null,
 }
 
+const DRIVER_LAST_VEHICLE = {
+  last_truck_id: 1,
+  last_trailer_id: 1,
+  trucks: [{ id: 1, number: 'T-100', vin: '1VIN001' }],
+  trailers: [{ id: 1, number: 'TR-200', vin: '2VIN001', trailer_type__name: 'Van' }],
+}
+
 const TRUCK_TYPES = [
   { id: 1, name: 'Sleeper', is_active: true },
   { id: 2, name: 'Day Cab', is_active: true },
@@ -349,7 +356,9 @@ async function mockApi(page) {
     if (pathname.endsWith('/drivers/types/')) return json(DRIVER_TYPES)
     if (pathname.endsWith('/drivers/options/')) return json(DRIVERS)
     if (pathname.endsWith('/drivers/') && method === 'GET') return json(DRIVERS)
+    if (/\/drivers\/\d+\/last-vehicle\/$/.test(pathname) && method === 'GET') return json(DRIVER_LAST_VEHICLE)
     if (/\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_DETAIL)
+    if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({ detail: 'Driver information sent successfully.' })
     if (pathname.endsWith('/loads/') && method === 'GET') return json({ results: [], count: 0 })
     if (pathname.endsWith('/loads/cities/search/')) return json([])
     if (pathname.endsWith('/brokers/search/')) return json([])
@@ -853,4 +862,64 @@ test('IFTA page renders report list with status badge', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /IFTA Reports/i })).toBeVisible()
   await expect(page.getByText('ELD-100')).toBeVisible()
   await expect(page.getByText('READY')).toBeVisible()
+})
+
+// ── Driver Info Modal ─────────────────────────────────────────────────────────
+
+test('Driver info button opens Send driver information modal', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /driver info/i }).click()
+  await expect(page.getByText('Send driver information')).toBeVisible()
+})
+
+test('Driver info modal populates carrier and driver dropdowns', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /driver info/i }).click()
+  // Wait for async data to load then verify options are attached to the DOM
+  await expect(page.locator('option', { hasText: 'Jobee Express LLC' })).toHaveCount(1)
+  await expect(page.locator('option', { hasText: 'John Doe' })).toHaveCount(1)
+})
+
+test('Driver info modal: selecting driver loads trucks and trailers', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /driver info/i }).click()
+  const modal = page.locator('.modal-content')
+  await expect(modal.locator('option', { hasText: 'John Doe' })).toHaveCount(1)
+  await modal.locator('select').nth(1).selectOption({ label: 'John Doe' })
+  await expect(modal.locator('option', { hasText: 'T-100' })).toHaveCount(1)
+  await expect(modal.locator('option', { hasText: 'TR-200' })).toHaveCount(1)
+})
+
+test('Driver info modal: In reply to is disabled', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /driver info/i }).click()
+  const modal = page.locator('.modal-content')
+  await expect(modal.locator('select').last()).toBeDisabled()
+})
+
+test('Driver info modal: Send shows success message', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /driver info/i }).click()
+  const modal = page.locator('.modal-content')
+  await expect(modal.locator('option', { hasText: 'Jobee Express LLC' })).toHaveCount(1)
+  await modal.locator('select').nth(0).selectOption({ index: 1 })
+  await modal.locator('select').nth(1).selectOption({ label: 'John Doe' })
+  await expect(modal.locator('option', { hasText: 'T-100' })).toHaveCount(1)
+  await modal.locator('input[type="email"]').fill('broker@test.com')
+  await page.getByRole('button', { name: /^send$/i }).click()
+  await expect(page.getByText(/sent successfully/i)).toBeVisible()
+})
+
+test('Driver info modal: Close button dismisses the modal', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /driver info/i }).click()
+  await expect(page.getByText('Send driver information')).toBeVisible()
+  await page.getByRole('button', { name: /close/i }).click()
+  await expect(page.getByText('Send driver information')).not.toBeVisible()
 })

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DateRangePicker from '../../components/DateRangePicker';
+import SendDriverInfoModal from '../../components/SendDriverInfoModal';
 import { useAuth } from '../../contexts/useAuth';
 import { useLoads } from '../../hooks/useLoads';
 import { loadsService, LOAD_STATUS } from '../../services/loads';
@@ -427,6 +428,7 @@ export default function LoadsPage() {
   const [gridCleared, setGridCleared] = useState(false);
   const [loadScopeTitle, setLoadScopeTitle] = useState('All Loads');
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [showDriverInfoModal, setShowDriverInfoModal] = useState(false);
   const { loads, count = 0, loading, error, refresh } = useLoads(filters);
   const visibleLoads = gridCleared ? EMPTY_LOADS : loads;
 
@@ -603,7 +605,7 @@ export default function LoadsPage() {
             <button className="btn btn-info text-white load-grid-tool-btn" type="button" onClick={handleToggleRowsMode} title={showAllRows ? 'Show paged data' : 'Show all rows'}>
               <i className={`bi ${showAllRows ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'} me-1`} />{showAllRows ? 'Page' : 'All'}
             </button>
-            <Link to="/drivers" className="btn btn-success"><i className="bi bi-truck me-1" />Driver info</Link>
+            <button className="btn btn-success" onClick={() => setShowDriverInfoModal(true)}><i className="bi bi-truck me-1" />Driver info</button>
             <Link to="/brokers" className="btn btn-primary"><i className="bi bi-person-x-fill me-1" />Brokers status</Link>
           </div>
         </div>
@@ -698,6 +700,10 @@ export default function LoadsPage() {
           </button>
         </div>
       </section>
+
+      {showDriverInfoModal && (
+        <SendDriverInfoModal onClose={() => setShowDriverInfoModal(false)} />
+      )}
     </div>
   );
 }

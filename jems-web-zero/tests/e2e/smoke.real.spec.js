@@ -713,6 +713,48 @@ test('can sync and retrieve an RTL driver via API (real)', async ({ page }) => {
   expect(detail.license_state).toBe('TX')
 })
 
+// ── Driver last-vehicle endpoint ─────────────────────────────────────────────
+
+test('driver last-vehicle returns correct shape with no prior loads (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const created = await apiPost(page, token, '/drivers/', {
+    first_name: 'E2E',
+    last_name: `LastVehicle ${Date.now()}`,
+    status: 1,
+  })
+
+  try {
+    const data = await apiGet(page, token, `/drivers/${created.id}/last-vehicle/`)
+    expect(data).toHaveProperty('last_truck_id')
+    expect(data).toHaveProperty('last_trailer_id')
+    expect(data).toHaveProperty('trucks')
+    expect(data).toHaveProperty('trailers')
+    expect(data.last_truck_id).toBeNull()
+    expect(data.last_trailer_id).toBeNull()
+    expect(Array.isArray(data.trucks)).toBeTruthy()
+    expect(Array.isArray(data.trailers)).toBeTruthy()
+  } finally {
+    await apiDelete(page, token, `/drivers/${created.id}/`)
+  }
+})
+
+test('send-driver-info rejects missing fields with 400 (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const res = await page.request.post(`${API_BASE}/loads/send-driver-info/`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    data: { carrier_id: 1 },
+  })
+  expect(res.status()).toBe(400)
+  const body = await res.json()
+  expect(body.detail).toMatch(/Missing fields/i)
+})
+
 test('can sync an RTL truck and retrieve it via API (real)', async ({ page }) => {
   test.setTimeout(30_000)
   await authenticateAsAdmin(page)
