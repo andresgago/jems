@@ -12,22 +12,28 @@ from typing import Any
 
 from .models import RtlDriver, RtlDriverStatus, RtlIfta, RtlTruck, RtlTruckStatus
 
+_RTL_DRIVER_FIELD_MAP = {
+    "companyId": "company_id",
+    "email": "email",
+    "firstName": "first_name",
+    "lastName": "last_name",
+    "active": "active",
+    "phoneNum": "phone_num",
+    "driverInfoLicenseNumber": "license_number",
+    "driverInfoLicenseState": "license_state",
+    "createdAt": "rtl_created_at",
+    "updatedAt": "rtl_updated_at",
+}
+
 
 def upsert_rtl_driver(*, data: dict[str, Any]) -> RtlDriver:
+    defaults = {
+        _RTL_DRIVER_FIELD_MAP[k]: v
+        for k, v in data.items()
+        if k in _RTL_DRIVER_FIELD_MAP
+    }
     driver, _ = RtlDriver.objects.update_or_create(
-        rtl_id=data["_id"],
-        defaults={
-            "company_id": data.get("companyId", ""),
-            "email": data.get("email", ""),
-            "first_name": data.get("firstName", ""),
-            "last_name": data.get("lastName", ""),
-            "active": data.get("active", True),
-            "phone_num": data.get("phoneNum", ""),
-            "license_number": data.get("driverInfoLicenseNumber", ""),
-            "license_state": data.get("driverInfoLicenseState", ""),
-            "rtl_created_at": data.get("createdAt", ""),
-            "rtl_updated_at": data.get("updatedAt", ""),
-        },
+        rtl_id=data["_id"], defaults=defaults
     )
     return driver
 
@@ -69,6 +75,7 @@ def upsert_rtl_driver_status(*, data: dict[str, Any]) -> RtlDriverStatus:
             "daily_hours_driven": data.get("dailyLogSummaryTimeDriven"),
             "daily_hours_on_duty": data.get("dailyLogSummaryTimeOnDuty"),
             "eta": data.get("eta", ""),
+            "violations": data.get("dailyLogSummaryViolations", ""),
             "rtl_updated_at": data.get("updatedAt", ""),
         },
     )

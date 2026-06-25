@@ -11,7 +11,8 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
-from apps.integrations.models import RtlDriverStatus
+from django.db.models import Exists
+from apps.integrations.models import RtlDriver, RtlDriverStatus
 from apps.locations.models import City
 
 from .exceptions import InvalidStatusTransition, NotReadyToExecute
@@ -80,10 +81,20 @@ class LoadViewSet(ViewSet):
     permission_classes = [IsAdminOrDispatcher]
 
     def _base_queryset(self):
-        _rtl_sq = Subquery(
+        _rtl_event_sq = Subquery(
             RtlDriverStatus.objects.filter(
                 rtl_driver__license_number=OuterRef("driver__license_number")
             ).values("hos_event_code")[:1]
+        )
+        _rtl_id_sq = Subquery(
+            RtlDriver.objects.filter(
+                license_number=OuterRef("driver__license_number")
+            ).values("id")[:1]
+        )
+        _rtl_violations_sq = Exists(
+            RtlDriverStatus.objects.filter(
+                rtl_driver__license_number=OuterRef("driver__license_number")
+            ).exclude(violations="")
         )
         return (
             Load.objects.select_related(
@@ -104,7 +115,11 @@ class LoadViewSet(ViewSet):
                 "receiver",
                 "carrier",
             )
-            .annotate(_driver_rtl_event_code=_rtl_sq)
+            .annotate(
+                _driver_rtl_event_code=_rtl_event_sq,
+                _driver_rtl_id=_rtl_id_sq,
+                _driver_rtl_has_violations=_rtl_violations_sq,
+            )
             .prefetch_related("stops")
         )
 

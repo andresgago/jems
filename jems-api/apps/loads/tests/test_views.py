@@ -1110,6 +1110,62 @@ class TestLoadListDriverRtlEventCode:
         row = load_results(response)[0]
         assert row["driver_rtl_event_code"] is None
 
+    def test_driver_rtl_id_returned_when_driver_has_rtl_record(self, auth_client):
+        from apps.integrations.models import RtlDriver, RtlDriverStatus
+
+        client, _ = auth_client
+        driver = DriverFactory(license_number="DL-RTL-ID-01")
+        rtl_driver = RtlDriver.objects.create(
+            rtl_id="rtl-id-01",
+            license_number="DL-RTL-ID-01",
+        )
+        RtlDriverStatus.objects.create(
+            rtl_id="rtl-id-01",
+            rtl_driver=rtl_driver,
+            hos_event_code="DS_ON",
+        )
+        load = LoadFactory(driver=driver)
+
+        response = client.get(reverse("load-list"), {"number": load.number})
+
+        assert response.status_code == status.HTTP_200_OK
+        row = load_results(response)[0]
+        assert row["driver_rtl_id"] == rtl_driver.pk
+        assert row["driver_rtl_has_violations"] is False
+
+    def test_driver_rtl_id_is_none_without_rtl_record(self, auth_client):
+        client, _ = auth_client
+        driver = DriverFactory(license_number="DL-NO-RTL")
+        load = LoadFactory(driver=driver)
+
+        response = client.get(reverse("load-list"), {"number": load.number})
+
+        row = load_results(response)[0]
+        assert row["driver_rtl_id"] is None
+        assert row["driver_rtl_has_violations"] is False
+
+    def test_driver_rtl_has_violations_true_when_violations_set(self, auth_client):
+        from apps.integrations.models import RtlDriver, RtlDriverStatus
+
+        client, _ = auth_client
+        driver = DriverFactory(license_number="DL-VIOL-01")
+        rtl_driver = RtlDriver.objects.create(
+            rtl_id="rtl-viol-01",
+            license_number="DL-VIOL-01",
+        )
+        RtlDriverStatus.objects.create(
+            rtl_id="rtl-viol-01",
+            rtl_driver=rtl_driver,
+            hos_event_code="DS_D",
+            violations="H11_DRIVING,H14_DUTY_LIMIT",
+        )
+        load = LoadFactory(driver=driver)
+
+        response = client.get(reverse("load-list"), {"number": load.number})
+
+        row = load_results(response)[0]
+        assert row["driver_rtl_has_violations"] is True
+
 
 @pytest.mark.django_db
 class TestLoadSetExecuted:

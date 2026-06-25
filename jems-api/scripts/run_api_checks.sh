@@ -845,7 +845,7 @@ assert_status "driver type list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "driver type listed" "$(body "$resp")" "Company Driver"
 
 step "Drivers: create"
-resp="$(post "/api/v1/drivers/" "{\"first_name\":\"Juan\",\"last_name\":\"Perez\",\"driver_type\":4,\"status\":1,\"phone\":\"5559876543\",\"email\":\"juan@example.com\",\"factor\":25}")"
+resp="$(post "/api/v1/drivers/" "{\"first_name\":\"Juan\",\"last_name\":\"Perez\",\"driver_type\":4,\"status\":1,\"phone\":\"5559876543\",\"email\":\"juan@example.com\",\"factor\":25,\"license_number\":\"TX123456\"}")"
 assert_status "driver create" "201" "$(code "$resp")" "$(body "$resp")"
 DRIVER_ID="$(body "$resp" | json_get_num id)"
 
@@ -855,7 +855,7 @@ assert_status "driver retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "driver name" "$(body "$resp")" "Juan"
 
 step "Drivers: update"
-resp="$(put "/api/v1/drivers/${DRIVER_ID}/" '{"first_name":"Juan","last_name":"Perez Updated"}')"
+resp="$(put "/api/v1/drivers/${DRIVER_ID}/" '{"first_name":"Juan","last_name":"Perez Updated","license_number":"TX123456"}')"
 assert_status "driver update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "driver updated" "$(body "$resp")" "Perez Updated"
 
@@ -1210,6 +1210,9 @@ assert_status "load list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "load list has count" "$(body "$resp")" '"count"'
 assert_contains "load list has results" "$(body "$resp")" '"results"'
 assert_contains "load list includes created load" "$(body "$resp")" "${LOAD_ID}"
+assert_contains "load list has driver_rtl_event_code field" "$(body "$resp")" '"driver_rtl_event_code"'
+assert_contains "load list has driver_rtl_id field" "$(body "$resp")" '"driver_rtl_id"'
+assert_contains "load list has driver_rtl_has_violations field" "$(body "$resp")" '"driver_rtl_has_violations"'
 
 step "Loads: list paginated page_size"
 resp="$(get "/api/v1/loads/?page=1&page_size=1")"
@@ -1689,6 +1692,24 @@ assert_contains "sync trucks count" "$(body "$resp")" '"trucks":1'
 step "Integrations: RTL sync is idempotent"
 resp="$(post "/api/v1/integrations/rtl/sync/" '{"drivers":[{"_id":"eld-drv-001","firstName":"Mike","lastName":"Smith","active":true}]}')"
 assert_status "rtl sync idempotent" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Integrations: RTL sync stores violations in driver status"
+resp="$(post "/api/v1/integrations/rtl/sync/" '{
+  "driver_statuses":[{"_id":"eld-dstat-001","userId":"eld-drv-001","hosEventCode":"DS_D","dailyLogSummaryTimeDriven":11.0,"dailyLogSummaryTimeOnDuty":14.5,"dailyLogSummaryViolations":"H11_DRIVING,H14_DUTY_LIMIT"}]
+}')"
+assert_status "rtl sync with violations" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Integrations: ELD badge fields appear in loads list when driver has RTL status"
+resp="$(post "/api/v1/loads/" "{\"number\":\"ELD-001\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 ELD Ave\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 ELD Blvd\",\"payment\":\"1000.00\",\"miles\":500,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"driver\":${DRIVER_ID},\"status\":1}")"
+assert_status "eld test load create" "201" "$(code "$resp")" "$(body "$resp")"
+ELD_LOAD_ID="$(body "$resp" | json_get_num id)"
+resp="$(get "/api/v1/loads/?number=ELD-001")"
+assert_status "load with eld driver" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "driver_rtl_event_code populated" "$(body "$resp")" '"driver_rtl_event_code":"DS_D"'
+assert_contains "driver_rtl_id populated" "$(body "$resp")" '"driver_rtl_id"'
+assert_contains "driver_rtl_has_violations true" "$(body "$resp")" '"driver_rtl_has_violations":true'
+resp="$(delete "/api/v1/loads/${ELD_LOAD_ID}/")"
+assert_status "eld test load delete" "204" "$(code "$resp")"
 
 step "Integrations: RTL drivers list"
 resp="$(get "/api/v1/integrations/rtl/drivers/")"

@@ -72,6 +72,7 @@ class RtlDriverStatus(models.Model):
     daily_hours_driven = models.FloatField(null=True, blank=True)
     daily_hours_on_duty = models.FloatField(null=True, blank=True)
     eta = models.CharField(max_length=50, blank=True, default="")
+    violations = models.CharField(max_length=500, blank=True, default="")
     rtl_updated_at = models.CharField(max_length=50, blank=True, default="")
     synced_at = models.DateTimeField(auto_now=True)
 

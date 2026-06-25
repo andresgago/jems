@@ -230,6 +230,8 @@ class LoadListSerializer(serializers.ModelSerializer):
     ready_to_execute = serializers.SerializerMethodField()
     driver_code = serializers.SerializerMethodField()
     driver_rtl_event_code = serializers.SerializerMethodField()
+    driver_rtl_id = serializers.SerializerMethodField()
+    driver_rtl_has_violations = serializers.SerializerMethodField()
 
     def get_broker_name(self, obj):
         if not obj.broker:
@@ -276,6 +278,12 @@ class LoadListSerializer(serializers.ModelSerializer):
         # Reads annotation set by _base_queryset in LoadViewSet
         return getattr(obj, "_driver_rtl_event_code", None) or None
 
+    def get_driver_rtl_id(self, obj):
+        return getattr(obj, "_driver_rtl_id", None)
+
+    def get_driver_rtl_has_violations(self, obj):
+        return bool(getattr(obj, "_driver_rtl_has_violations", False))
+
     @staticmethod
     def _city_display(city):
         if not city:
@@ -312,6 +320,8 @@ class LoadListSerializer(serializers.ModelSerializer):
             "driver_name",
             "driver_code",
             "driver_rtl_event_code",
+            "driver_rtl_id",
+            "driver_rtl_has_violations",
             "team_driver",
             "team_driver_name",
             "driver_photo",
