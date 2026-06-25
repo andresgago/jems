@@ -18,10 +18,17 @@ vi.mock('../../../hooks/useOptions', () => ({
 }))
 
 vi.mock('../../../services/loads', () => ({
+  LOAD_FILE_SLOTS: [
+    { slot: 'rate_file',      label: 'Rate Confirmation' },
+    { slot: 'bill_file',      label: 'POD' },
+    { slot: 'lumper_file',    label: 'Lumper File' },
+    { slot: 'detention_file', label: 'Detention File' },
+  ],
   loadsService: {
     get: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    uploadFile: vi.fn(),
   },
 }))
 
@@ -49,6 +56,11 @@ const TRAILER_TYPES = [
 const CARRIERS = [
   { id: 1, name: 'Jobee Express LLC' },
   { id: 2, name: 'Best Wheels Transport LLC' },
+]
+
+const DISPATCHERS = [
+  { id: 10, full_name: 'Alice Smith', username: 'alice', is_dispatcher: true },
+  { id: 11, full_name: 'Bob Jones',  username: 'bob',   is_dispatcher: true },
 ]
 
 function renderNewForm() {
@@ -94,6 +106,7 @@ describe('LoadFormPage — new load', () => {
     useOptions.mockImplementation((url) => {
       if (url.includes('trailer-types')) return TRAILER_TYPES
       if (url.includes('carriers')) return CARRIERS
+      if (url.includes('dispatchers')) return DISPATCHERS
       return []
     })
     loadGoogleMaps.mockReturnValue(new Promise(() => {}))
@@ -237,6 +250,7 @@ describe('LoadFormPage — edit load', () => {
     useOptions.mockImplementation((url) => {
       if (url.includes('trailer-types')) return TRAILER_TYPES
       if (url.includes('carriers')) return CARRIERS
+      if (url.includes('dispatchers')) return DISPATCHERS
       return []
     })
 
@@ -276,6 +290,7 @@ describe('LoadFormPage — edit load', () => {
         trailer_type: 1,
         carrier: 1,
         carrier_name: 'Jobee Express LLC',
+        dispatcher: 10,
         shipper: null,
         receiver: null,
         details: 'Handle with care',
@@ -419,6 +434,7 @@ describe('LoadFormPage — shipper and receiver fields', () => {
     useOptions.mockImplementation((url) => {
       if (url.includes('trailer-types')) return TRAILER_TYPES
       if (url.includes('carriers')) return CARRIERS
+      if (url.includes('dispatchers')) return DISPATCHERS
       return []
     })
     loadGoogleMaps.mockReturnValue(new Promise(() => {}))
@@ -580,6 +596,7 @@ describe('LoadFormPage — address autocomplete', () => {
     useOptions.mockImplementation((url) => {
       if (url.includes('trailer-types')) return TRAILER_TYPES
       if (url.includes('carriers')) return CARRIERS
+      if (url.includes('dispatchers')) return DISPATCHERS
       return []
     })
     setupGoogleMock()
@@ -725,5 +742,141 @@ describe('LoadFormPage — address autocomplete', () => {
     await waitFor(() =>
       expect(loadsService.create).toHaveBeenCalledWith(expect.objectContaining({ miles: 350 }))
     )
+  })
+})
+
+// ── Dispatcher field ─────────────────────────────────────────────────────────
+
+describe('LoadFormPage — dispatcher field', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useOptions.mockImplementation((url) => {
+      if (url.includes('trailer-types')) return TRAILER_TYPES
+      if (url.includes('carriers')) return CARRIERS
+      if (url.includes('dispatchers')) return DISPATCHERS
+      return []
+    })
+    loadGoogleMaps.mockReturnValue(new Promise(() => {}))
+    api.get.mockResolvedValue({ data: [] })
+  })
+
+  it('renders dispatcher select with placeholder', () => {
+    renderNewForm()
+    const label = screen.getByText(/dispatcher/i, { selector: 'label' })
+    const select = label.nextElementSibling
+    expect(select.tagName).toBe('SELECT')
+    expect(select.querySelector('option[value=""]')).toBeInTheDocument()
+  })
+
+  it('renders dispatcher options from useOptions', () => {
+    renderNewForm()
+    expect(screen.getByRole('option', { name: /alice smith/i })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /bob jones/i })).toBeInTheDocument()
+  })
+
+  it('dispatcher starts empty', () => {
+    renderNewForm()
+    const label = screen.getByText(/dispatcher/i, { selector: 'label' })
+    expect(label.nextElementSibling.value).toBe('')
+  })
+
+  it('includes dispatcher in create payload when selected', async () => {
+    loadsService.create.mockResolvedValueOnce({ data: { id: 55 } })
+
+    renderNewForm()
+    const label = screen.getByText(/dispatcher/i, { selector: 'label' })
+    fireEvent.change(label.nextElementSibling, { target: { value: '10' } })
+
+    fireEvent.submit(screen.getByRole('button', { name: /create load/i }).closest('form'))
+
+    await waitFor(() =>
+      expect(loadsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ dispatcher: '10' })
+      )
+    )
+  })
+
+  it('pre-populates dispatcher in edit mode', async () => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn()
+    api.get.mockImplementation((url) => {
+      if (/\/brokers\/\d+\/contacts\//.test(url)) return Promise.resolve({ data: [] })
+      return Promise.resolve({ data: [] })
+    })
+    loadsService.get.mockResolvedValue({
+      data: {
+        number: 'LD-99', weight: 42000, payment: '1000', detention: 0,
+        lumper: 0, lumper_paid_by: '', miles: 0, miles_empty: 0,
+        pickup_date: '2026-01-10T15:00:00Z', pickup_address: '',
+        pickup_city: null, pickup_city_display: '',
+        dropoff_date: '2026-01-12T20:00:00Z', dropoff_address: '',
+        dropoff_city: null, dropoff_city_display: '',
+        broker: null, broker_contacts: '', trailer_type: null,
+        carrier: null, carrier_name: '', dispatcher: 11,
+        shipper: null, receiver: null, details: 'On time.',
+      },
+    })
+
+    renderEditForm()
+    const label = await screen.findByText(/dispatcher/i, { selector: 'label' })
+    await waitFor(() => expect(label.nextElementSibling.value).toBe('11'))
+  })
+})
+
+// ── File inputs ──────────────────────────────────────────────────────────────
+
+describe('LoadFormPage — file inputs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useOptions.mockImplementation((url) => {
+      if (url.includes('trailer-types')) return TRAILER_TYPES
+      if (url.includes('carriers')) return CARRIERS
+      if (url.includes('dispatchers')) return DISPATCHERS
+      return []
+    })
+    loadGoogleMaps.mockReturnValue(new Promise(() => {}))
+    api.get.mockResolvedValue({ data: [] })
+  })
+
+  it('renders all 4 file slot labels', () => {
+    renderNewForm()
+    expect(screen.getByText(/rate confirmation/i, { selector: 'label' })).toBeInTheDocument()
+    expect(screen.getByText(/^pod$/i, { selector: 'label' })).toBeInTheDocument()
+    expect(screen.getByText(/lumper file/i, { selector: 'label' })).toBeInTheDocument()
+    expect(screen.getByText(/detention file/i, { selector: 'label' })).toBeInTheDocument()
+  })
+
+  it('renders 4 file inputs', () => {
+    renderNewForm()
+    // file inputs don't have a role — check by type
+    const inputs = document.querySelectorAll('input[type="file"]')
+    expect(inputs).toHaveLength(4)
+  })
+
+  it('uploads selected file after load creation', async () => {
+    loadsService.create.mockResolvedValueOnce({ data: { id: 77 } })
+    loadsService.uploadFile.mockResolvedValue({ data: {} })
+
+    renderNewForm()
+
+    const fileInputs = document.querySelectorAll('input[type="file"]')
+    const fakeFile = new File(['content'], 'rate.pdf', { type: 'application/pdf' })
+    fireEvent.change(fileInputs[0], { target: { files: [fakeFile] } })
+
+    fireEvent.submit(screen.getByRole('button', { name: /create load/i }).closest('form'))
+
+    await waitFor(() =>
+      expect(loadsService.uploadFile).toHaveBeenCalledWith(77, 'rate_file', fakeFile)
+    )
+  })
+
+  it('does not call uploadFile when no files are selected', async () => {
+    loadsService.create.mockResolvedValueOnce({ data: { id: 88 } })
+    loadsService.uploadFile.mockResolvedValue({ data: {} })
+
+    renderNewForm()
+    fireEvent.submit(screen.getByRole('button', { name: /create load/i }).closest('form'))
+
+    await waitFor(() => expect(loadsService.create).toHaveBeenCalled())
+    expect(loadsService.uploadFile).not.toHaveBeenCalled()
   })
 })

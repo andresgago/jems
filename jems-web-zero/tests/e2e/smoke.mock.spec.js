@@ -383,6 +383,7 @@ async function mockApi(page) {
     if (/\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_DETAIL)
     if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({ detail: 'Driver information sent successfully.' })
     if (/\/loads\/\d+\/set-rating\/$/.test(pathname) && method === 'POST') return json({})
+    if (/\/loads\/\d+\/files\/[^/]+\/$/.test(pathname)) return json({})
     if (pathname.endsWith('/loads/') && method === 'GET') return json({ results: [], count: 0 })
     if (pathname.endsWith('/loads/cities/search/')) return json([])
     if (pathname.endsWith('/brokers/search/')) return json([])
@@ -498,6 +499,28 @@ test('new load form: submit button reads "Create Load"', async ({ page }) => {
   await withAuth(page)
   await page.goto('/loads/create')
   await expect(page.getByRole('button', { name: /create load/i })).toBeVisible()
+})
+
+test('new load form: dispatcher label is visible', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads/create')
+  await expect(page.locator('label').filter({ hasText: /^dispatcher$/i })).toBeVisible()
+})
+
+test('new load form: all 4 file slot labels are visible', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads/create')
+  await expect(page.getByText(/rate confirmation/i)).toBeVisible()
+  await expect(page.getByText(/^pod$/i)).toBeVisible()
+  await expect(page.getByText(/lumper file/i)).toBeVisible()
+  await expect(page.getByText(/detention file/i)).toBeVisible()
+})
+
+test('new load form: renders 4 file inputs', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads/create')
+  const fileInputs = page.locator('input[type="file"]')
+  await expect(fileInputs).toHaveCount(4)
 })
 
 // ── Drivers ─────────────────────────────────────────────────────────────────

@@ -8,6 +8,13 @@ export const LOAD_STATUS = {
   5: { label: 'Cancelled',  cls: 'danger'    },
 };
 
+export const LOAD_FILE_SLOTS = [
+  { slot: 'rate_file',      label: 'Rate Confirmation' },
+  { slot: 'bill_file',      label: 'POD' },
+  { slot: 'lumper_file',    label: 'Lumper File' },
+  { slot: 'detention_file', label: 'Detention File' },
+];
+
 export const loadsService = {
   list:      (params) => api.get('/loads/', { params }),
   get:       (id)     => api.get(`/loads/${id}/`),
@@ -21,4 +28,10 @@ export const loadsService = {
   setExecuted:(id)    => api.post(`/loads/${id}/set-executed/`),
   assign:    (id, data) => api.post(`/loads/${id}/assign/`, data),
   setRating: (id, data) => api.post(`/loads/${id}/set-rating/`, data),
+  uploadFile: (id, slot, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/loads/${id}/files/${slot}/`, form, { headers: { 'Content-Type': undefined } });
+  },
+  deleteFile: (id, slot) => api.delete(`/loads/${id}/files/${slot}/`),
 };

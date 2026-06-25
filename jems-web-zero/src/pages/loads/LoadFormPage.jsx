@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { loadsService } from '../../services/loads';
+import { loadsService, LOAD_FILE_SLOTS } from '../../services/loads';
 import { useOptions } from '../../hooks/useOptions';
 import api from '../../services/api';
 import { loadGoogleMaps, parsePlaceComponents, calculateMiles } from '../../services/googleMaps';
@@ -289,8 +289,16 @@ const EMPTY = {
   dropoff_date: '', dropoff_address: '', dropoff_city: null,
   broker: null, broker_contacts: '',
   trailer_type: null, carrier: null,
+  dispatcher: null,
   shipper: null, receiver: null,
   details: 'Must be on time.',
+};
+
+const EMPTY_FILES = {
+  rate_file: null,
+  bill_file: null,
+  lumper_file: null,
+  detention_file: null,
 };
 
 const EMPTY_DISPLAY = {
@@ -311,9 +319,11 @@ export default function LoadFormPage() {
   const [loadingData, setLoadingData] = useState(isEdit);
   const [showNewShipper, setShowNewShipper] = useState(false);
   const [showNewReceiver, setShowNewReceiver] = useState(false);
+  const [files, setFiles] = useState(EMPTY_FILES);
 
   const trailerTypes = useOptions('/fleet/trailer-types/');
   const carriers = useOptions('/carriers/');
+  const dispatchers = useOptions('/users/options/?dispatchers=1');
 
   const pickupAddressRef = useRef(null);
   const dropoffAddressRef = useRef(null);
@@ -419,6 +429,7 @@ export default function LoadFormPage() {
         dropoff_city: data.dropoff_city || null,
         broker: data.broker || null, broker_contacts: data.broker_contacts || '',
         trailer_type: data.trailer_type || null, carrier: data.carrier || null,
+        dispatcher: data.dispatcher || null,
         shipper: data.shipper || null, receiver: data.receiver || null,
         details: data.details || 'Must be on time.',
       });
@@ -485,9 +496,15 @@ export default function LoadFormPage() {
     try {
       if (isEdit) {
         await loadsService.update(id, form);
+        for (const { slot } of LOAD_FILE_SLOTS) {
+          if (files[slot]) await loadsService.uploadFile(id, slot, files[slot]);
+        }
         navigate(`/loads/${id}`);
       } else {
         const { data } = await loadsService.create(form);
+        for (const { slot } of LOAD_FILE_SLOTS) {
+          if (files[slot]) await loadsService.uploadFile(data.id, slot, files[slot]);
+        }
         navigate(`/loads/${data.id}`);
       }
     } catch (err) {
@@ -757,9 +774,9 @@ export default function LoadFormPage() {
           )}
         </div>
 
-        {/* Row 8: Details */}
-        <div className="row mb-4">
-          <div className="col-md-12">
+        {/* Row 8: Details | Dispatcher */}
+        <div className="row mb-3">
+          <div className="col-md-8">
             <label className="control-label">Details</label>
             <textarea
               className={`form-control form-control-sm ${errors.details ? 'is-invalid' : ''}`}
@@ -771,6 +788,35 @@ export default function LoadFormPage() {
             />
             {err('details')}
           </div>
+          <div className="col-md-4">
+            <label className="control-label">Dispatcher</label>
+            <select
+              className="form-select form-select-sm"
+              value={form.dispatcher || ''}
+              onChange={e => set('dispatcher', e.target.value || null)}
+            >
+              <option value="">— Select —</option>
+              {dispatchers.map(d => (
+                <option key={d.id} value={d.id}>{d.full_name || d.username}</option>
+              ))}
+            </select>
+            {err('dispatcher')}
+          </div>
+        </div>
+
+        {/* Row 9: File uploads */}
+        <div className="row mb-4">
+          {LOAD_FILE_SLOTS.map(({ slot, label }) => (
+            <div key={slot} className="col-md-3">
+              <label className="control-label">{label}</label>
+              <input
+                type="file"
+                className="form-control form-control-sm"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={e => setFiles(f => ({ ...f, [slot]: e.target.files[0] || null }))}
+              />
+            </div>
+          ))}
         </div>
 
         {/* Actions */}

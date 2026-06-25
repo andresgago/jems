@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import AssignLoadModal from '../AssignLoadModal';
@@ -61,12 +61,16 @@ describe('AssignLoadModal', () => {
   });
 
   test('renders modal title with load number', async () => {
-    render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    await act(async () => {
+      render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    });
     expect(screen.getByText('Update Load: ABC123')).toBeInTheDocument();
   });
 
   test('renders driver, truck, trailer selects and populates options', async () => {
-    render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    await act(async () => {
+      render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    });
     // There are 4 selects: Driver, Truck, Trailer, Is Drop Trailer
     expect(screen.getAllByRole('combobox').length).toBeGreaterThanOrEqual(4);
     await waitFor(() => {
@@ -76,13 +80,17 @@ describe('AssignLoadModal', () => {
   });
 
   test('drop section is hidden when is_drop=0', async () => {
-    render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    await act(async () => {
+      render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    });
     expect(screen.queryByText('Drop Trailer ($)')).not.toBeInTheDocument();
   });
 
   test('drop section shows when is_drop switched to YES', async () => {
     const user = userEvent.setup();
-    render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    await act(async () => {
+      render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    });
     const isDropSelect = screen.getByDisplayValue('NOT');
     await user.selectOptions(isDropSelect, '1');
     expect(screen.getByText('Drop Trailer ($)')).toBeInTheDocument();
@@ -91,7 +99,9 @@ describe('AssignLoadModal', () => {
 
   test('drop section is hidden again when switched back to NOT', async () => {
     const user = userEvent.setup();
-    render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    await act(async () => {
+      render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    });
     const isDropSelect = screen.getByDisplayValue('NOT');
     await user.selectOptions(isDropSelect, '1');
     await user.selectOptions(isDropSelect, '0');
@@ -100,7 +110,9 @@ describe('AssignLoadModal', () => {
 
   test('footer Close button calls onClose', async () => {
     const user = userEvent.setup();
-    render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    await act(async () => {
+      render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    });
     // The footer has a "Close" button (the X header button also matches /close/, pick footer button)
     const closeButtons = screen.getAllByRole('button', { name: /^close$/i });
     await user.click(closeButtons[closeButtons.length - 1]);
@@ -112,13 +124,15 @@ describe('AssignLoadModal', () => {
     loadsService.assign.mockResolvedValueOnce({ data: { id: 1, number: 'ABC123' } });
 
     const user = userEvent.setup();
-    render(
-      <AssignLoadModal
-        load={{ ...LOAD, driver: 1, truck: 10, trailer: 20 }}
-        onClose={onClose}
-        onSaved={onSaved}
-      />
-    );
+    await act(async () => {
+      render(
+        <AssignLoadModal
+          load={{ ...LOAD, driver: 1, truck: 10, trailer: 20 }}
+          onClose={onClose}
+          onSaved={onSaved}
+        />
+      );
+    });
     await user.click(screen.getByRole('button', { name: /save/i }));
     await waitFor(() => {
       expect(loadsService.assign).toHaveBeenCalledWith(1, expect.objectContaining({
@@ -137,7 +151,9 @@ describe('AssignLoadModal', () => {
     loadsService.assign.mockResolvedValueOnce({ data: { id: 1, number: 'ABC123' } });
 
     const user = userEvent.setup();
-    render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    await act(async () => {
+      render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    });
     await user.click(screen.getByRole('button', { name: /save/i }));
     await waitFor(() => {
       expect(loadsService.assign).toHaveBeenCalledWith(1, expect.objectContaining({
@@ -155,7 +171,9 @@ describe('AssignLoadModal', () => {
     });
 
     const user = userEvent.setup();
-    render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    await act(async () => {
+      render(<AssignLoadModal load={LOAD} onClose={onClose} onSaved={onSaved} />);
+    });
     await user.click(screen.getByRole('button', { name: /save/i }));
     await waitFor(() => {
       expect(screen.getByText('Assignment failed')).toBeInTheDocument();
@@ -163,14 +181,16 @@ describe('AssignLoadModal', () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
-  test('pre-populates form with current load values', () => {
-    render(
-      <AssignLoadModal
-        load={{ ...LOAD, is_drop: true, days_in_drop: 3 }}
-        onClose={onClose}
-        onSaved={onSaved}
-      />
-    );
+  test('pre-populates form with current load values', async () => {
+    await act(async () => {
+      render(
+        <AssignLoadModal
+          load={{ ...LOAD, is_drop: true, days_in_drop: 3 }}
+          onClose={onClose}
+          onSaved={onSaved}
+        />
+      );
+    });
     expect(screen.getByDisplayValue('YES')).toBeInTheDocument();
   });
 });
