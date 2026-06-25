@@ -14,9 +14,11 @@ from apps.loads.services import (
     FILE_SLOTS,
     _accounting_day_from,
     assign_load,
+    bulk_delete_loads,
     clear_load_file,
     create_load,
     create_load_stop,
+    delete_load,
     delete_load_stop,
     set_executed,
     set_invoiced,
@@ -759,3 +761,48 @@ class TestClearLoadFile:
         load = LoadFactory()
         with pytest.raises(ValidationError):
             clear_load_file(load=load, slot="bad_slot")
+
+
+@pytest.mark.django_db
+class TestDeleteLoad:
+    def test_deletes_load(self):
+        load = LoadFactory()
+        pk = load.pk
+        delete_load(load=load)
+        assert not Load.objects.filter(pk=pk).exists()
+
+    def test_load_no_longer_retrievable_after_delete(self):
+        load = LoadFactory()
+        pk = load.pk
+        delete_load(load=load)
+        with pytest.raises(Load.DoesNotExist):
+            Load.objects.get(pk=pk)
+
+
+@pytest.mark.django_db
+class TestBulkDeleteLoads:
+    def test_empty_list_returns_zero(self):
+        LoadFactory.create_batch(3)
+        count_before = Load.objects.count()
+        deleted = bulk_delete_loads(ids=[])
+        assert deleted == 0
+        assert Load.objects.count() == count_before
+
+    def test_deletes_all_specified_loads(self):
+        loads = LoadFactory.create_batch(3)
+        ids = [load.pk for load in loads]
+        deleted = bulk_delete_loads(ids=ids)
+        assert deleted == 3
+        assert not Load.objects.filter(pk__in=ids).exists()
+
+    def test_ignores_nonexistent_ids(self):
+        load = LoadFactory()
+        deleted = bulk_delete_loads(ids=[load.pk, 99999, 88888])
+        assert deleted == 1
+        assert not Load.objects.filter(pk=load.pk).exists()
+
+    def test_does_not_delete_loads_not_in_ids(self):
+        keep = LoadFactory()
+        remove = LoadFactory()
+        bulk_delete_loads(ids=[remove.pk])
+        assert Load.objects.filter(pk=keep.pk).exists()

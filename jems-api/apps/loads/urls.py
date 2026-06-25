@@ -15,6 +15,7 @@ load_set_history = LoadViewSet.as_view({"post": "toggle_history"})
 load_set_executed = LoadViewSet.as_view({"post": "set_executed_action"})
 load_set_rating = LoadViewSet.as_view({"post": "set_rating_action"})
 load_set_file = LoadViewSet.as_view({"post": "set_file", "delete": "clear_file"})
+load_bulk_delete = LoadViewSet.as_view({"post": "bulk_delete"})
 load_stops = LoadViewSet.as_view({"get": "stops", "post": "stops"})
 
 # Stops detail
@@ -27,6 +28,7 @@ city_search = CitySearchView.as_view({"get": "search"})
 
 urlpatterns = [
     path("", load_list, name="load-list"),
+    path("bulk-delete/", load_bulk_delete, name="load-bulk-delete"),
     path("<int:pk>/", load_detail, name="load-detail"),
     path("<int:pk>/assign/", load_assign, name="load-assign"),
     path("<int:pk>/set-status/", load_set_status, name="load-set-status"),

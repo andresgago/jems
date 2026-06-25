@@ -26,6 +26,7 @@ from .serializers import (
 from .services import (
     FILE_SLOTS,
     assign_load,
+    bulk_delete_loads,
     clear_load_file,
     create_load,
     create_load_stop,
@@ -389,6 +390,17 @@ class LoadViewSet(ViewSet):
         except NotReadyToExecute as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(LoadSerializer(load).data)
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        ids = request.data.get("ids", [])
+        if not isinstance(ids, list):
+            return Response(
+                {"detail": "'ids' must be a list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        deleted = bulk_delete_loads(ids=ids)
+        return Response({"deleted": deleted})
 
     # --- Stops nested ---
 

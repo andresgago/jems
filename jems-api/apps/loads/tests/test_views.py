@@ -1437,3 +1437,68 @@ class TestLoadFileUpload:
             reverse("load-set-file", kwargs={"pk": load.pk, "slot": "bad_slot"}),
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestLoadDestroy:
+    def test_unauthenticated_returns_401(self, api_client):
+        load = LoadFactory()
+        response = api_client.delete(reverse("load-detail", kwargs={"pk": load.pk}))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_deletes_existing_load(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory()
+        response = client.delete(reverse("load-detail", kwargs={"pk": load.pk}))
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Load.objects.filter(pk=load.pk).exists()
+
+    def test_returns_404_for_nonexistent_load(self, auth_client):
+        client, _ = auth_client
+        response = client.delete(reverse("load-detail", kwargs={"pk": 99999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestLoadBulkDelete:
+    def test_unauthenticated_returns_401(self, api_client):
+        response = api_client.post(
+            reverse("load-bulk-delete"), {"ids": []}, format="json"
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_empty_ids_returns_zero_deleted(self, auth_client):
+        client, _ = auth_client
+        LoadFactory.create_batch(2)
+        response = client.post(reverse("load-bulk-delete"), {"ids": []}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["deleted"] == 0
+        assert Load.objects.count() == 2
+
+    def test_deletes_selected_loads(self, auth_client):
+        client, _ = auth_client
+        loads = LoadFactory.create_batch(3)
+        ids = [load.pk for load in loads[:2]]
+        response = client.post(reverse("load-bulk-delete"), {"ids": ids}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["deleted"] == 2
+        assert not Load.objects.filter(pk__in=ids).exists()
+        assert Load.objects.filter(pk=loads[2].pk).exists()
+
+    def test_ignores_nonexistent_ids(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory()
+        response = client.post(
+            reverse("load-bulk-delete"),
+            {"ids": [load.pk, 99999]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["deleted"] == 1
+
+    def test_invalid_ids_type_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("load-bulk-delete"), {"ids": "1,2,3"}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST

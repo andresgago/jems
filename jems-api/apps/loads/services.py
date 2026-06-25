@@ -294,6 +294,14 @@ def delete_load(*, load: Load) -> None:
     load.delete()
 
 
+def bulk_delete_loads(*, ids: list[int]) -> int:
+    """Delete all loads whose pk is in ids. Returns the number deleted."""
+    if not ids:
+        return 0
+    deleted, _ = Load.objects.filter(pk__in=ids).delete()
+    return deleted
+
+
 FILE_SLOTS: dict[str, str] = {
     "rate_file": "rate_file",
     "bill_file": "bill_file",

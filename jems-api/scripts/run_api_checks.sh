@@ -1478,6 +1478,35 @@ step "Loads: deleted → 404"
 resp="$(get "/api/v1/loads/${LOAD_ID}/")"
 assert_status "load gone" "404" "$(code "$resp")"
 
+step "Loads: bulk-delete — create two loads"
+resp="$(post "/api/v1/loads/" "{\"number\":\"BULK-DEL-A\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"1000.00\",\"miles\":100,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID}}")"
+assert_status "bulk del load A create" "201" "$(code "$resp")" "$(body "$resp")"
+BULK_DEL_A="$(body "$resp" | json_get_num id)"
+
+resp="$(post "/api/v1/loads/" "{\"number\":\"BULK-DEL-B\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"1000.00\",\"miles\":100,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID}}")"
+assert_status "bulk del load B create" "201" "$(code "$resp")" "$(body "$resp")"
+BULK_DEL_B="$(body "$resp" | json_get_num id)"
+
+step "Loads: bulk-delete — delete both"
+resp="$(post "/api/v1/loads/bulk-delete/" "{\"ids\":[${BULK_DEL_A},${BULK_DEL_B}]}")"
+assert_status "load bulk delete" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "bulk delete count" "$(body "$resp")" '"deleted":2'
+
+step "Loads: bulk-delete — verify both gone"
+resp="$(get "/api/v1/loads/${BULK_DEL_A}/")"
+assert_status "bulk del A gone" "404" "$(code "$resp")"
+resp="$(get "/api/v1/loads/${BULK_DEL_B}/")"
+assert_status "bulk del B gone" "404" "$(code "$resp")"
+
+step "Loads: bulk-delete — empty list returns 0"
+resp="$(post "/api/v1/loads/bulk-delete/" "{\"ids\":[]}")"
+assert_status "bulk delete empty" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "bulk delete empty count" "$(body "$resp")" '"deleted":0'
+
+step "Loads: bulk-delete — invalid ids type returns 400"
+resp="$(post "/api/v1/loads/bulk-delete/" "{\"ids\":\"1,2\"}")"
+assert_status "bulk delete invalid type" "400" "$(code "$resp")"
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 step "Dispatch: create work session"
 resp="$(post "/api/v1/dispatch/work/" "{\"start\":\"2024-08-05T08:00:00Z\",\"end\":\"2024-08-05T18:00:00Z\",\"title\":\"Monday shift\",\"dispatcher\":${DISPATCHER_USER_ID},\"session\":\"sess-001\"}")"
