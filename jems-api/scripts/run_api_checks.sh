@@ -1294,6 +1294,13 @@ step "Loads: set-status (advance to STARTED)"
 resp="$(post "/api/v1/loads/${LOAD_ID}/set-status/" '{"status":2}')"
 assert_status "load set status" "200" "$(code "$resp")" "$(body "$resp")"
 
+step "Loads: set-status legacy dropdown allows FINISHED to DETENTION"
+resp="$(post "/api/v1/loads/${LOAD_ID}/set-status/" '{"status":3}')"
+assert_status "load set status finished" "200" "$(code "$resp")" "$(body "$resp")"
+resp="$(post "/api/v1/loads/${LOAD_ID}/set-status/" '{"status":4}')"
+assert_status "load set status detention" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "load status detention" "$(body "$resp")" '"status":4'
+
 step "Loads: set-invoiced (toggle invoiced flag)"
 resp="$(post "/api/v1/loads/${LOAD_ID}/set-invoiced/" '{}')"
 assert_status "load set invoiced" "200" "$(code "$resp")" "$(body "$resp")"

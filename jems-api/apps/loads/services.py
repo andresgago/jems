@@ -95,7 +95,8 @@ def _accounting_day_from(dropoff: Any) -> int:
     return _ACCOUNTING_DAYS[weekday]
 
 
-# Valid status transitions: current -> allowed next statuses
+# Status actions mirror the legacy loads grid dropdown, not a strict workflow state
+# machine. The legacy UI shows Delivered and Detention for every non-detention load.
 _ALLOWED_TRANSITIONS: dict[int, set[int]] = {
     Load.Status.REGISTERED: {
         Load.Status.STARTED,
@@ -109,8 +110,14 @@ _ALLOWED_TRANSITIONS: dict[int, set[int]] = {
         Load.Status.CANCELLED,
     },
     Load.Status.DETENTION_PENDING: {Load.Status.FINISHED, Load.Status.CANCELLED},
-    Load.Status.FINISHED: set(),
-    Load.Status.CANCELLED: set(),
+    Load.Status.FINISHED: {
+        Load.Status.FINISHED,
+        Load.Status.DETENTION_PENDING,
+    },
+    Load.Status.CANCELLED: {
+        Load.Status.FINISHED,
+        Load.Status.DETENTION_PENDING,
+    },
 }
 
 
@@ -196,8 +203,12 @@ def set_load_status(
 ) -> Load:
     allowed = _ALLOWED_TRANSITIONS.get(load.status, set())
     if new_status not in allowed:
+        try:
+            new_status_label = Load.Status(new_status).label
+        except ValueError:
+            new_status_label = str(new_status)
         raise InvalidStatusTransition(
-            f"Cannot transition from {load.get_status_display()} to {Load.Status(new_status).label}."
+            f"Cannot transition from {load.get_status_display()} to {new_status_label}."
         )
     load.status = new_status
     if updated_by is not None:

@@ -336,13 +336,28 @@ class TestSetLoadStatus:
         with pytest.raises(InvalidStatusTransition):
             set_load_status(load=load, new_status=Load.Status.STARTED)
 
-    def test_cannot_go_from_cancelled(self):
-        load = LoadFactory(status=Load.Status.CANCELLED)
-        with pytest.raises(InvalidStatusTransition):
-            set_load_status(load=load, new_status=Load.Status.REGISTERED)
-
-    def test_cannot_go_from_finished(self):
+    def test_finished_to_finished_is_allowed_for_legacy_delivered_action(self):
         load = LoadFactory(status=Load.Status.FINISHED)
+        updated = set_load_status(load=load, new_status=Load.Status.FINISHED)
+        assert updated.status == Load.Status.FINISHED
+
+    def test_finished_to_detention_matches_legacy_dropdown(self):
+        load = LoadFactory(status=Load.Status.FINISHED)
+        updated = set_load_status(load=load, new_status=Load.Status.DETENTION_PENDING)
+        assert updated.status == Load.Status.DETENTION_PENDING
+
+    def test_cancelled_to_finished_matches_legacy_dropdown(self):
+        load = LoadFactory(status=Load.Status.CANCELLED)
+        updated = set_load_status(load=load, new_status=Load.Status.FINISHED)
+        assert updated.status == Load.Status.FINISHED
+
+    def test_cancelled_to_detention_matches_legacy_dropdown(self):
+        load = LoadFactory(status=Load.Status.CANCELLED)
+        updated = set_load_status(load=load, new_status=Load.Status.DETENTION_PENDING)
+        assert updated.status == Load.Status.DETENTION_PENDING
+
+    def test_cannot_reopen_cancelled_to_registered(self):
+        load = LoadFactory(status=Load.Status.CANCELLED)
         with pytest.raises(InvalidStatusTransition):
             set_load_status(load=load, new_status=Load.Status.REGISTERED)
 

@@ -676,6 +676,14 @@ class TestLoadRetrieve:
 
 @pytest.mark.django_db
 class TestLoadSetStatus:
+    def test_unauthenticated_returns_401(self, api_client):
+        load = LoadFactory(status=Load.Status.REGISTERED)
+        response = api_client.post(
+            reverse("load-set-status", kwargs={"pk": load.pk}),
+            {"status": Load.Status.FINISHED},
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
     def test_valid_transition(self, auth_client):
         client, _ = auth_client
         load = LoadFactory(status=Load.Status.REGISTERED)
@@ -685,6 +693,26 @@ class TestLoadSetStatus:
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == Load.Status.STARTED
+
+    def test_finished_to_detention_matches_legacy_dropdown(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(status=Load.Status.FINISHED)
+        response = client.post(
+            reverse("load-set-status", kwargs={"pk": load.pk}),
+            {"status": Load.Status.DETENTION_PENDING},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == Load.Status.DETENTION_PENDING
+
+    def test_cancelled_to_finished_matches_legacy_dropdown(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(status=Load.Status.CANCELLED)
+        response = client.post(
+            reverse("load-set-status", kwargs={"pk": load.pk}),
+            {"status": Load.Status.FINISHED},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == Load.Status.FINISHED
 
     def test_invalid_transition_returns_400(self, auth_client):
         client, _ = auth_client
