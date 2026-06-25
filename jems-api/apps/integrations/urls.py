@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     ReportIFTAViewSet,
     RtlDriverViewSet,
+    RtlFetchSyncView,
     RtlIftaViewSet,
     RtlSyncView,
     RtlTruckViewSet,
@@ -21,6 +22,7 @@ report_ifta_list = ReportIFTAViewSet.as_view({"get": "list", "post": "create"})
 report_ifta_detail = ReportIFTAViewSet.as_view({"delete": "destroy"})
 
 urlpatterns = [
+    path("rtl/fetch-and-sync/", RtlFetchSyncView.as_view(), name="rtl-fetch-and-sync"),
     path("rtl/sync/", RtlSyncView.as_view(), name="rtl-sync"),
     path("rtl/drivers/", rtl_driver_list, name="rtl-driver-list"),
     path("rtl/drivers/<int:pk>/", rtl_driver_detail, name="rtl-driver-detail"),

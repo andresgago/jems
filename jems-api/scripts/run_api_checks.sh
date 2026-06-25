@@ -1740,6 +1740,11 @@ assert_contains "driver_rtl_has_violations true" "$(body "$resp")" '"driver_rtl_
 resp="$(delete "/api/v1/loads/${ELD_LOAD_ID}/")"
 assert_status "eld test load delete" "204" "$(code "$resp")"
 
+step "Integrations: RTL fetch-and-sync (no carriers with ELD credentials seeded — expects empty synced)"
+resp="$(post "/api/v1/integrations/rtl/fetch-and-sync/" '{}')"
+assert_status "rtl fetch-and-sync" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "rtl fetch-and-sync has synced key" "$(body "$resp")" '"synced"'
+
 step "Integrations: RTL drivers list"
 resp="$(get "/api/v1/integrations/rtl/drivers/")"
 assert_status "rtl driver list" "200" "$(code "$resp")" "$(body "$resp")"

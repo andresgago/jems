@@ -8,6 +8,7 @@ from rest_framework.viewsets import ViewSet
 
 from . import services
 from .models import ReportIFTA, RtlDriver, RtlIfta, RtlTruck
+from .rtl_client import RtlApiError
 from .serializers import (
     ReportIFTASerializer,
     RtlDriverSerializer,
@@ -82,6 +83,28 @@ class ReportIFTAViewSet(ViewSet):
         report = get_object_or_404(ReportIFTA, pk=pk)
         report.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RtlFetchSyncView(APIView):
+    """
+    Actively fetch fresh data from the ApexHOS/RTL ELD API for all active
+    carriers and upsert it into the local database.
+
+    Equivalent to the legacy RtlDriver::updateLocation() action triggered by
+    the "Update location" button on the loads grid.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        try:
+            synced = services.fetch_and_sync_all_carriers()
+        except RtlApiError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response({"synced": synced})
 
 
 class RtlSyncView(APIView):

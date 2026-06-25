@@ -1,9 +1,12 @@
+from unittest.mock import patch
+
 import pytest
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.integrations.models import RtlDriver, RtlTruck
+from apps.integrations.rtl_client import RtlApiError
 from apps.integrations.tests.factories import (
     ReportIFTAFactory,
     RtlDriverFactory,
@@ -184,3 +187,32 @@ class TestRtlSync:
     def test_unauthenticated_blocked(self, api_client):
         response = api_client.post(reverse("rtl-sync"), {})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+# ── RtlFetchSync ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestRtlFetchSync:
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.post(reverse("rtl-fetch-and-sync"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_success_returns_synced_counts(self, auth_client):
+        synced = {"drivers": 3, "trucks": 2, "driver_statuses": 3, "truck_statuses": 2}
+        with patch(
+            "apps.integrations.views.services.fetch_and_sync_all_carriers",
+            return_value=synced,
+        ):
+            response = auth_client.post(reverse("rtl-fetch-and-sync"))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["synced"] == synced
+
+    def test_rtl_api_error_returns_502(self, auth_client):
+        with patch(
+            "apps.integrations.views.services.fetch_and_sync_all_carriers",
+            side_effect=RtlApiError("RTL login failed: connection refused"),
+        ):
+            response = auth_client.post(reverse("rtl-fetch-and-sync"))
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
+        assert "RTL login failed" in response.data["detail"]

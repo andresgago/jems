@@ -11,6 +11,53 @@ from __future__ import annotations
 from typing import Any
 
 from .models import RtlDriver, RtlDriverStatus, RtlIfta, RtlTruck, RtlTruckStatus
+from .rtl_client import RtlApiClient
+
+
+def fetch_and_sync_all_carriers() -> dict[str, int]:
+    """
+    Pull fresh data from the RTL/ApexHOS API for every active carrier that
+    has ELD credentials, then upsert it into the local database.
+
+    Returns a dict with counts of upserted records per entity type.
+    Raises RtlApiError if any carrier's API call fails.
+    """
+    from apps.carriers.models import Carrier
+
+    totals: dict[str, int] = {
+        "drivers": 0,
+        "trucks": 0,
+        "driver_statuses": 0,
+        "truck_statuses": 0,
+    }
+
+    carriers = (
+        Carrier.objects.filter(active=True)
+        .exclude(eld_user="")
+        .exclude(eld_password="")
+    )
+
+    for carrier in carriers:
+        client = RtlApiClient(carrier.pk, carrier.eld_user, carrier.eld_password)
+
+        for record in client.get_drivers():
+            upsert_rtl_driver(data=record)
+            totals["drivers"] += 1
+
+        for record in client.get_trucks():
+            upsert_rtl_truck(data=record)
+            totals["trucks"] += 1
+
+        for record in client.get_latest_driver_statuses():
+            upsert_rtl_driver_status(data=record)
+            totals["driver_statuses"] += 1
+
+        for record in client.get_latest_vehicle_statuses():
+            upsert_rtl_truck_status(data=record)
+            totals["truck_statuses"] += 1
+
+    return totals
+
 
 _RTL_DRIVER_FIELD_MAP = {
     "companyId": "company_id",
