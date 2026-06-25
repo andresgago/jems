@@ -873,6 +873,47 @@ test('system settings page renders invoice counters and display options', async 
 
 // ── RTL / ELD ─────────────────────────────────────────────────────────────────
 
+const ELD_LOAD_BASE = {
+  id: 99, number: 'LD-ELD-01', status: 2, payment: '1500.00',
+  pickup_city_display: 'Dallas (TX)', pickup_city_zip: '75201',
+  dropoff_city_display: 'Houston (TX)', dropoff_city_zip: '77001',
+  broker: 1, broker_name: 'Test Broker', broker_contacts: null,
+  broker_denied: false, broker_buy_status: '1', broker_debtor_buy_status: '',
+  carrier_name: 'Jobee Express', dispatcher: 1, dispatcher_name: 'Admin',
+  driver: 4, driver_name: 'John Doe', driver_code: '0001', driver_photo: null,
+  driver_rtl_event_code: 'DS_D', driver_rtl_id: 42, driver_rtl_has_violations: false,
+  team_driver: null, team_driver_name: null,
+  truck: 1, truck_number: 'T100',
+  trailer: 1, trailer_number: 'TR100', trailer_type_short_name: 'V',
+  load_trailer_type_short_name: 'V', trailer_type: 1,
+  rate_file: null, bill_file: null, lumper_file: null, detention_file: null,
+  assignment_complete: true, ready_to_execute: false, execute: false,
+  shipper_rating: 0, receiver_rating: 0,
+  is_drop: false, drop_place: null, days_in_drop: 0,
+  invoiced: false, paid: false, created_at: '2025-01-01T00:00:00Z',
+}
+
+async function withEldLoad(page, loadOverrides = {}) {
+  await withAuth(page)
+  const ts = Date.now()
+  const load = {
+    ...ELD_LOAD_BASE,
+    pickup_date: new Date(ts - 2 * 3600 * 1000).toISOString(),
+    dropoff_date: new Date(ts + 6 * 3600 * 1000).toISOString(),
+    ...loadOverrides,
+  }
+  await page.route('**/api/v1/loads/**', (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname.endsWith('/loads/') && route.request().method() === 'GET') {
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ results: [load], count: 1 }),
+      })
+    }
+    return route.continue()
+  })
+}
+
 test('RTL page renders drivers tab by default with HOS status', async ({ page }) => {
   await withAuth(page)
   await page.goto('/rtl')
@@ -909,6 +950,31 @@ test('IFTA page renders report list with status badge', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /IFTA Reports/i })).toBeVisible()
   await expect(page.getByText('ELD-100')).toBeVisible()
   await expect(page.getByText('READY')).toBeVisible()
+})
+
+// ── ELD badge in loads list ────────────────────────────────────────────────────
+
+test('ELD badge renders as a link to RTL driver detail page', async ({ page }) => {
+  await withEldLoad(page)
+  await page.goto('/loads')
+  const badge = page.getByText('Driving')
+  await expect(badge).toBeVisible()
+  await expect(badge).toHaveAttribute('href', '/integrations/rtl/drivers/42')
+})
+
+test('ELD badge shows danger class when driver has HOS violations', async ({ page }) => {
+  await withEldLoad(page, { driver_rtl_has_violations: true })
+  await page.goto('/loads')
+  const badge = page.getByText('Driving')
+  await expect(badge).toBeVisible()
+  await expect(badge).toHaveClass(/bg-danger/)
+})
+
+test('ELD badge shows success class for Driving status when no violations', async ({ page }) => {
+  await withEldLoad(page)
+  await page.goto('/loads')
+  const badge = page.getByText('Driving')
+  await expect(badge).toHaveClass(/bg-success/)
 })
 
 // ── Driver Info Modal ─────────────────────────────────────────────────────────

@@ -107,6 +107,8 @@ const rows = [
     driver_name: 'Alain Reynier',
     driver_code: '0149',
     driver_rtl_event_code: null,
+    driver_rtl_id: null,
+    driver_rtl_has_violations: false,
     truck_number: '4268',
     trailer_number: 'J534242',
     trailer_type_short_name: 'V',
@@ -373,6 +375,52 @@ describe('LoadsPage', () => {
     await waitFor(() => expect(usersService.options).toHaveBeenCalled());
 
     expect(screen.queryByText('Driving')).not.toBeInTheDocument();
+  });
+
+  it('renders ELD badge as a link to RTL driver detail when driver_rtl_id is set', async () => {
+    const now = new Date();
+    const puDate = new Date(now.getTime() - 2 * 3600 * 1000).toISOString();
+    const dropDate = new Date(now.getTime() + 6 * 3600 * 1000).toISOString();
+    mockLoadsReturn({
+      loads: [{ ...rows[0], driver_rtl_event_code: 'DS_D', driver_rtl_id: 42, driver_rtl_has_violations: false, status: 2, pickup_date: puDate, dropoff_date: dropDate }],
+    });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    const badge = screen.getByText('Driving');
+    expect(badge.tagName).toBe('A');
+    expect(badge.getAttribute('href')).toBe('/integrations/rtl/drivers/42');
+  });
+
+  it('renders ELD badge as a span (not a link) when driver_rtl_id is null', async () => {
+    const now = new Date();
+    const puDate = new Date(now.getTime() - 2 * 3600 * 1000).toISOString();
+    const dropDate = new Date(now.getTime() + 6 * 3600 * 1000).toISOString();
+    mockLoadsReturn({
+      loads: [{ ...rows[0], driver_rtl_event_code: 'DS_ON', driver_rtl_id: null, driver_rtl_has_violations: false, status: 2, pickup_date: puDate, dropoff_date: dropDate }],
+    });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    const badge = screen.getByText('On Duty');
+    expect(badge.tagName).toBe('SPAN');
+  });
+
+  it('renders ELD badge with danger class when driver_rtl_has_violations is true', async () => {
+    const now = new Date();
+    const puDate = new Date(now.getTime() - 2 * 3600 * 1000).toISOString();
+    const dropDate = new Date(now.getTime() + 6 * 3600 * 1000).toISOString();
+    mockLoadsReturn({
+      loads: [{ ...rows[0], driver_rtl_event_code: 'DS_D', driver_rtl_id: 7, driver_rtl_has_violations: true, status: 2, pickup_date: puDate, dropoff_date: dropDate }],
+    });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    const badge = screen.getByText('Driving');
+    expect(badge.className).toMatch(/bg-danger/);
   });
 
   it('shows drop indicator on dropoff city when is_drop=true', async () => {

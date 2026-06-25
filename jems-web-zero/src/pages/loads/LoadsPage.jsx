@@ -89,7 +89,8 @@ const RTL_BADGE_CLS = {
   VIOL:  'danger',
 };
 
-function rtlBadgeCls(code) {
+function rtlBadgeCls(code, hasViolations) {
+  if (hasViolations) return 'danger';
   return RTL_BADGE_CLS[code] || 'secondary';
 }
 
@@ -510,9 +511,18 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate }) {
               {load.trailer_type_short_name ? ` (${load.trailer_type_short_name})` : ''}
             </div>
             {showRtlBadge ? (
-              <span className={`badge bg-${rtlBadgeCls(load.driver_rtl_event_code)} mt-1`}>
-                {RTL_EVENT_LABEL[load.driver_rtl_event_code] || load.driver_rtl_event_code}
-              </span>
+              load.driver_rtl_id ? (
+                <Link
+                  to={`/integrations/rtl/drivers/${load.driver_rtl_id}`}
+                  className={`badge bg-${rtlBadgeCls(load.driver_rtl_event_code, load.driver_rtl_has_violations)} mt-1 text-decoration-none`}
+                >
+                  {RTL_EVENT_LABEL[load.driver_rtl_event_code] || load.driver_rtl_event_code}
+                </Link>
+              ) : (
+                <span className={`badge bg-${rtlBadgeCls(load.driver_rtl_event_code, load.driver_rtl_has_violations)} mt-1`}>
+                  {RTL_EVENT_LABEL[load.driver_rtl_event_code] || load.driver_rtl_event_code}
+                </span>
+              )
             ) : null}
           </>
         ) : (
