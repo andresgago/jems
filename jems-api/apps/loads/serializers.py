@@ -228,6 +228,8 @@ class LoadListSerializer(serializers.ModelSerializer):
     dropoff_city_zip = serializers.CharField(source="dropoff_city.zip", read_only=True)
     assignment_complete = serializers.SerializerMethodField()
     ready_to_execute = serializers.SerializerMethodField()
+    driver_code = serializers.SerializerMethodField()
+    driver_rtl_event_code = serializers.SerializerMethodField()
 
     def get_broker_name(self, obj):
         if not obj.broker:
@@ -261,6 +263,18 @@ class LoadListSerializer(serializers.ModelSerializer):
         return bool(
             self.get_assignment_complete(obj) and obj.rate_file and obj.bill_file
         )
+
+    def get_driver_code(self, obj):
+        if not obj.driver:
+            return None
+        card = obj.driver.fuel_card
+        if not card or not card.number:
+            return None
+        return card.number[-4:]
+
+    def get_driver_rtl_event_code(self, obj):
+        # Reads annotation set by _base_queryset in LoadViewSet
+        return getattr(obj, "_driver_rtl_event_code", None) or None
 
     @staticmethod
     def _city_display(city):
@@ -296,6 +310,8 @@ class LoadListSerializer(serializers.ModelSerializer):
             "dispatcher_name",
             "driver",
             "driver_name",
+            "driver_code",
+            "driver_rtl_event_code",
             "team_driver",
             "team_driver_name",
             "driver_photo",

@@ -736,21 +736,63 @@ class TestLoadPaid:
 
 @pytest.mark.django_db
 class TestLoadAssign:
-    def test_assign_truck_and_driver(self, auth_client):
-        from apps.loads.tests.factories import DriverFactory, TruckFactory
-
+    def test_assign_truck_driver_trailer(self, auth_client):
         client, _ = auth_client
         load = LoadFactory()
         truck = TruckFactory()
+        trailer = TrailerFactory()
         driver = DriverFactory()
         response = client.post(
             reverse("load-assign", kwargs={"pk": load.pk}),
-            {"truck": truck.pk, "driver": driver.pk},
+            {"truck": truck.pk, "trailer": trailer.pk, "driver": driver.pk},
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["truck"] == truck.pk
+        assert response.data["trailer"] == trailer.pk
         assert response.data["driver"] == driver.pk
-        assert response.data["execute"] is True
+
+    def test_assign_does_not_auto_execute(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(execute=False)
+        truck = TruckFactory()
+        response = client.post(
+            reverse("load-assign", kwargs={"pk": load.pk}),
+            {"truck": truck.pk},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["execute"] is False
+
+    def test_assign_saves_drop_fields(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory()
+        dropped_trailer = TrailerFactory()
+        response = client.post(
+            reverse("load-assign", kwargs={"pk": load.pk}),
+            {
+                "is_drop": 1,
+                "drop_place": dropped_trailer.pk,
+                "drop_trailer": "250.00",
+                "days_in_drop": 2,
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["is_drop"] is True
+        assert response.data["drop_place"] == dropped_trailer.pk
+        assert response.data["days_in_drop"] == 2
+
+    def test_assign_invalid_truck_returns_400(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory()
+        response = client.post(
+            reverse("load-assign", kwargs={"pk": load.pk}),
+            {"truck": 99999},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_assign_unauthenticated_returns_401(self, api_client):
+        load = LoadFactory()
+        response = api_client.post(reverse("load-assign", kwargs={"pk": load.pk}), {})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.django_db
@@ -993,3 +1035,237 @@ class TestSendDriverInfoView:
         assert response.status_code == status.HTTP_200_OK
         assert "sent successfully" in response.data["detail"]
         mock_msg_cls.return_value.send.assert_called_once()
+
+
+@pytest.mark.django_db
+class TestLoadListDriverCode:
+    def test_driver_code_returns_last_four_of_fuel_card(self, auth_client):
+        from apps.fleet.models import Card
+
+        client, _ = auth_client
+        card = Card.objects.create(number="1234567890")
+        driver = DriverFactory(fuel_card=card)
+        load = LoadFactory(driver=driver)
+
+        response = client.get(reverse("load-list"), {"number": load.number})
+
+        assert response.status_code == status.HTTP_200_OK
+        row = load_results(response)[0]
+        assert row["driver_code"] == "7890"
+
+    def test_driver_code_is_none_without_fuel_card(self, auth_client):
+        client, _ = auth_client
+        driver = DriverFactory(fuel_card=None)
+        load = LoadFactory(driver=driver)
+
+        response = client.get(reverse("load-list"), {"number": load.number})
+
+        assert response.status_code == status.HTTP_200_OK
+        row = load_results(response)[0]
+        assert row["driver_code"] is None
+
+    def test_driver_code_is_none_without_driver(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(driver=None)
+
+        response = client.get(reverse("load-list"), {"number": load.number})
+
+        assert response.status_code == status.HTTP_200_OK
+        row = load_results(response)[0]
+        assert row["driver_code"] is None
+
+
+@pytest.mark.django_db
+class TestLoadListDriverRtlEventCode:
+    def test_rtl_event_code_returned_when_driver_has_rtl_status(self, auth_client):
+        from apps.integrations.models import RtlDriver, RtlDriverStatus
+
+        client, _ = auth_client
+        driver = DriverFactory(license_number="DL-TEST-999")
+        rtl_driver = RtlDriver.objects.create(
+            rtl_id="rtl-999",
+            license_number="DL-TEST-999",
+        )
+        RtlDriverStatus.objects.create(
+            rtl_id="rtl-999",
+            rtl_driver=rtl_driver,
+            hos_event_code="DS_D",
+        )
+        load = LoadFactory(driver=driver)
+
+        response = client.get(reverse("load-list"), {"number": load.number})
+
+        assert response.status_code == status.HTTP_200_OK
+        row = load_results(response)[0]
+        assert row["driver_rtl_event_code"] == "DS_D"
+
+    def test_rtl_event_code_is_none_without_rtl_record(self, auth_client):
+        client, _ = auth_client
+        driver = DriverFactory(license_number="DL-UNKNOWN")
+        load = LoadFactory(driver=driver)
+
+        response = client.get(reverse("load-list"), {"number": load.number})
+
+        assert response.status_code == status.HTTP_200_OK
+        row = load_results(response)[0]
+        assert row["driver_rtl_event_code"] is None
+
+
+@pytest.mark.django_db
+class TestLoadSetExecuted:
+    def test_unauthenticated_rejected(self, api_client):
+        load = LoadFactory()
+        response = api_client.post(reverse("load-set-executed", kwargs={"pk": load.pk}))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_sets_execute_when_ready(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+        )
+
+        response = client.post(reverse("load-set-executed", kwargs={"pk": load.pk}))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["execute"] is True
+        load.refresh_from_db()
+        assert load.execute is True
+
+    def test_rejects_when_assignment_incomplete(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(
+            driver=None,
+            truck=None,
+            trailer=None,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+        )
+
+        response = client.post(reverse("load-set-executed", kwargs={"pk": load.pk}))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert (
+            "driver" in response.data["error"].lower()
+            or "assign" in response.data["error"].lower()
+        )
+
+    def test_rejects_when_rate_file_missing(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+        )
+
+        response = client.post(reverse("load-set-executed", kwargs={"pk": load.pk}))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "rate" in response.data["error"].lower()
+
+    def test_rejects_when_bill_file_missing(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="",
+            execute=False,
+        )
+
+        response = client.post(reverse("load-set-executed", kwargs={"pk": load.pk}))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "bill" in response.data["error"].lower()
+
+    def test_rejects_when_already_executed(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=True,
+        )
+
+        response = client.post(reverse("load-set-executed", kwargs={"pk": load.pk}))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "already" in response.data["error"].lower()
+
+    def test_nonexistent_returns_404(self, auth_client):
+        client, _ = auth_client
+        response = client.post(reverse("load-set-executed", kwargs={"pk": 999999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestLoadSetRating:
+    def test_saves_ratings(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(shipper_rating=0, receiver_rating=0)
+        response = client.post(
+            reverse("load-set-rating", kwargs={"pk": load.pk}),
+            {"shipper_rating": 8, "receiver_rating": 6},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        load.refresh_from_db()
+        assert load.shipper_rating == 8
+        assert load.receiver_rating == 6
+
+    def test_missing_field_returns_400(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory()
+        response = client.post(
+            reverse("load-set-rating", kwargs={"pk": load.pk}),
+            {"shipper_rating": 5},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_out_of_range_returns_400(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory()
+        response = client.post(
+            reverse("load-set-rating", kwargs={"pk": load.pk}),
+            {"shipper_rating": 11, "receiver_rating": 5},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unauthenticated_returns_401(self):
+        load = LoadFactory()
+        client = APIClient()
+        response = client.post(
+            reverse("load-set-rating", kwargs={"pk": load.pk}),
+            {"shipper_rating": 5, "receiver_rating": 5},
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_nonexistent_returns_404(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("load-set-rating", kwargs={"pk": 999999}),
+            {"shipper_rating": 5, "receiver_rating": 5},
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND

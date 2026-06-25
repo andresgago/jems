@@ -1,6 +1,7 @@
 from datetime import datetime, time
 
-from django.db.models import Q
+from django.core.exceptions import ValidationError
+from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import status
@@ -10,9 +11,10 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
+from apps.integrations.models import RtlDriverStatus
 from apps.locations.models import City
 
-from .exceptions import InvalidStatusTransition
+from .exceptions import InvalidStatusTransition, NotReadyToExecute
 from .models import Load, LoadStop
 from .serializers import LoadListSerializer, LoadSerializer, LoadStopSerializer
 from .services import (
@@ -22,8 +24,10 @@ from .services import (
     delete_load,
     delete_load_stop,
     send_driver_info,
+    set_executed,
     set_history,
     set_invoiced,
+    set_load_rating,
     set_load_status,
     set_paid,
     update_load,
@@ -68,23 +72,33 @@ class LoadViewSet(ViewSet):
     permission_classes = [IsAdminOrDispatcher]
 
     def _base_queryset(self):
-        return Load.objects.select_related(
-            "broker",
-            "dispatcher",
-            "driver",
-            "team_driver",
-            "truck",
-            "trailer",
-            "trailer__trailer_type",
-            "trailer_type",
-            "pickup_city",
-            "pickup_city__state",
-            "dropoff_city",
-            "dropoff_city__state",
-            "shipper",
-            "receiver",
-            "carrier",
-        ).prefetch_related("stops")
+        _rtl_sq = Subquery(
+            RtlDriverStatus.objects.filter(
+                rtl_driver__license_number=OuterRef("driver__license_number")
+            ).values("hos_event_code")[:1]
+        )
+        return (
+            Load.objects.select_related(
+                "broker",
+                "dispatcher",
+                "driver",
+                "driver__fuel_card",
+                "team_driver",
+                "truck",
+                "trailer",
+                "trailer__trailer_type",
+                "trailer_type",
+                "pickup_city",
+                "pickup_city__state",
+                "dropoff_city",
+                "dropoff_city__state",
+                "shipper",
+                "receiver",
+                "carrier",
+            )
+            .annotate(_driver_rtl_event_code=_rtl_sq)
+            .prefetch_related("stops")
+        )
 
     def list(self, request):
         qs = self._base_queryset()
@@ -240,19 +254,30 @@ class LoadViewSet(ViewSet):
         from apps.fleet.models import Truck, Trailer
         from apps.drivers.models import Driver
 
-        truck_id = request.data.get("truck")
-        trailer_id = request.data.get("trailer")
-        driver_id = request.data.get("driver")
+        truck_id = request.data.get("truck") or None
+        trailer_id = request.data.get("trailer") or None
+        driver_id = request.data.get("driver") or None
+        drop_place_id = request.data.get("drop_place") or None
 
-        truck = Truck.objects.get(pk=truck_id) if truck_id else None
-        trailer = Trailer.objects.get(pk=trailer_id) if trailer_id else None
-        driver = Driver.objects.get(pk=driver_id) if driver_id else None
+        try:
+            truck = Truck.objects.get(pk=truck_id) if truck_id else None
+            trailer = Trailer.objects.get(pk=trailer_id) if trailer_id else None
+            driver = Driver.objects.get(pk=driver_id) if driver_id else None
+            drop_place_trailer = (
+                Trailer.objects.get(pk=drop_place_id) if drop_place_id else None
+            )
+        except (Truck.DoesNotExist, Trailer.DoesNotExist, Driver.DoesNotExist) as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         load = assign_load(
             load=load,
             truck=truck,
             trailer=trailer,
             driver=driver,
+            is_drop=request.data.get("is_drop", 0),
+            drop_place=drop_place_trailer,
+            drop_trailer=request.data.get("drop_trailer", 0.0),
+            days_in_drop=request.data.get("days_in_drop", 0),
             updated_by=request.user,
         )
         return Response(LoadSerializer(load).data)
@@ -304,6 +329,42 @@ class LoadViewSet(ViewSet):
         except Load.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         load = set_history(load=load)
+        return Response(LoadSerializer(load).data)
+
+    @action(detail=True, methods=["post"], url_path="set-rating")
+    def set_rating_action(self, request, pk=None):
+        try:
+            load = Load.objects.get(pk=pk)
+        except Load.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        shipper_rating = request.data.get("shipper_rating")
+        receiver_rating = request.data.get("receiver_rating")
+        if shipper_rating is None or receiver_rating is None:
+            return Response(
+                {"error": "shipper_rating and receiver_rating are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            load = set_load_rating(
+                load=load,
+                shipper_rating=int(shipper_rating),
+                receiver_rating=int(receiver_rating),
+                updated_by=request.user,
+            )
+        except (ValidationError, ValueError) as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(LoadSerializer(load).data)
+
+    @action(detail=True, methods=["post"], url_path="set-executed")
+    def set_executed_action(self, request, pk=None):
+        try:
+            load = Load.objects.get(pk=pk)
+        except Load.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        try:
+            load = set_executed(load=load, updated_by=request.user)
+        except NotReadyToExecute as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(LoadSerializer(load).data)
 
     # --- Stops nested ---

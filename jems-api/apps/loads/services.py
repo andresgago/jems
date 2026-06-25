@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMessage, get_connection
 from django.db import transaction
+from django.db.models import Count, Sum
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -96,7 +97,12 @@ def _accounting_day_from(dropoff: Any) -> int:
 
 # Valid status transitions: current -> allowed next statuses
 _ALLOWED_TRANSITIONS: dict[int, set[int]] = {
-    Load.Status.REGISTERED: {Load.Status.STARTED, Load.Status.CANCELLED},
+    Load.Status.REGISTERED: {
+        Load.Status.STARTED,
+        Load.Status.FINISHED,
+        Load.Status.DETENTION_PENDING,
+        Load.Status.CANCELLED,
+    },
     Load.Status.STARTED: {
         Load.Status.FINISHED,
         Load.Status.DETENTION_PENDING,
@@ -143,31 +149,44 @@ def update_load(*, load: Load, **kwargs: Any) -> Load:
     return load
 
 
+_UNSET: Any = object()
+
+
 def assign_load(
     *,
     load: Load,
-    truck: Optional[Any] = None,
-    trailer: Optional[Any] = None,
-    driver: Optional[Any] = None,
-    dispatcher: Optional[Any] = None,
+    truck: Any = _UNSET,
+    trailer: Any = _UNSET,
+    driver: Any = _UNSET,
+    is_drop: Any = _UNSET,
+    drop_place: Any = _UNSET,
+    drop_trailer: Any = _UNSET,
+    days_in_drop: Any = _UNSET,
+    dispatcher: Any = _UNSET,
     updated_by: Optional[Any] = None,
 ) -> Load:
-    if truck is not None:
-        load.truck = truck
-    if trailer is not None:
-        load.trailer = trailer
-    if driver is not None:
+    if driver is not _UNSET:
         load.driver = driver
-        # Auto-assign team driver if driver type is "team" (type 5 in legacy)
-        if hasattr(driver, "team_driver") and driver.team_driver:
+        if driver is not None and hasattr(driver, "team_driver") and driver.team_driver:
             load.team_driver = driver.team_driver
         else:
             load.team_driver = None
-    if dispatcher is not None:
+    if truck is not _UNSET:
+        load.truck = truck
+    if trailer is not _UNSET:
+        load.trailer = trailer
+    if is_drop is not _UNSET:
+        load.is_drop = bool(is_drop)
+    if drop_place is not _UNSET:
+        load.drop_place = drop_place  # Trailer instance or None
+    if drop_trailer is not _UNSET:
+        load.drop_trailer = float(drop_trailer)
+    if days_in_drop is not _UNSET:
+        load.days_in_drop = int(days_in_drop)
+    if dispatcher is not _UNSET:
         load.dispatcher = dispatcher
     if updated_by is not None:
         load.updated_by = updated_by
-    load.execute = True
     load.save()
     return load
 
@@ -211,6 +230,63 @@ def set_paid(*, load: Load) -> Load:
 def set_history(*, load: Load) -> Load:
     load.history = not load.history
     load.save(update_fields=["history"])
+    return load
+
+
+def set_executed(*, load: Load, updated_by: Optional[Any] = None) -> Load:
+    """Move a load from dispatch to executed (requires assignment + rate + bill)."""
+    from .exceptions import NotReadyToExecute
+
+    if not (load.driver_id and load.truck_id and load.trailer_id):
+        raise NotReadyToExecute("Load must have driver, truck, and trailer assigned.")
+    if not load.rate_file:
+        raise NotReadyToExecute("Rate confirmation file is required.")
+    if not load.bill_file:
+        raise NotReadyToExecute("Bill of lading file is required.")
+    if load.execute:
+        raise NotReadyToExecute("Load is already executed.")
+    load.execute = True
+    if updated_by is not None:
+        load.updated_by = updated_by
+    load.save(update_fields=["execute", "updated_by"])
+    return load
+
+
+def set_load_rating(
+    *,
+    load: Load,
+    shipper_rating: int,
+    receiver_rating: int,
+    updated_by: Optional[Any] = None,
+) -> Load:
+    """Save shipper/receiver ratings and recalculate Business.rating for each."""
+    from apps.brokers.models import Business
+
+    if not (0 <= shipper_rating <= 10):
+        raise ValidationError("shipper_rating must be between 0 and 10.")
+    if not (0 <= receiver_rating <= 10):
+        raise ValidationError("receiver_rating must be between 0 and 10.")
+
+    load.shipper_rating = shipper_rating
+    load.receiver_rating = receiver_rating
+    if updated_by is not None:
+        load.updated_by = updated_by
+    load.save(update_fields=["shipper_rating", "receiver_rating", "updated_by"])
+
+    for business_id in (
+        bid for bid in (load.shipper_id, load.receiver_id) if bid is not None
+    ):
+        shipper_agg = Load.objects.filter(shipper_id=business_id).aggregate(
+            total=Sum("shipper_rating"), cnt=Count("id")
+        )
+        receiver_agg = Load.objects.filter(receiver_id=business_id).aggregate(
+            total=Sum("receiver_rating"), cnt=Count("id")
+        )
+        total = (shipper_agg["total"] or 0) + (receiver_agg["total"] or 0)
+        count = (shipper_agg["cnt"] or 0) + (receiver_agg["cnt"] or 0)
+        rating = round(total / count) if count else 0
+        Business.objects.filter(pk=business_id).update(rating=rating)
+
     return load
 
 

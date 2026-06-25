@@ -44,12 +44,26 @@ pass() { echo "    OK: $1"; }
 
 fail() {
   echo
-  echo "FAIL: $1"
+  echo "============================================"
+  echo " FAIL: $1"
+  echo "============================================"
   if [[ -n "${2:-}" ]]; then
     echo "Response:"
     echo "$2" | head -20
   fi
   exit 1
+}
+
+# Called by set -e when any command exits non-zero (outside of fail()).
+# Prints the line that blew up and the last server log lines for diagnosis.
+on_error() {
+  local line="${BASH_LINENO[0]:-?}"
+  echo
+  echo "============================================"
+  echo " SCRIPT ABORTED at line ${line}"
+  echo "============================================"
+  echo "Last 30 lines of server log:"
+  tail -30 /tmp/jems-server.log 2>/dev/null || echo "(no server log found)"
 }
 
 psql_no_db() {
@@ -176,6 +190,8 @@ free_port() {
 }
 
 cleanup() {
+  # Disable ERR trap inside cleanup so its own commands don't re-trigger on_error.
+  trap - ERR
   if [[ -n "${SERVER_PID}" ]]; then
     kill "${SERVER_PID}" 2>/dev/null || true
   fi
@@ -217,6 +233,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 trap 'cleanup' EXIT INT TERM
+trap 'on_error' ERR
 TOKEN=""
 
 # ── Database setup ────────────────────────────────────────────────────────────
@@ -278,7 +295,9 @@ DriverType.objects.get_or_create(id=4, defaults={'name': 'Solo Driver', 'is_acti
 for code, name in {
     '90010': 'Income by Rate',
     '90011': 'Income by Detention',
+    '90014': 'Income by Drop Trailer',
     '10040': '% Factor dispatch by load',
+    '10041': '% Factor dispatch Drop',
     '80011': 'Expenses By Detention',
 }.items():
     Account.objects.get_or_create(code=code, defaults={'name': name})
@@ -1246,6 +1265,27 @@ step "Loads: assign (reassign truck/trailer/driver)"
 resp="$(post "/api/v1/loads/${LOAD_ID}/assign/" "{\"truck\":${TRUCK_ID},\"trailer\":${TRAILER_ID},\"driver\":${DRIVER_ID}}")"
 assert_status "load assign" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "load assigned truck" "$(body "$resp")" "${TRUCK_ID}"
+assert_contains "load assign must not auto-execute" "$(body "$resp")" '"execute":false'
+
+step "Loads: assign with drop trailer fields"
+resp="$(post "/api/v1/loads/${LOAD_ID}/assign/" "{\"truck\":${TRUCK_ID},\"trailer\":${TRAILER_ID},\"driver\":${DRIVER_ID},\"is_drop\":1,\"drop_place\":${TRAILER_ID},\"drop_trailer\":150.0,\"days_in_drop\":3}")"
+assert_status "load assign drop" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "load assign is_drop set" "$(body "$resp")" '"is_drop":true'
+assert_contains "load assign days_in_drop" "$(body "$resp")" '"days_in_drop":3'
+
+step "Loads: assign with invalid truck ID returns 400"
+resp="$(post "/api/v1/loads/${LOAD_ID}/assign/" '{"truck":999999}')"
+assert_status "load assign invalid truck" "400" "$(code "$resp")" "$(body "$resp")"
+
+step "Loads: set-rating (shipper and receiver)"
+resp="$(post "/api/v1/loads/${LOAD_ID}/set-rating/" '{"shipper_rating":8,"receiver_rating":6}')"
+assert_status "load set-rating" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "load shipper_rating saved" "$(body "$resp")" '"shipper_rating":8'
+assert_contains "load receiver_rating saved" "$(body "$resp")" '"receiver_rating":6'
+
+step "Loads: set-rating out-of-range returns 400"
+resp="$(post "/api/v1/loads/${LOAD_ID}/set-rating/" '{"shipper_rating":11,"receiver_rating":5}')"
+assert_status "load set-rating out-of-range" "400" "$(code "$resp")" "$(body "$resp")"
 
 step "Loads: set-status (advance to STARTED)"
 resp="$(post "/api/v1/loads/${LOAD_ID}/set-status/" '{"status":2}')"
@@ -1925,6 +1965,8 @@ resp="$(get "/api/v1/fleet/trailers/${TRAILER_ID}/")"
 assert_status "trailer still exists" "200" "$(code "$resp")"
 
 # ── Final summary ─────────────────────────────────────────────────────────────
+# Disable ERR trap — we're done, exit 0 is intentional.
+trap - ERR
 echo
 echo "============================================"
 echo " All checks passed."

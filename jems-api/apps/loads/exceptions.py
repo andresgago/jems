@@ -7,3 +7,7 @@ class InvalidStatusTransition(ValidationError):
 
 class LoadAlreadyAssigned(ValidationError):
     pass
+
+
+class NotReadyToExecute(ValidationError):
+    pass

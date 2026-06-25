@@ -9,13 +9,16 @@ from apps.accounting.models import Account, Record
 from apps.drivers.models import DriverType
 from apps.loads.exceptions import InvalidStatusTransition
 from apps.loads.models import Load, LoadStop
+from apps.loads.exceptions import NotReadyToExecute
 from apps.loads.services import (
     _accounting_day_from,
     assign_load,
     create_load,
     create_load_stop,
     delete_load_stop,
+    set_executed,
     set_invoiced,
+    set_load_rating,
     set_load_status,
     set_paid,
     update_load,
@@ -23,10 +26,12 @@ from apps.loads.services import (
 )
 from apps.loads.tests.factories import (
     BrokerFactory,
+    BusinessFactory,
     CityFactory,
     DriverFactory,
     LoadFactory,
     LoadStopFactory,
+    TrailerFactory,
     TruckFactory,
 )
 
@@ -237,20 +242,66 @@ class TestUpdateLoad:
 
 @pytest.mark.django_db
 class TestAssignLoad:
-    def test_assigns_truck_and_driver(self):
+    def test_assigns_truck_trailer_driver(self):
         load = LoadFactory()
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        updated = assign_load(load=load, truck=truck, trailer=trailer, driver=driver)
+        assert updated.truck == truck
+        assert updated.trailer == trailer
+        assert updated.driver == driver
+
+    def test_does_not_auto_set_execute(self):
+        load = LoadFactory(execute=False)
         truck = TruckFactory()
         driver = DriverFactory()
         updated = assign_load(load=load, truck=truck, driver=driver)
-        assert updated.truck == truck
-        assert updated.driver == driver
-        assert updated.execute is True
+        assert updated.execute is False
 
     def test_clears_team_driver_when_no_team(self):
         load = LoadFactory()
         driver = DriverFactory()
         updated = assign_load(load=load, driver=driver)
         assert updated.team_driver is None
+
+    def test_clears_driver_when_passed_none(self):
+        driver = DriverFactory()
+        load = LoadFactory(driver=driver)
+        updated = assign_load(load=load, driver=None)
+        assert updated.driver is None
+        assert updated.team_driver is None
+
+    def test_untouched_fields_unchanged(self):
+        truck = TruckFactory()
+        load = LoadFactory(truck=truck)
+        updated = assign_load(load=load, driver=DriverFactory())
+        assert updated.truck == truck
+
+    def test_drop_fields_saved(self):
+        load = LoadFactory()
+        dropped_trailer = TrailerFactory()
+        updated = assign_load(
+            load=load,
+            is_drop=True,
+            drop_place=dropped_trailer,
+            drop_trailer=150.0,
+            days_in_drop=3,
+        )
+        assert updated.is_drop is True
+        assert updated.drop_place == dropped_trailer
+        assert updated.drop_trailer == 150.0
+        assert updated.days_in_drop == 3
+
+    def test_clearing_is_drop_resets_amount(self):
+        dropped_trailer = TrailerFactory()
+        load = LoadFactory(is_drop=True, drop_trailer=200.0, drop_place=dropped_trailer)
+        updated = assign_load(
+            load=load, is_drop=False, drop_trailer=0.0, drop_place=None
+        )
+        assert updated.is_drop is False
+        assert updated.drop_trailer == 0.0
+        assert updated.drop_place is None
 
 
 @pytest.mark.django_db
@@ -260,6 +311,21 @@ class TestSetLoadStatus:
         updated = set_load_status(load=load, new_status=Load.Status.STARTED)
         assert updated.status == Load.Status.STARTED
 
+    def test_registered_to_finished(self):
+        load = LoadFactory(status=Load.Status.REGISTERED)
+        updated = set_load_status(load=load, new_status=Load.Status.FINISHED)
+        assert updated.status == Load.Status.FINISHED
+
+    def test_registered_to_detention(self):
+        load = LoadFactory(status=Load.Status.REGISTERED)
+        updated = set_load_status(load=load, new_status=Load.Status.DETENTION_PENDING)
+        assert updated.status == Load.Status.DETENTION_PENDING
+
+    def test_registered_to_cancelled(self):
+        load = LoadFactory(status=Load.Status.REGISTERED)
+        updated = set_load_status(load=load, new_status=Load.Status.CANCELLED)
+        assert updated.status == Load.Status.CANCELLED
+
     def test_invalid_transition_raises(self):
         load = LoadFactory(status=Load.Status.FINISHED)
         with pytest.raises(InvalidStatusTransition):
@@ -267,6 +333,11 @@ class TestSetLoadStatus:
 
     def test_cannot_go_from_cancelled(self):
         load = LoadFactory(status=Load.Status.CANCELLED)
+        with pytest.raises(InvalidStatusTransition):
+            set_load_status(load=load, new_status=Load.Status.REGISTERED)
+
+    def test_cannot_go_from_finished(self):
+        load = LoadFactory(status=Load.Status.FINISHED)
         with pytest.raises(InvalidStatusTransition):
             set_load_status(load=load, new_status=Load.Status.REGISTERED)
 
@@ -496,3 +567,125 @@ class TestSendDriverInfo:
             )
 
         assert "Jane Smith" in captured_body["body"]
+
+
+@pytest.mark.django_db
+class TestSetExecuted:
+    def test_sets_execute_true_when_ready(self):
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+        )
+        result = set_executed(load=load)
+        assert result.execute is True
+        load.refresh_from_db()
+        assert load.execute is True
+
+    def test_raises_when_driver_missing(self):
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        load = LoadFactory(
+            driver=None,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+        )
+        with pytest.raises(NotReadyToExecute):
+            set_executed(load=load)
+
+    def test_raises_when_rate_file_missing(self):
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+        )
+        with pytest.raises(NotReadyToExecute):
+            set_executed(load=load)
+
+    def test_raises_when_bill_file_missing(self):
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="",
+            execute=False,
+        )
+        with pytest.raises(NotReadyToExecute):
+            set_executed(load=load)
+
+    def test_raises_when_already_executed(self):
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=True,
+        )
+        with pytest.raises(NotReadyToExecute):
+            set_executed(load=load)
+
+
+@pytest.mark.django_db
+class TestSetLoadRating:
+    def test_saves_ratings_on_load(self):
+        load = LoadFactory()
+        result = set_load_rating(load=load, shipper_rating=8, receiver_rating=6)
+        load.refresh_from_db()
+        assert result.shipper_rating == 8
+        assert load.shipper_rating == 8
+        assert load.receiver_rating == 6
+
+    def test_recalculates_business_rating_for_shipper(self):
+        shipper = BusinessFactory()
+        load = LoadFactory(shipper=shipper)
+        set_load_rating(load=load, shipper_rating=10, receiver_rating=0)
+        shipper.refresh_from_db()
+        # 1 load as shipper (rating=10), 0 as receiver → 10/1 = 10
+        assert shipper.rating == 10
+
+    def test_recalculates_business_rating_for_receiver(self):
+        receiver = BusinessFactory()
+        load = LoadFactory(receiver=receiver)
+        set_load_rating(load=load, shipper_rating=0, receiver_rating=8)
+        receiver.refresh_from_db()
+        # 0 loads as shipper, 1 as receiver (rating=8) → 8/1 = 8
+        assert receiver.rating == 8
+
+    def test_raises_on_shipper_rating_out_of_range(self):
+        load = LoadFactory()
+        with pytest.raises(ValidationError):
+            set_load_rating(load=load, shipper_rating=11, receiver_rating=5)
+
+    def test_raises_on_receiver_rating_out_of_range(self):
+        load = LoadFactory()
+        with pytest.raises(ValidationError):
+            set_load_rating(load=load, shipper_rating=5, receiver_rating=-1)
+
+    def test_zero_is_valid(self):
+        load = LoadFactory()
+        result = set_load_rating(load=load, shipper_rating=0, receiver_rating=0)
+        assert result.shipper_rating == 0
+        assert result.receiver_rating == 0

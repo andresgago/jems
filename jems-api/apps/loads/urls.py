@@ -12,6 +12,8 @@ load_set_status = LoadViewSet.as_view({"post": "set_status"})
 load_set_invoiced = LoadViewSet.as_view({"post": "toggle_invoiced"})
 load_set_paid = LoadViewSet.as_view({"post": "toggle_paid"})
 load_set_history = LoadViewSet.as_view({"post": "toggle_history"})
+load_set_executed = LoadViewSet.as_view({"post": "set_executed_action"})
+load_set_rating = LoadViewSet.as_view({"post": "set_rating_action"})
 load_stops = LoadViewSet.as_view({"get": "stops", "post": "stops"})
 
 # Stops detail
@@ -30,6 +32,8 @@ urlpatterns = [
     path("<int:pk>/set-invoiced/", load_set_invoiced, name="load-set-invoiced"),
     path("<int:pk>/set-paid/", load_set_paid, name="load-set-paid"),
     path("<int:pk>/set-history/", load_set_history, name="load-set-history"),
+    path("<int:pk>/set-executed/", load_set_executed, name="load-set-executed"),
+    path("<int:pk>/set-rating/", load_set_rating, name="load-set-rating"),
     path("<int:pk>/stops/", load_stops, name="load-stops"),
     path("<int:load_pk>/stops/<int:pk>/", stop_detail, name="load-stop-detail"),
     path("cities/search/", city_search, name="city-search"),
