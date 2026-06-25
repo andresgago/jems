@@ -316,22 +316,20 @@ class TestAssignLoad:
 
     def test_drop_fields_saved(self):
         load = LoadFactory()
-        dropped_trailer = TrailerFactory()
         updated = assign_load(
             load=load,
             is_drop=True,
-            drop_place=dropped_trailer,
+            drop_place=1,
             drop_trailer=150.0,
             days_in_drop=3,
         )
         assert updated.is_drop is True
-        assert updated.drop_place == dropped_trailer
+        assert updated.drop_place == 1
         assert updated.drop_trailer == 150.0
         assert updated.days_in_drop == 3
 
     def test_clearing_is_drop_resets_amount(self):
-        dropped_trailer = TrailerFactory()
-        load = LoadFactory(is_drop=True, drop_trailer=200.0, drop_place=dropped_trailer)
+        load = LoadFactory(is_drop=True, drop_trailer=200.0, drop_place=0)
         updated = assign_load(
             load=load, is_drop=False, drop_trailer=0.0, drop_place=None
         )

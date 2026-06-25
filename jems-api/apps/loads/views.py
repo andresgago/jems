@@ -300,15 +300,17 @@ class LoadViewSet(ViewSet):
         truck_id = request.data.get("truck") or None
         trailer_id = request.data.get("trailer") or None
         driver_id = request.data.get("driver") or None
-        drop_place_id = request.data.get("drop_place") or None
+        drop_place_raw = request.data.get("drop_place")
+        drop_place = (
+            int(drop_place_raw)
+            if drop_place_raw is not None and str(drop_place_raw).strip() != ""
+            else None
+        )
 
         try:
             truck = Truck.objects.get(pk=truck_id) if truck_id else None
             trailer = Trailer.objects.get(pk=trailer_id) if trailer_id else None
             driver = Driver.objects.get(pk=driver_id) if driver_id else None
-            drop_place_trailer = (
-                Trailer.objects.get(pk=drop_place_id) if drop_place_id else None
-            )
         except (Truck.DoesNotExist, Trailer.DoesNotExist, Driver.DoesNotExist) as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -318,7 +320,7 @@ class LoadViewSet(ViewSet):
             trailer=trailer,
             driver=driver,
             is_drop=request.data.get("is_drop", 0),
-            drop_place=drop_place_trailer,
+            drop_place=drop_place,
             drop_trailer=request.data.get("drop_trailer", 0.0),
             days_in_drop=request.data.get("days_in_drop", 0),
             updated_by=request.user,

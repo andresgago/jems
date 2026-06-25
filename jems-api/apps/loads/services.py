@@ -199,7 +199,7 @@ def assign_load(
     if is_drop is not _UNSET:
         load.is_drop = bool(is_drop)
     if drop_place is not _UNSET:
-        load.drop_place = drop_place  # Trailer instance or None
+        load.drop_place = drop_place  # 0 (dropoff), 1 (pickup), or None
     if drop_trailer is not _UNSET:
         load.drop_trailer = float(drop_trailer)
     if days_in_drop is not _UNSET:

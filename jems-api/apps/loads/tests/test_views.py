@@ -904,20 +904,29 @@ class TestLoadAssign:
     def test_assign_saves_drop_fields(self, auth_client):
         client, _ = auth_client
         load = LoadFactory()
-        dropped_trailer = TrailerFactory()
         response = client.post(
             reverse("load-assign", kwargs={"pk": load.pk}),
             {
                 "is_drop": 1,
-                "drop_place": dropped_trailer.pk,
+                "drop_place": 1,
                 "drop_trailer": "250.00",
                 "days_in_drop": 2,
             },
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["is_drop"] is True
-        assert response.data["drop_place"] == dropped_trailer.pk
+        assert response.data["drop_place"] == 1
         assert response.data["days_in_drop"] == 2
+
+    def test_assign_saves_drop_place_at_dropoff(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory()
+        response = client.post(
+            reverse("load-assign", kwargs={"pk": load.pk}),
+            {"is_drop": 1, "drop_place": 0, "days_in_drop": 1},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["drop_place"] == 0
 
     def test_assign_invalid_truck_returns_400(self, auth_client):
         client, _ = auth_client

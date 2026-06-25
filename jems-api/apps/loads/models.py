@@ -147,14 +147,17 @@ class Load(models.Model):
         related_name="loads",
     )
     drivers_paid = models.BooleanField(default=False)
+
+    class DropPlace(models.IntegerChoices):
+        DROPOFF = 0, "In drop off"
+        PICKUP = 1, "In pick up"
+
     # Drop related
     is_drop = models.BooleanField(default=False)
-    drop_place = models.ForeignKey(
-        "fleet.Trailer",
-        on_delete=models.SET_NULL,
+    drop_place = models.IntegerField(
+        choices=DropPlace.choices,
         null=True,
         blank=True,
-        related_name="drop_loads",
     )
     days_in_drop = models.IntegerField(default=0)
     # Notification flags
