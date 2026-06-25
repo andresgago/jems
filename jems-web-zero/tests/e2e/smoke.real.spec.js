@@ -214,6 +214,11 @@ test('can create and delete a load via API (real)', async ({ page }) => {
 
   const shipper = await apiPost(page, token, '/brokers/business/', { name: `E2E Shipper ${Date.now()}` })
   const receiver = await apiPost(page, token, '/brokers/business/', { name: `E2E Receiver ${Date.now()}` })
+  const contact = await apiPost(page, token, `/brokers/${brokerId}/contacts/`, {
+    name: `E2E Broker Contact ${Date.now()}`,
+    email: `e2e-contact-${Date.now()}@example.com`,
+    phone: '555-0101',
+  })
 
   const number = `E2E-${Date.now()}`
   const created = await apiPost(page, token, '/loads/', {
@@ -230,7 +235,7 @@ test('can create and delete a load via API (real)', async ({ page }) => {
     trailer_type: trailerTypeId,
     carrier: carrierId,
     broker: brokerId,
-    broker_contacts: 'E2E contact',
+    broker_contacts: String(contact.id),
     shipper: shipper.id,
     receiver: receiver.id,
   })
@@ -238,7 +243,12 @@ test('can create and delete a load via API (real)', async ({ page }) => {
   expect(created.id).toBeTruthy()
   expect(created.number).toBe(number)
 
+  const brokerContacts = await apiGet(page, token, `/loads/${created.id}/broker-contacts/`)
+  expect(brokerContacts.broker.id).toBe(brokerId)
+  expect(brokerContacts.contacts.map((item) => item.id)).toContain(contact.id)
+
   await apiDelete(page, token, `/loads/${created.id}/`)
+  await apiDelete(page, token, `/brokers/${brokerId}/contacts/${contact.id}/`)
 })
 
 // ── Locations: states endpoint ────────────────────────────────────────────────

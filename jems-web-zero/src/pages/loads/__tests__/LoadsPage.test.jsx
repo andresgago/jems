@@ -21,6 +21,7 @@ vi.mock('../../../services/loads', async () => {
       destroy: vi.fn(),
       bulkDelete: vi.fn(),
       setExecuted: vi.fn(),
+      brokerContacts: vi.fn(),
     },
   };
 });
@@ -101,6 +102,7 @@ const rows = [
     status: 1,
     broker: 10,
     broker_name: 'Local Jobee',
+    broker_contacts: '20,21',
     broker_denied: true,
     broker_debtor_buy_status: 'No Buy - Denied For Purchases',
     carrier_name: 'JOBEE EXPRESS LLC',
@@ -163,9 +165,64 @@ describe('LoadsPage', () => {
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
     await waitFor(() => expect(usersService.options).toHaveBeenCalled());
 
-    const broker = screen.getByRole('link', { name: /Local Jobee/i });
+    const broker = screen.getByRole('button', { name: /Local Jobee/i });
     expect(broker).toHaveClass('broker-denied');
     expect(broker).toHaveAttribute('title', 'No Buy - Denied For Purchases');
+  });
+
+  it('opens selected contacts from the broker name like the legacy grid link', async () => {
+    loadsService.brokerContacts.mockResolvedValue({
+      data: {
+        broker: {
+          id: 10,
+          name: 'Royal Transportation Services',
+          dba_name: 'Royal',
+          mc: 'MC123456',
+          email: 'ops@broker.test',
+          phone: '555-0100',
+          accounting_email: 'ap@broker.test',
+          status: 1,
+          status_display: 'Active',
+          debtor_buy_status: 'Approved For Purchases',
+          checked_at: '2026-06-25',
+          details: 'Preferred broker',
+          created_by_name: 'Dispatch Admin',
+          created_at: '2023-05-15T17:57:03',
+          updated_by_name: 'System',
+          updated_at: '2026-06-25T08:00:01',
+        },
+        contacts: [
+          { id: 21, name: 'Amy Contact', email: 'amy@broker.test', phone: '555-0101' },
+          { id: 20, name: 'Zed Contact', email: 'zed@broker.test', phone: '555-0102' },
+        ],
+      },
+    });
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /Local Jobee/i }));
+
+    await waitFor(() => expect(loadsService.brokerContacts).toHaveBeenCalledWith(1));
+    expect(await screen.findByRole('heading', { name: 'Royal Transportation Services' })).toBeInTheDocument();
+    expect(screen.getByText('MC')).toBeInTheDocument();
+    expect(screen.getByText('Legal name')).toBeInTheDocument();
+    expect(screen.getByText('Short name')).toBeInTheDocument();
+    expect(screen.getByText('Royal')).toBeInTheDocument();
+    expect(screen.getByText('Debtor Buy Status')).toBeInTheDocument();
+    expect(screen.getByText('Approved For Purchases (06/25/2026)')).toBeInTheDocument();
+    expect(screen.getByText('Created By')).toBeInTheDocument();
+    expect(screen.getByText('Dispatch Admin')).toBeInTheDocument();
+    expect(screen.getByText('Created At')).toBeInTheDocument();
+    expect(screen.getByText('2023-05-15 17:57:03')).toBeInTheDocument();
+    expect(screen.getByText('Updated By')).toBeInTheDocument();
+    expect(screen.getByText('System')).toBeInTheDocument();
+    expect(screen.getByText('Updated At')).toBeInTheDocument();
+    expect(screen.getByText('2026-06-25 08:00:01')).toBeInTheDocument();
+    expect(screen.queryByText('555-0100')).not.toBeInTheDocument();
+    expect(screen.getByText("Load's contacts")).toBeInTheDocument();
+    expect(screen.getByText('Amy Contact')).toBeInTheDocument();
+    expect(screen.getByText('amy@broker.test')).toBeInTheDocument();
+    expect(screen.getByText('Zed Contact')).toBeInTheDocument();
   });
 
   it('applies column filters through useLoads params', async () => {
@@ -261,16 +318,16 @@ describe('LoadsPage', () => {
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
     await waitFor(() => expect(usersService.options).toHaveBeenCalled());
 
-    expect(screen.getByRole('link', { name: /Local Jobee/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Local Jobee/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Reset Grid/i }));
 
-    expect(screen.queryByRole('link', { name: /Local Jobee/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Local Jobee/i })).not.toBeInTheDocument();
     expect(screen.getByText('No loads found.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Search/i }));
 
-    expect(screen.getByRole('link', { name: /Local Jobee/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Local Jobee/i })).toBeInTheDocument();
   });
 
   it('shows Total 0 items when All mode has no matching rows', async () => {

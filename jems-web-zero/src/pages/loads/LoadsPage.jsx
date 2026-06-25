@@ -73,6 +73,22 @@ function formatDateTime(value) {
   });
 }
 
+function formatLegacyDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function formatBrokerCheckedAt(value) {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${pad(date.getMonth() + 1)}/${pad(date.getDate())}/${date.getFullYear()}`;
+}
+
 const RTL_EVENT_LABEL = {
   DS_D:     'Driving',
   DS_ON:    'On Duty',
@@ -156,6 +172,123 @@ function CityCell({ city, zip, date, isDrop, daysInDrop }) {
         ) : null}
       </div>
       <div className="text-muted small">{formatDateTime(date)}</div>
+    </div>
+  );
+}
+
+function BrokerContactsModal({ state, onClose }) {
+  const broker = state.data?.broker;
+  const contacts = state.data?.contacts || [];
+  const brokerName = broker?.name || state.load?.broker_name || 'Broker';
+  const debtorStatus = broker?.debtor_buy_status || '';
+  const checkedAt = formatBrokerCheckedAt(broker?.checked_at);
+  const debtorStatusText = debtorStatus && checkedAt ? `${debtorStatus} (${checkedAt})` : debtorStatus;
+  const isApproved = debtorStatus.toLowerCase().includes('approved');
+  const detailRows = [
+    ['MC', broker?.mc || ''],
+    ['Legal name', broker?.name || ''],
+    ['Short name', broker?.dba_name || ''],
+    ['Email', broker?.email || '', broker?.email ? `mailto:${broker.email}` : ''],
+    ['Accounting email', broker?.accounting_email || '', broker?.accounting_email ? `mailto:${broker.accounting_email}` : ''],
+    ['Status', broker?.status_display || (broker?.status === 1 ? 'Active' : broker?.status === 0 ? 'Inactive' : '')],
+    ['Debtor Buy Status', debtorStatusText, '', isApproved ? 'approved' : debtorStatus ? 'denied' : ''],
+    ['Details', broker?.details || ''],
+  ];
+
+  return (
+    <div className="modal fade show d-block broker-contacts-modal" tabIndex="-1" role="dialog" aria-modal="true" aria-labelledby="broker-contacts-title">
+      <div className="modal-dialog modal-xl">
+        <div className="modal-content broker-contacts-modal-content">
+          <div className="modal-header broker-contacts-modal-header">
+            <h3 className="modal-title" id="broker-contacts-title">{brokerName}</h3>
+            <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
+          </div>
+          <div className="modal-body broker-contacts-modal-body">
+            {state.loading ? (
+              <div className="text-center py-4">
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+                Loading contacts...
+              </div>
+            ) : null}
+            {state.error ? <div className="alert alert-danger mb-0">{state.error}</div> : null}
+            {!state.loading && !state.error && broker ? (
+              <>
+                <table className="table broker-detail-table">
+                  <tbody>
+                    {detailRows.map(([label, value, href, stateClass]) => (
+                      <tr key={label}>
+                        <th>{label}</th>
+                        <td className={stateClass ? `broker-status-cell ${stateClass}` : ''}>
+                          {href ? <a href={href}>{value}</a> : value}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="broker-audit-grid">
+                  <table className="table broker-detail-table">
+                    <tbody>
+                      <tr>
+                        <th>Created By</th>
+                        <td>{broker.created_by_name || ''}</td>
+                      </tr>
+                      <tr>
+                        <th>Created At</th>
+                        <td>{formatLegacyDateTime(broker.created_at)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <table className="table broker-detail-table">
+                    <tbody>
+                      <tr>
+                        <th>Updated By</th>
+                        <td>{broker.updated_by_name || ''}</td>
+                      </tr>
+                      <tr>
+                        <th>Updated At</th>
+                        <td>{formatLegacyDateTime(broker.updated_at)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {contacts.length ? (
+                  <div className="broker-load-contacts">
+                    <h5>Load's contacts</h5>
+                    <div className="table-responsive">
+                      <table className="table broker-load-contacts-table">
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {contacts.map((contact) => (
+                            <tr key={contact.id}>
+                              <td>{contact.name}</td>
+                              <td><a href={`mailto:${contact.email}`}>{contact.email}</a></td>
+                              <td>{contact.phone ? <a href={`tel:${contact.phone}`}>{contact.phone}</a> : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="broker-load-contacts">
+                    <h5>Load's contacts</h5>
+                    <div className="text-muted">No load contacts selected.</div>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -401,7 +534,7 @@ function isLoadStarted(load) {
   return now >= puB6 && now <= dropA8;
 }
 
-function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate }) {
+function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrokerInfo }) {
   const [actioning, setActioning] = useState(false);
   const trailerType = load.load_trailer_type_short_name || load.trailer_type_short_name || '-';
   const brokerTitle = load.broker_debtor_buy_status || load.broker_buy_status || 'Broker status';
@@ -459,14 +592,15 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate }) {
       <td className="text-center text-muted">{load.id}</td>
       <td className="text-center"><DriverPhoto load={load} /></td>
       <td className="text-center">
-        <Link
-          to={`/loads/${load.id}`}
-          className={`load-broker-link ${load.broker_denied ? 'broker-denied' : ''}`}
+        <button
+          type="button"
+          className={`btn btn-link btn-sm p-0 load-broker-link ${load.broker_denied ? 'broker-denied' : ''}`}
           title={brokerTitle}
+          onClick={() => onBrokerInfo(load)}
         >
           {load.broker_name || (load.broker ? `Broker #${load.broker}` : '—')}
           {load.broker_contacts ? <i className="bi bi-info-circle-fill ms-1" /> : null}
-        </Link>
+        </button>
         {load.carrier_name ? <div className="text-muted load-subline">{load.carrier_name}</div> : null}
       </td>
       <td className="text-center">
@@ -614,6 +748,7 @@ export default function LoadsPage() {
   const [updatingLocation, setUpdatingLocation] = useState(false);
   const [assigningLoad, setAssigningLoad] = useState(null);
   const [ratingLoad, setRatingLoad] = useState(null);
+  const [brokerContactsModal, setBrokerContactsModal] = useState(null);
   const [filterLabels, setFilterLabels] = useState({});
   const driverCacheRef = useRef(null);
   const { loads, count = 0, loading, error, refresh } = useLoads(filters);
@@ -792,6 +927,21 @@ export default function LoadsPage() {
       window.alert("Driver's location could not be updated. Please try again.");
     } finally {
       setUpdatingLocation(false);
+    }
+  };
+
+  const handleBrokerInfo = async (load) => {
+    setBrokerContactsModal({ load, loading: true, error: '', data: null });
+    try {
+      const { data } = await loadsService.brokerContacts(load.id);
+      setBrokerContactsModal({ load, loading: false, error: '', data });
+    } catch (err) {
+      setBrokerContactsModal({
+        load,
+        loading: false,
+        error: err.response?.data?.detail || 'Could not load broker contacts.',
+        data: null,
+      });
     }
   };
 
@@ -1006,6 +1156,7 @@ export default function LoadsPage() {
                   onChanged={refresh}
                   onAssign={setAssigningLoad}
                   onRate={setRatingLoad}
+                  onBrokerInfo={handleBrokerInfo}
                 />
               ))}
             </tbody>
@@ -1039,6 +1190,12 @@ export default function LoadsPage() {
       )}
       {showBrokersStatusModal && (
         <BrokersStatusModal onClose={() => setShowBrokersStatusModal(false)} />
+      )}
+      {brokerContactsModal && (
+        <BrokerContactsModal
+          state={brokerContactsModal}
+          onClose={() => setBrokerContactsModal(null)}
+        />
       )}
       {assigningLoad && (
         <AssignLoadModal

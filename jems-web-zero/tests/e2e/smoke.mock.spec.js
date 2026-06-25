@@ -118,6 +118,11 @@ const BROKER_DETAIL = {
   ],
 }
 
+const LOAD_BROKER_CONTACTS = {
+  broker: BROKER_DETAIL,
+  contacts: BROKER_DETAIL.contacts,
+}
+
 const BROKER_STATUS_RESULTS = [
   {
     id: 1, mc: 'MC001', name: 'Sunrise Freight LLC', dba_name: 'Sunrise',
@@ -383,6 +388,7 @@ async function mockApi(page) {
     if (/\/drivers\/\d+\/last-vehicle\/$/.test(pathname) && method === 'GET') return json(DRIVER_LAST_VEHICLE)
     if (/\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_DETAIL)
     if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({ detail: 'Driver information sent successfully.' })
+    if (/\/loads\/\d+\/broker-contacts\/$/.test(pathname) && method === 'GET') return json(LOAD_BROKER_CONTACTS)
     if (/\/loads\/\d+\/set-rating\/$/.test(pathname) && method === 'POST') return json({})
     if (/\/loads\/\d+\/set-status\/$/.test(pathname) && method === 'POST') return json({ id: 1, status: 3 })
     if (/\/loads\/\d+\/files\/[^/]+\/$/.test(pathname)) return json({})
@@ -1202,6 +1208,51 @@ test('loads page: individual delete button is present in action column', async (
   })
   await page.goto('/loads')
   await expect(page.getByTitle('Delete')).toBeVisible()
+})
+
+test('loads page: broker info button opens selected contacts modal', async ({ page }) => {
+  await withAuth(page)
+  await mockApi(page)
+  await page.route('**/api/v1/loads/**', async (route) => {
+    const method = route.request().method()
+    const url = new URL(route.request().url())
+    const { pathname } = url
+    const json = (data, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) })
+    if (/\/loads\/\d+\/broker-contacts\/$/.test(pathname) && method === 'GET') {
+      return json(LOAD_BROKER_CONTACTS)
+    }
+    if (pathname.endsWith('/loads/') && method === 'GET') {
+      return json({
+        results: [{
+          id: 1,
+          number: 'LD-001',
+          payment: 1500,
+          status: 1,
+          broker: 1,
+          broker_name: 'Sunrise',
+          broker_contacts: '1',
+          pickup_city_display: 'Dallas (TX)',
+          dropoff_city_display: 'Austin (TX)',
+          pickup_date: '2026-06-01T10:00:00Z',
+          dropoff_date: '2026-06-02T10:00:00Z',
+          assignment_complete: false,
+          ready_to_execute: false,
+          execute: false,
+          invoiced: false,
+          paid: false,
+        }],
+        count: 1,
+      })
+    }
+    return route.continue()
+  })
+
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /sunrise/i }).click()
+  await expect(page.getByRole('heading', { name: /sunrise/i })).toBeVisible()
+  await expect(page.getByText("Load's contacts")).toBeVisible()
+  await expect(page.getByText('John Smith')).toBeVisible()
 })
 
 test('loads page: bulk Delete All button is disabled with no selection', async ({ page }) => {

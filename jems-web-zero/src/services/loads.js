@@ -21,6 +21,7 @@ export const loadsService = {
   create:    (data)   => api.post('/loads/', data),
   update:    (id, data) => api.patch(`/loads/${id}/`, data),
   destroy:   (id)     => api.delete(`/loads/${id}/`),
+  brokerContacts: (id) => api.get(`/loads/${id}/broker-contacts/`),
   bulkDelete:(ids)    => api.post('/loads/bulk-delete/', { ids }),
   setStatus: (id, status) => api.post(`/loads/${id}/set-status/`, { status }),
   toggleInvoiced:(id) => api.post(`/loads/${id}/set-invoiced/`),

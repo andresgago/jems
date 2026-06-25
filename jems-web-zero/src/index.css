@@ -597,6 +597,134 @@ body {
   text-decoration: none;
 }
 
+.broker-contacts-modal {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.broker-contacts-modal .modal-xl {
+  max-width: min(96vw, 1260px);
+}
+
+.broker-contacts-modal-content {
+  border: 0;
+  border-radius: 0;
+  color: #777;
+}
+
+.broker-contacts-modal-header {
+  align-items: flex-start;
+  padding: 1.6rem 1.8rem 1rem;
+  border-bottom: 2px solid #ddd;
+}
+
+.broker-contacts-modal-header h3 {
+  color: #111;
+  font-size: 1.7rem;
+  font-weight: 800;
+}
+
+.broker-contacts-modal-header .btn-close {
+  opacity: 0.35;
+}
+
+.broker-contacts-modal-body {
+  padding: 1.5rem 1.8rem 0.5rem;
+}
+
+.broker-detail-table {
+  width: 100%;
+  margin-bottom: 1rem;
+  color: #777;
+  border: 1px solid #e4e9ee;
+}
+
+.broker-detail-table th,
+.broker-detail-table td {
+  padding: 0.85rem 1rem;
+  border: 1px solid #e4e9ee;
+  font-size: 1rem;
+}
+
+.broker-detail-table th {
+  width: 35%;
+  color: #666;
+  font-weight: 800;
+}
+
+.broker-detail-table tr:nth-child(odd) th,
+.broker-detail-table tr:nth-child(odd) td {
+  background: #f3f7fb;
+}
+
+.broker-status-cell.approved {
+  background: #0d8f43 !important;
+  color: #fff;
+  font-weight: 800;
+}
+
+.broker-status-cell.denied {
+  background: #d9534f !important;
+  color: #fff;
+  font-weight: 800;
+}
+
+.broker-audit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.2rem;
+  margin: 1.1rem 0 1.6rem;
+}
+
+.broker-load-contacts {
+  margin: 0 1rem 1.4rem;
+}
+
+.broker-load-contacts h5 {
+  margin-bottom: 1.3rem;
+  padding-bottom: 0.35rem;
+  color: #555;
+  font-size: 1rem;
+  font-weight: 800;
+  border-bottom: 1px solid #ddd;
+}
+
+.broker-load-contacts-table {
+  color: #666;
+  border: 1px solid #c8c8c8;
+}
+
+.broker-load-contacts-table th,
+.broker-load-contacts-table td {
+  padding: 0.95rem 1rem;
+  border: 1px solid #c8c8c8;
+  font-size: 1rem;
+}
+
+.broker-load-contacts-table th {
+  background: #eee;
+  font-weight: 800;
+}
+
+.broker-load-contacts-table td:first-child {
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  .broker-audit-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .broker-detail-table th,
+  .broker-detail-table td,
+  .broker-load-contacts-table th,
+  .broker-load-contacts-table td {
+    padding: 0.7rem;
+    font-size: 0.9rem;
+  }
+}
+
 .broker-denied {
   color: #f30606 !important;
   text-decoration: line-through;
