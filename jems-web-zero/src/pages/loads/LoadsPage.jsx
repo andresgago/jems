@@ -421,17 +421,6 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate }) {
     }
   };
 
-  const handleHistory = async () => {
-    if (!window.confirm('Move this load to history?')) return;
-    setActioning(true);
-    try {
-      await loadsService.setHistory(load.id);
-      onChanged();
-    } finally {
-      setActioning(false);
-    }
-  };
-
   const handleDelete = async () => {
     if (!window.confirm(`Delete load ${load.number}?`)) return;
     setActioning(true);
@@ -560,15 +549,11 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate }) {
               Status
             </button>
             <ul className="dropdown-menu dropdown-menu-end">
-              {load.status !== 3 && (
-                <li><button className="dropdown-item" onClick={() => handleStatus(3)}><i className="bi bi-check-circle me-1 text-success" />Delivered</button></li>
-              )}
+              <li><button className="dropdown-item" onClick={() => handleStatus(3)}><i className="bi bi-check-circle me-1 text-success" />Delivered</button></li>
               <li><button className="dropdown-item" onClick={() => handleStatus(4)}><i className="bi bi-pause-circle me-1 text-warning" />Mark as Detention</button></li>
               {load.status === 1 && (
                 <li><button className="dropdown-item text-danger" onClick={() => handleStatus(5)}><i className="bi bi-x-circle me-1" />Cancel Load</button></li>
               )}
-              <li><hr className="dropdown-divider" /></li>
-              <li><button className="dropdown-item" onClick={handleHistory}><i className="bi bi-archive me-1" />Move to History</button></li>
             </ul>
           </div>
         )}

@@ -460,6 +460,29 @@ describe('LoadsPage', () => {
     expect(screen.getByRole('button', { name: /^Status$/i })).toBeEnabled();
   });
 
+  it('shows only the legacy Status dropdown items for registered loads', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Delivered/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Mark as Detention/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Cancel Load/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Move to History/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps Delivered visible for finished loads like the legacy grid', async () => {
+    mockLoadsReturn({
+      loads: [{ ...rows[0], status: 3 }],
+    });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Delivered/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Mark as Detention/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cancel Load/i })).not.toBeInTheDocument();
+  });
+
   it('hides the Status dropdown for detention loads instead of disabling it', async () => {
     mockLoadsReturn({
       loads: [{ ...rows[0], status: 4 }],

@@ -384,6 +384,7 @@ async function mockApi(page) {
     if (/\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_DETAIL)
     if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({ detail: 'Driver information sent successfully.' })
     if (/\/loads\/\d+\/set-rating\/$/.test(pathname) && method === 'POST') return json({})
+    if (/\/loads\/\d+\/set-status\/$/.test(pathname) && method === 'POST') return json({ id: 1, status: 3 })
     if (/\/loads\/\d+\/files\/[^/]+\/$/.test(pathname)) return json({})
     if (pathname.endsWith('/loads/bulk-delete/') && method === 'POST') return json({ deleted: 1 })
     if (/\/loads\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
@@ -1229,6 +1230,7 @@ test('loads page: bulk-delete endpoint is called after checking a row and confir
     if (pathname.endsWith('/carriers/options/') && method === 'GET') return json([])
     if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({})
     if (/\/loads\/\d+\/set-rating\/$/.test(pathname) && method === 'POST') return json({})
+    if (/\/loads\/\d+\/set-status\/$/.test(pathname) && method === 'POST') return json({ id: 1, status: 3 })
     if (/\/loads\/\d+\/files\/[^/]+\/$/.test(pathname)) return json({})
     if (/\/loads\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     if (pathname.endsWith('/loads/bulk-delete/') && method === 'POST') {

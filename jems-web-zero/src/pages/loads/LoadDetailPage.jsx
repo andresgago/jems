@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useLoad } from '../../hooks/useLoad';
 import { useOptions } from '../../hooks/useOptions';
 import { loadsService, LOAD_STATUS } from '../../services/loads';
@@ -41,7 +41,6 @@ function FileLink({ label, value }) {
 
 export default function LoadDetailPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { load, loading, error, refresh } = useLoad(id);
   const trailerTypes = useOptions('/fleet/trailer-types/');
   const [actioning, setActioning] = useState(false);
@@ -110,29 +109,26 @@ export default function LoadDetailPage() {
           >
             <i className="bi bi-cash-coin me-1" />{load.paid ? 'Paid' : 'Mark Paid'}
           </button>
-          <div className="dropdown">
-            <button
-              className="btn btn-sm btn-outline-dark dropdown-toggle"
-              data-bs-toggle="dropdown"
-              disabled={actioning}
-            >
-              Status
-            </button>
-            <ul className="dropdown-menu dropdown-menu-end">
-              {load.status !== 3 && (
+          {load.status !== 4 && (
+            <div className="dropdown">
+              <button
+                className="btn btn-sm btn-outline-dark dropdown-toggle"
+                data-bs-toggle="dropdown"
+                disabled={actioning}
+              >
+                Status
+              </button>
+              <ul className="dropdown-menu dropdown-menu-end">
                 <li>
                   <button className="dropdown-item" onClick={() => runAction(() => loadsService.setStatus(load.id, 3), 'Mark as Delivered?')}>
                     <i className="bi bi-check-circle me-1 text-success" />Delivered
                   </button>
                 </li>
-              )}
-              {load.status !== 4 && (
                 <li>
                   <button className="dropdown-item" onClick={() => runAction(() => loadsService.setStatus(load.id, 4), 'Mark as Detention?')}>
                     <i className="bi bi-pause-circle me-1 text-warning" />Mark as Detention
                   </button>
                 </li>
-              )}
               {load.status === 1 && (
                 <li>
                   <button className="dropdown-item text-danger" onClick={() => runAction(() => loadsService.setStatus(load.id, 5), 'Cancel this load?')}>
@@ -140,17 +136,9 @@ export default function LoadDetailPage() {
                   </button>
                 </li>
               )}
-              <li><hr className="dropdown-divider" /></li>
-              <li>
-                <button
-                  className="dropdown-item"
-                  onClick={() => runAction(async () => { await loadsService.setHistory(load.id); navigate('/loads'); }, 'Move this load to history?')}
-                >
-                  <i className="bi bi-archive me-1" />Move to History
-                </button>
-              </li>
-            </ul>
-          </div>
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 

@@ -117,6 +117,33 @@ describe('LoadDetailPage', () => {
     await waitFor(() => expect(loadsService.get).toHaveBeenCalledTimes(2))
   })
 
+  it('shows only legacy Status dropdown items for a registered load', async () => {
+    renderDetail()
+    expect(await screen.findByRole('button', { name: /^Status$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Delivered/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Mark as Detention/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Cancel Load/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Move to History/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps Delivered visible for a finished load like the legacy dropdown', async () => {
+    loadsService.get.mockResolvedValue({ data: { ...baseLoad, status: 3 } })
+    renderDetail()
+    expect(await screen.findByRole('button', { name: /^Status$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Delivered/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Mark as Detention/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Cancel Load/i })).not.toBeInTheDocument()
+  })
+
+  it('hides the Status dropdown for detention loads', async () => {
+    loadsService.get.mockResolvedValue({ data: { ...baseLoad, status: 4 } })
+    renderDetail()
+    expect(await screen.findByText('Load JB-1001')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Status$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Delivered/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Mark as Detention/i })).not.toBeInTheDocument()
+  })
+
   it('shows a not-found message when the load fails to load', async () => {
     loadsService.get.mockRejectedValue(new Error('404'))
     renderDetail()
