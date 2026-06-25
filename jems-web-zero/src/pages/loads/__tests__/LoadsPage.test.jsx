@@ -638,7 +638,46 @@ describe('LoadsPage', () => {
     expect(screen.getByTitle('Already executed')).toBeInTheDocument();
   });
 
+  it('delete button is not rendered for dispatcher users', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.queryByTitle('Delete')).not.toBeInTheDocument();
+  });
+
+  it('bulk delete button is not rendered for dispatcher users', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.queryByRole('button', { name: /Delete All/i })).not.toBeInTheDocument();
+  });
+
+  it('delete button is rendered for admin users', async () => {
+    useAuth.mockReturnValue({
+      user: { user_id: 1, full_name: 'Admin User', roles: ['root'] },
+    });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByTitle('Delete')).toBeInTheDocument();
+  });
+
+  it('bulk delete button is rendered for admin users', async () => {
+    useAuth.mockReturnValue({
+      user: { user_id: 1, full_name: 'Admin User', roles: ['root'] },
+    });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Delete All/i })).toBeInTheDocument();
+  });
+
   it('individual delete calls loadsService.destroy after confirm', async () => {
+    useAuth.mockReturnValue({
+      user: { user_id: 1, full_name: 'Admin User', roles: ['root'] },
+    });
     loadsService.destroy.mockResolvedValue({});
     window.confirm = vi.fn(() => true);
     const refresh = vi.fn();
@@ -657,6 +696,9 @@ describe('LoadsPage', () => {
   });
 
   it('individual delete shows alert when API fails', async () => {
+    useAuth.mockReturnValue({
+      user: { user_id: 1, full_name: 'Admin User', roles: ['root'] },
+    });
     const err = { response: { data: { detail: 'Server error' } } };
     loadsService.destroy.mockRejectedValue(err);
     window.confirm = vi.fn(() => true);
@@ -674,6 +716,9 @@ describe('LoadsPage', () => {
   });
 
   it('individual delete does nothing when confirm is cancelled', async () => {
+    useAuth.mockReturnValue({
+      user: { user_id: 1, full_name: 'Admin User', roles: ['root'] },
+    });
     window.confirm = vi.fn(() => false);
     mockLoadsReturn();
 
@@ -686,6 +731,9 @@ describe('LoadsPage', () => {
   });
 
   it('bulk delete calls loadsService.bulkDelete with selected ids', async () => {
+    useAuth.mockReturnValue({
+      user: { user_id: 1, full_name: 'Admin User', roles: ['root'] },
+    });
     loadsService.bulkDelete.mockResolvedValue({ data: { deleted: 1 } });
     window.confirm = vi.fn(() => true);
     const refresh = vi.fn();
@@ -705,6 +753,9 @@ describe('LoadsPage', () => {
   });
 
   it('bulk delete is disabled when no load is selected', async () => {
+    useAuth.mockReturnValue({
+      user: { user_id: 1, full_name: 'Admin User', roles: ['root'] },
+    });
     mockLoadsReturn();
 
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
@@ -714,6 +765,9 @@ describe('LoadsPage', () => {
   });
 
   it('bulk delete shows alert when API fails', async () => {
+    useAuth.mockReturnValue({
+      user: { user_id: 1, full_name: 'Admin User', roles: ['root'] },
+    });
     const err = { response: { data: { detail: 'Bulk delete failed' } } };
     loadsService.bulkDelete.mockRejectedValue(err);
     window.confirm = vi.fn(() => true);
@@ -732,6 +786,9 @@ describe('LoadsPage', () => {
   });
 
   it('bulk delete does nothing when confirm is cancelled', async () => {
+    useAuth.mockReturnValue({
+      user: { user_id: 1, full_name: 'Admin User', roles: ['root'] },
+    });
     window.confirm = vi.fn(() => false);
     mockLoadsReturn();
 

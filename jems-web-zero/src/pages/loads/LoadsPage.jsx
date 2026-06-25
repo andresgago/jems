@@ -534,7 +534,7 @@ function isLoadStarted(load) {
   return now >= puB6 && now <= dropA8;
 }
 
-function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrokerInfo }) {
+function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrokerInfo, isAdmin }) {
   const [actioning, setActioning] = useState(false);
   const trailerType = load.load_trailer_type_short_name || load.trailer_type_short_name || '-';
   const brokerTitle = load.broker_debtor_buy_status || load.broker_buy_status || 'Broker status';
@@ -673,9 +673,11 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrok
           <Link to={`/loads/${load.id}/edit`} className="btn btn-sm btn-link p-0" title="Edit">
             <i className="bi bi-pencil-fill" />
           </Link>
-          <button className="btn btn-sm btn-link p-0 text-danger" onClick={handleDelete} disabled={actioning} title="Delete">
-            <i className="bi bi-trash" />
-          </button>
+          {isAdmin && (
+            <button className="btn btn-sm btn-link p-0 text-danger" onClick={handleDelete} disabled={actioning} title="Delete">
+              <i className="bi bi-trash" />
+            </button>
+          )}
         </div>
       </td>
       <td className="text-center">
@@ -879,6 +881,7 @@ export default function LoadsPage() {
     setGridCleared(true);
   };
 
+  const isAdmin = Boolean(user?.roles?.includes('root') || user?.roles?.includes('admin'));
   const isDispatcher = Boolean(user?.roles?.includes('dispatcher'));
   const isMyLoadsScope = Boolean(
     isDispatcher &&
@@ -1159,6 +1162,7 @@ export default function LoadsPage() {
                   onAssign={setAssigningLoad}
                   onRate={setRatingLoad}
                   onBrokerInfo={handleBrokerInfo}
+                  isAdmin={isAdmin}
                 />
               ))}
             </tbody>
@@ -1167,9 +1171,11 @@ export default function LoadsPage() {
 
         <div className="loads-bulk-bar">
           <span><i className="bi bi-arrow-right me-2" />With selected</span>
-          <button className="btn btn-danger btn-sm" type="button" disabled={selectedIds.size === 0} onClick={handleBulkDelete}>
-            <i className="bi bi-trash me-1" />Delete All
-          </button>
+          {isAdmin && (
+            <button className="btn btn-danger btn-sm" type="button" disabled={selectedIds.size === 0} onClick={handleBulkDelete}>
+              <i className="bi bi-trash me-1" />Delete All
+            </button>
+          )}
           {!showAllRows && totalPages > 1 ? (
             <div className="loads-pagination ms-auto">
               <button className="btn btn-outline-secondary btn-sm" type="button" disabled={page <= 1 || loading} onClick={() => goToPage(page - 1)}>

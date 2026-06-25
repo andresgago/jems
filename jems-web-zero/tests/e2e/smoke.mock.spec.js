@@ -25,6 +25,27 @@ function mockJWT() {
   return `${header}.${payload}.mock-sig`
 }
 
+function mockAdminJWT() {
+  const header = b64url({ alg: 'HS256', typ: 'JWT' })
+  const payload = b64url({
+    user_id: 1,
+    username: 'admin',
+    full_name: 'Admin User',
+    roles: ['root'],
+    exp: Math.floor(Date.now() / 1000) + 86400,
+  })
+  return `${header}.${payload}.mock-sig`
+}
+
+async function withAdminAuth(page) {
+  await mockApi(page)
+  const token = mockAdminJWT()
+  await page.addInitScript((t) => {
+    localStorage.setItem('access_token', t)
+    localStorage.setItem('refresh_token', 'mock-refresh')
+  }, token)
+}
+
 // ── Mock API ──────────────────────────────────────────────────────────────────
 
 const TRAILER_TYPES = [
@@ -1192,7 +1213,7 @@ test('scope toggle: dispatcher trigger shows "All dispatchers" after clicking "L
 // ── Load delete buttons ────────────────────────────────────────────────────────
 
 test('loads page: individual delete button is present in action column', async ({ page }) => {
-  await withAuth(page)
+  await withAdminAuth(page)
   await mockApi(page)
   // Load a page with one row
   await page.route('**/api/v1/loads/**', async (route) => {
@@ -1256,7 +1277,7 @@ test('loads page: broker info button opens selected contacts modal', async ({ pa
 })
 
 test('loads page: bulk Delete All button is disabled with no selection', async ({ page }) => {
-  await withAuth(page)
+  await withAdminAuth(page)
   await mockApi(page)
   await page.goto('/loads')
   const bulkBtn = page.getByRole('button', { name: /Delete All/i })
@@ -1264,7 +1285,7 @@ test('loads page: bulk Delete All button is disabled with no selection', async (
 })
 
 test('loads page: bulk-delete endpoint is called after checking a row and confirming', async ({ page }) => {
-  await withAuth(page)
+  await withAdminAuth(page)
 
   let bulkDeleteCalled = false
   await page.route('**/api/v1/**', async (route) => {
