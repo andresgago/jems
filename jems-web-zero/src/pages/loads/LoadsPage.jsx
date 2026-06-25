@@ -613,6 +613,8 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrok
           city={load.pickup_city_display}
           zip={load.pickup_city_zip}
           date={load.pickup_date}
+          isDrop={Boolean(load.is_drop) && load.drop_place === 1}
+          daysInDrop={load.days_in_drop}
         />
       </td>
       <td>
@@ -620,7 +622,7 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrok
           city={load.dropoff_city_display}
           zip={load.dropoff_city_zip}
           date={load.dropoff_date}
-          isDrop={Boolean(load.is_drop)}
+          isDrop={Boolean(load.is_drop) && load.drop_place !== 1}
           daysInDrop={load.days_in_drop}
         />
       </td>

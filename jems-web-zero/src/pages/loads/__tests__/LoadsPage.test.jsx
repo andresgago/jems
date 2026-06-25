@@ -487,16 +487,48 @@ describe('LoadsPage', () => {
     expect(badge.className).toMatch(/bg-danger/);
   });
 
-  it('shows drop indicator on dropoff city when is_drop=true', async () => {
+  it('shows drop indicator in dropoff city cell when is_drop=true and drop_place=0', async () => {
     mockLoadsReturn({
-      loads: [{ ...rows[0], is_drop: true, drop_place: 50, days_in_drop: 3 }],
+      loads: [{
+        ...rows[0],
+        is_drop: true,
+        drop_place: 0,
+        days_in_drop: 3,
+        pickup_city_display: 'Chicago (IL)',
+        dropoff_city_display: 'Dallas (TX)',
+      }],
     });
 
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
     await waitFor(() => expect(usersService.options).toHaveBeenCalled());
 
-    expect(screen.getByTitle('Trailer Drop Here')).toBeInTheDocument();
+    const icon = screen.getByTitle('Trailer Drop Here');
+    expect(icon).toBeInTheDocument();
+    expect(icon.closest('td')).toHaveTextContent('Dallas (TX)');
+    expect(icon.closest('td')).not.toHaveTextContent('Chicago (IL)');
     expect(screen.getByText('(3d)')).toBeInTheDocument();
+  });
+
+  it('shows drop indicator in pickup city cell when is_drop=true and drop_place=1', async () => {
+    mockLoadsReturn({
+      loads: [{
+        ...rows[0],
+        is_drop: true,
+        drop_place: 1,
+        days_in_drop: 2,
+        pickup_city_display: 'Chicago (IL)',
+        dropoff_city_display: 'Dallas (TX)',
+      }],
+    });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    const icon = screen.getByTitle('Trailer Drop Here');
+    expect(icon).toBeInTheDocument();
+    expect(icon.closest('td')).toHaveTextContent('Chicago (IL)');
+    expect(icon.closest('td')).not.toHaveTextContent('Dallas (TX)');
+    expect(screen.getByText('(2d)')).toBeInTheDocument();
   });
 
   it('does not show drop indicator when is_drop=false', async () => {
