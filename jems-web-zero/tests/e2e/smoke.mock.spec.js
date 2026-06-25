@@ -1015,3 +1015,56 @@ test('Brokers status modal: Close button dismisses the modal', async ({ page }) 
   await modal.getByRole('button', { name: /^close$/i }).click()
   await expect(page.getByText('Find broker')).not.toBeVisible()
 })
+
+// ── List all loads / List only my loads toggle ─────────────────────────────────
+
+test('scope toggle button shows "List all loads" when auto-scoped to own dispatcher', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await expect(page.locator('button.btn-link', { hasText: 'List all loads' })).toBeVisible()
+})
+
+test('scope toggle: clicking "List all loads" changes heading to All Loads', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.locator('button.btn-link', { hasText: 'List all loads' }).click()
+  await expect(page.getByRole('heading', { name: /All Loads/i })).toBeVisible()
+})
+
+test('scope toggle: clicking "List all loads" changes button label to "List only my loads"', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  const toggleBtn = page.locator('button.btn-link').filter({ hasText: /List (all|only my) loads/i })
+  await expect(toggleBtn).toHaveText(/List all loads/i)
+  await toggleBtn.click()
+  await expect(toggleBtn).toHaveText(/List only my loads/i)
+})
+
+test('scope toggle: clicking "List only my loads" restores My Loads heading', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  const toggleBtn = page.locator('button.btn-link').filter({ hasText: /List (all|only my) loads/i })
+  await expect(toggleBtn).toHaveText(/List all loads/i)
+  await toggleBtn.click()
+  await expect(toggleBtn).toHaveText(/List only my loads/i)
+  await toggleBtn.click()
+  await expect(page.getByRole('heading', { name: /My Loads/i })).toBeVisible()
+})
+
+test('scope toggle: clicking "List only my loads" changes button label back to "List all loads"', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  const toggleBtn = page.locator('button.btn-link').filter({ hasText: /List (all|only my) loads/i })
+  await expect(toggleBtn).toHaveText(/List all loads/i)
+  await toggleBtn.click()
+  await expect(toggleBtn).toHaveText(/List only my loads/i)
+  await toggleBtn.click()
+  await expect(toggleBtn).toHaveText(/List all loads/i)
+})
+
+test('scope toggle: dispatcher trigger shows "All dispatchers" after clicking "List all loads"', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.locator('button.btn-link', { hasText: 'List all loads' }).click()
+  await expect(page.locator('.dispatcher-select-trigger', { hasText: /All dispatchers/i })).toBeVisible()
+})

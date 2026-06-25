@@ -523,8 +523,25 @@ export default function LoadsPage() {
     setGridCleared(true);
   };
 
+  const isDispatcher = Boolean(user?.roles?.includes('dispatcher'));
+  const isMyLoadsScope = Boolean(
+    isDispatcher &&
+    draft.dispatcher &&
+    String(draft.dispatcher) === String(user?.user_id)
+  );
+
   const handleListAllLoads = () => {
     const nextDraft = { ...draft, status: '', dispatcher: '', date_type: 'all', date_from: '', date_to: '' };
+    setDraft(nextDraft);
+    setShowAllRows(false);
+    setPage(1);
+    setFilters(buildLoadParams(nextDraft, { page: 1, showAllRows: false }));
+    setGridCleared(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleListMyLoads = () => {
+    const nextDraft = { date_type: 'all', status: '', dispatcher: String(user.user_id) };
     setDraft(nextDraft);
     setShowAllRows(false);
     setPage(1);
@@ -598,8 +615,13 @@ export default function LoadsPage() {
           </span>
         </div>
         <div className="loads-grid-toolbar">
-          <button className="btn btn-link btn-sm" type="button" onClick={handleListAllLoads}>
-            <i className="bi bi-list-ul me-1" />List all loads
+          <button
+            className="btn btn-link btn-sm"
+            type="button"
+            onClick={isMyLoadsScope ? handleListAllLoads : (isDispatcher ? handleListMyLoads : handleListAllLoads)}
+          >
+            <i className={`bi ${isDispatcher && !isMyLoadsScope ? 'bi-person-fill' : 'bi-list-ul'} me-1`} />
+            {isMyLoadsScope ? 'List all loads' : (isDispatcher ? 'List only my loads' : 'List all loads')}
           </button>
           <div className="ms-auto btn-group btn-group-sm">
             <Link to="/loads/create" className="btn btn-primary"><i className="bi bi-plus-lg me-1" />New Load</Link>

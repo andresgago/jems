@@ -220,4 +220,64 @@ describe('LoadsPage', () => {
     expect(screen.getByText('Total 0 items.')).toBeInTheDocument();
     expect(screen.getByText('No loads found.')).toBeInTheDocument();
   });
+
+  it('shows "List all loads" button when dispatcher is auto-scoped to current user', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^List all loads$/i })).toBeInTheDocument();
+    });
+  });
+
+  it('"List all loads" changes button label to "List only my loads"', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^List all loads$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^List all loads$/i }));
+
+    expect(screen.getByRole('button', { name: /^List only my loads$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^List all loads$/i })).not.toBeInTheDocument();
+  });
+
+  it('"List all loads" removes dispatcher from useLoads params and updates heading', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^List all loads$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^List all loads$/i }));
+
+    await waitFor(() => {
+      const lastCall = useLoads.mock.calls.at(-1)[0];
+      expect(lastCall).not.toHaveProperty('dispatcher');
+    });
+
+    expect(await screen.findByRole('heading', { name: /All Loads/i })).toBeInTheDocument();
+  });
+
+  it('"List only my loads" restores dispatcher filter to current user', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^List all loads$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^List all loads$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^List only my loads$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^List only my loads$/i }));
+
+    await waitFor(() => {
+      expect(useLoads).toHaveBeenLastCalledWith(expect.objectContaining({ dispatcher: '17' }));
+    });
+
+    expect(screen.getByRole('button', { name: /^List all loads$/i })).toBeInTheDocument();
+  });
 });
