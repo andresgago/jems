@@ -286,21 +286,33 @@ def set_history(*, load: Load) -> Load:
 
 
 def set_executed(*, load: Load, updated_by: Optional[Any] = None) -> Load:
-    """Move a load from dispatch to executed (requires assignment + rate + bill)."""
+    """Toggle a load's executed state. Execute requires assignment + rate + bill; un-execute resets to REGISTERED."""
     from .exceptions import NotReadyToExecute
 
-    if not (load.driver_id and load.truck_id and load.trailer_id):
-        raise NotReadyToExecute("Load must have driver, truck, and trailer assigned.")
-    if not load.rate_file:
-        raise NotReadyToExecute("Rate confirmation file is required.")
-    if not load.bill_file:
-        raise NotReadyToExecute("Bill of lading file is required.")
     if load.execute:
-        raise NotReadyToExecute("Load is already executed.")
-    load.execute = True
-    if updated_by is not None:
-        load.updated_by = updated_by
-    load.save(update_fields=["execute", "updated_by"])
+        # Un-execute: mirror legacy actionSetExecuted when execute==1
+        load.execute = False
+        load.status = Load.Status.REGISTERED
+        load.history = False
+        load.drivers_paid = False
+        if updated_by is not None:
+            load.updated_by = updated_by
+        load.save(
+            update_fields=["execute", "status", "history", "drivers_paid", "updated_by"]
+        )
+    else:
+        if not (load.driver_id and load.truck_id and load.trailer_id):
+            raise NotReadyToExecute(
+                "Load must have driver, truck, and trailer assigned."
+            )
+        if not load.rate_file:
+            raise NotReadyToExecute("Rate confirmation file is required.")
+        if not load.bill_file:
+            raise NotReadyToExecute("Bill of lading file is required.")
+        load.execute = True
+        if updated_by is not None:
+            load.updated_by = updated_by
+        load.save(update_fields=["execute", "updated_by"])
     return load
 
 

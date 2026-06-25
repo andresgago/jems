@@ -736,7 +736,7 @@ class TestSetExecuted:
         with pytest.raises(NotReadyToExecute):
             set_executed(load=load)
 
-    def test_raises_when_already_executed(self):
+    def test_unexecutes_when_already_executed(self):
         truck = TruckFactory()
         trailer = TrailerFactory()
         driver = DriverFactory()
@@ -747,9 +747,17 @@ class TestSetExecuted:
             rate_file="loads/rates/rate.pdf",
             bill_file="loads/bills/bill.pdf",
             execute=True,
+            status=Load.Status.FINISHED,
+            history=True,
+            drivers_paid=True,
         )
-        with pytest.raises(NotReadyToExecute):
-            set_executed(load=load)
+        result = set_executed(load=load)
+        assert result.execute is False
+        load.refresh_from_db()
+        assert load.execute is False
+        assert load.status == Load.Status.REGISTERED
+        assert load.history is False
+        assert load.drivers_paid is False
 
 
 @pytest.mark.django_db

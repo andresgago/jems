@@ -1408,7 +1408,7 @@ class TestLoadSetExecuted:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "bill" in response.data["error"].lower()
 
-    def test_rejects_when_already_executed(self, auth_client):
+    def test_unexecutes_when_already_executed(self, auth_client):
         client, _ = auth_client
         truck = TruckFactory()
         trailer = TrailerFactory()
@@ -1420,12 +1420,20 @@ class TestLoadSetExecuted:
             rate_file="loads/rates/rate.pdf",
             bill_file="loads/bills/bill.pdf",
             execute=True,
+            status=Load.Status.FINISHED,
+            history=True,
+            drivers_paid=True,
         )
 
         response = client.post(reverse("load-set-executed", kwargs={"pk": load.pk}))
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "already" in response.data["error"].lower()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["execute"] is False
+        load.refresh_from_db()
+        assert load.execute is False
+        assert load.status == Load.Status.REGISTERED
+        assert load.history is False
+        assert load.drivers_paid is False
 
     def test_nonexistent_returns_404(self, auth_client):
         client, _ = auth_client
