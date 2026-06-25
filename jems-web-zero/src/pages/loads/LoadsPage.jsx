@@ -11,6 +11,7 @@ import { brokersService } from '../../services/brokers';
 import { citiesService } from '../../services/cities';
 import { driversService } from '../../services/drivers';
 import { loadsService, LOAD_STATUS } from '../../services/loads';
+import { rtlService } from '../../services/rtl';
 import { usersService } from '../../services/users';
 
 const STATUS_OPTIONS = [
@@ -625,6 +626,7 @@ export default function LoadsPage() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [showDriverInfoModal, setShowDriverInfoModal] = useState(false);
   const [showBrokersStatusModal, setShowBrokersStatusModal] = useState(false);
+  const [updatingLocation, setUpdatingLocation] = useState(false);
   const [assigningLoad, setAssigningLoad] = useState(null);
   const [ratingLoad, setRatingLoad] = useState(null);
   const [filterLabels, setFilterLabels] = useState({});
@@ -794,6 +796,20 @@ export default function LoadsPage() {
     });
   };
 
+  const handleUpdateLocation = async () => {
+    if (!window.confirm("Are you sure you want to update driver's location?")) return;
+    setUpdatingLocation(true);
+    try {
+      await rtlService.fetchAndSync();
+      refresh();
+      window.alert("Driver's location updated successfully!");
+    } catch {
+      window.alert("Driver's location could not be updated. Please try again.");
+    } finally {
+      setUpdatingLocation(false);
+    }
+  };
+
   const goToPage = (nextPage) => {
     const boundedPage = Math.min(Math.max(nextPage, 1), totalPages);
     if (boundedPage === page || showAllRows) return;
@@ -864,6 +880,11 @@ export default function LoadsPage() {
             </button>
             <button className="btn btn-success" onClick={() => setShowDriverInfoModal(true)}><i className="bi bi-truck me-1" />Driver info</button>
             <button className="btn btn-primary" onClick={() => setShowBrokersStatusModal(true)}><i className="bi bi-person-x-fill me-1" />Brokers status</button>
+            <button className="btn btn-secondary" onClick={handleUpdateLocation} disabled={updatingLocation}>
+              {updatingLocation
+                ? <><span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />Updating...</>
+                : <><i className="bi bi-geo-alt-fill me-1" />Update location</>}
+            </button>
           </div>
         </div>
 

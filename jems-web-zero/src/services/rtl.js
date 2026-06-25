@@ -34,6 +34,9 @@ export const rtlService = {
   createReport: (data)   => api.post('/integrations/ifta-reports/', data),
   deleteReport: (id)     => api.delete(`/integrations/ifta-reports/${id}/`),
 
-  // Manual sync
+  // Manual sync (passive data-push, used by Celery task)
   sync:         (data)   => api.post('/integrations/rtl/sync/', data),
+
+  // Active fetch: pulls fresh data from the ApexHOS API for all carriers
+  fetchAndSync: ()       => api.post('/integrations/rtl/fetch-and-sync/'),
 };

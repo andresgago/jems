@@ -55,6 +55,11 @@ vi.mock('../../../services/trailers', async () => {
   return { ...actual, trailersService: { options: vi.fn() } };
 });
 
+vi.mock('../../../services/rtl', async () => {
+  const actual = await vi.importActual('../../../services/rtl');
+  return { ...actual, rtlService: { fetchAndSync: vi.fn() } };
+});
+
 vi.mock('../AssignLoadModal', () => ({
   default: ({ load, onClose }) => (
     <div data-testid="assign-modal">
@@ -79,6 +84,7 @@ import { usersService } from '../../../services/users';
 import { brokersService } from '../../../services/brokers';
 import { driversService } from '../../../services/drivers';
 import { loadsService } from '../../../services/loads';
+import { rtlService } from '../../../services/rtl';
 
 const dispatchers = [
   { id: 17, label: 'Beatriz Gago Alonso', full_name: 'Beatriz Gago Alonso', is_dispatcher: true },
@@ -605,5 +611,76 @@ describe('LoadsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Delete All/i }));
 
     expect(loadsService.bulkDelete).not.toHaveBeenCalled();
+  });
+
+  // ── Update location button ─────────────────────────────────────────────────
+
+  it('renders the "Update location" button in the toolbar', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: /Update location/i })).toBeInTheDocument();
+  });
+
+  it('does not call fetchAndSync when confirm is cancelled', async () => {
+    window.confirm = vi.fn(() => false);
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /Update location/i }));
+    expect(rtlService.fetchAndSync).not.toHaveBeenCalled();
+  });
+
+  it('calls fetchAndSync, refreshes, and alerts success on confirm', async () => {
+    window.confirm = vi.fn(() => true);
+    window.alert = vi.fn();
+    rtlService.fetchAndSync.mockResolvedValue({});
+    const refresh = vi.fn();
+    mockLoadsReturn({ refresh });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /Update location/i }));
+
+    await waitFor(() => expect(rtlService.fetchAndSync).toHaveBeenCalledOnce());
+    expect(refresh).toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/updated successfully/i));
+  });
+
+  it('shows error alert when fetchAndSync rejects', async () => {
+    window.confirm = vi.fn(() => true);
+    window.alert = vi.fn();
+    rtlService.fetchAndSync.mockRejectedValue(new Error('RTL error'));
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /Update location/i }));
+
+    await waitFor(() =>
+      expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/could not be updated/i))
+    );
+  });
+
+  it('disables the button while the update is in flight', async () => {
+    window.confirm = vi.fn(() => true);
+    window.alert = vi.fn();
+    let resolve;
+    rtlService.fetchAndSync.mockReturnValue(new Promise((r) => { resolve = r; }));
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    const btn = screen.getByRole('button', { name: /Update location/i });
+    fireEvent.click(btn);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Updating/i })).toBeDisabled());
+
+    resolve({});
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Update location/i })).not.toBeDisabled()
+    );
   });
 });

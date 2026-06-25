@@ -369,6 +369,7 @@ async function mockApi(page) {
     if (/\/users\/\d+\/$/.test(pathname) && method === 'GET') return json(USER_DETAIL)
     if (pathname.endsWith('/users/') && method === 'GET') return json(USERS)
     // Integrations — RTL / ELD (must come before generic /drivers/ checks)
+    if (pathname.endsWith('/integrations/rtl/fetch-and-sync/') && method === 'POST') return json({ synced: { drivers: 3, trucks: 2, driver_statuses: 3, truck_statuses: 2 } })
     if (pathname.endsWith('/integrations/rtl/drivers/') && method === 'GET') return json(RTL_DRIVERS)
     if (/\/integrations\/rtl\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(RTL_DRIVER_DETAIL)
     if (pathname.endsWith('/integrations/rtl/trucks/') && method === 'GET') return json(RTL_TRUCKS)
@@ -1106,6 +1107,26 @@ test('Brokers status modal: Close button dismisses the modal', async ({ page }) 
   await expect(modal.getByText('Find broker')).toBeVisible()
   await modal.getByRole('button', { name: /^close$/i }).click()
   await expect(page.getByText('Find broker')).not.toBeVisible()
+})
+
+// ── Update location button ────────────────────────────────────────────────────
+
+test('Update location button is visible in the loads toolbar', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await expect(page.getByRole('button', { name: /update location/i })).toBeVisible()
+})
+
+test('Update location: clicking the button triggers a confirm dialog', async ({ page }) => {
+  await withAuth(page)
+  let dialogText = ''
+  page.once('dialog', (dialog) => {
+    dialogText = dialog.message()
+    dialog.dismiss()  // dismiss to avoid blocking
+  })
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /update location/i }).click()
+  await expect.poll(() => dialogText).toMatch(/update driver/i)
 })
 
 // ── List all loads / List only my loads toggle ─────────────────────────────────
