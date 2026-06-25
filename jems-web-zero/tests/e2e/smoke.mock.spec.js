@@ -1233,3 +1233,21 @@ test('loads page: bulk-delete endpoint is called after checking a row and confir
   await page.waitForTimeout(500)
   expect(bulkDeleteCalled).toBe(true)
 })
+
+// ── Navbar active state ────────────────────────────────────────────────────────
+
+test('navbar: Loads link is marked active on the loads page', async ({ page }) => {
+  await withAuth(page)
+  await mockApi(page)
+  await page.goto('/loads')
+  const loadsLink = page.getByRole('link', { name: /Loads/i }).first()
+  await expect(loadsLink).toHaveClass(/\bactive\b/)
+})
+
+test('navbar: no dropdown toggle is marked active on the loads page', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  // None of the dropdown toggles should be active when browsing loads
+  const activeDropdowns = page.locator('.navbar-custom .nav-link.dropdown-toggle.active')
+  await expect(activeDropdowns).toHaveCount(0)
+})

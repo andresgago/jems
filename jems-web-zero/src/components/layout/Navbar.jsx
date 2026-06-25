@@ -1,9 +1,10 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/useAuth';
 
 export default function Navbar() {
   const { user, logout, can, haveAnyPermission } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const handleLogout = (e) => {
     e.preventDefault();
@@ -12,6 +13,13 @@ export default function Navbar() {
   };
 
   const fullName = user?.full_name || user?.username || '';
+
+  // True when the current path equals or is nested under any of the given prefixes
+  const at = (...prefixes) =>
+    prefixes.some((p) => pathname === p || pathname.startsWith(p + '/'));
+
+  const linkClass = (active) => `nav-link${active ? ' active' : ''}`;
+  const dropdownClass = (active) => `nav-link dropdown-toggle${active ? ' active' : ''}`;
 
   return (
     <nav className="navbar navbar-expand-lg navbar-dark fixed-top navbar-custom">
@@ -28,7 +36,7 @@ export default function Navbar() {
 
             {haveAnyPermission(['admin', 'dispatcher']) && (
               <li className="nav-item">
-                <Link className="nav-link" to="/loads">
+                <Link className={linkClass(at('/loads') && !at('/loads/history'))} to="/loads">
                   <i className="bi bi-box-seam me-1" />Loads
                 </Link>
               </li>
@@ -36,7 +44,7 @@ export default function Navbar() {
 
             {can('admin') && (
               <li className="nav-item">
-                <Link className="nav-link" to="/loads/history">
+                <Link className={linkClass(at('/loads/history'))} to="/loads/history">
                   <i className="bi bi-clock-history me-1" />History
                 </Link>
               </li>
@@ -44,7 +52,7 @@ export default function Navbar() {
 
             {haveAnyPermission(['admin', 'assistant']) && (
               <li className="nav-item dropdown">
-                <a className="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                <a className={dropdownClass(at('/accounting'))} href="#" data-bs-toggle="dropdown">
                   <i className="bi bi-currency-dollar me-1" />Accounting
                 </a>
                 <ul className="dropdown-menu dropdown-menu-dark">
@@ -67,7 +75,7 @@ export default function Navbar() {
 
             {haveAnyPermission(['admin', 'root']) && (
               <li className="nav-item dropdown">
-                <a className="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                <a className={dropdownClass(at('/rtl'))} href="#" data-bs-toggle="dropdown">
                   <i className="bi bi-journal-text me-1" />RTL
                 </a>
                 <ul className="dropdown-menu dropdown-menu-dark">
@@ -82,7 +90,7 @@ export default function Navbar() {
 
             {haveAnyPermission(['admin', 'root']) && (
               <li className="nav-item dropdown">
-                <a className="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                <a className={dropdownClass(at('/reports'))} href="#" data-bs-toggle="dropdown">
                   <i className="bi bi-printer me-1" />
                 </a>
                 <ul className="dropdown-menu dropdown-menu-dark">
@@ -100,7 +108,7 @@ export default function Navbar() {
 
             {haveAnyPermission(['admin', 'basic', 'maintenance']) && (
               <li className="nav-item dropdown">
-                <a className="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                <a className={dropdownClass(at('/fleet/truck-maintenance', '/fleet/trailer-maintenance', '/fleet/accidents'))} href="#" data-bs-toggle="dropdown">
                   <i className="bi bi-wrench-adjustable me-1" />
                 </a>
                 <ul className="dropdown-menu dropdown-menu-dark">
@@ -119,7 +127,7 @@ export default function Navbar() {
             )}
 
             <li className="nav-item dropdown">
-              <a className="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+              <a className={dropdownClass(at('/drivers', '/fleet/trucks', '/fleet/trailers', '/brokers', '/settings/business', '/settings/cities', '/settings/users'))} href="#" data-bs-toggle="dropdown">
                 <i className="bi bi-gear me-1" />
               </a>
               <ul className="dropdown-menu dropdown-menu-dark">
@@ -139,7 +147,7 @@ export default function Navbar() {
 
             {haveAnyPermission(['admin', 'root']) && (
               <li className="nav-item dropdown">
-                <a className="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                <a className={dropdownClass(at('/settings/carriers', '/settings/system', '/settings/truck-owners', '/settings/loss-payees', '/settings/driver-types', '/settings/trailer-types', '/settings/truck-types'))} href="#" data-bs-toggle="dropdown">
                   <i className="bi bi-sliders me-1" />System
                 </a>
                 <ul className="dropdown-menu dropdown-menu-dark">
@@ -157,7 +165,7 @@ export default function Navbar() {
             )}
 
             <li className="nav-item dropdown">
-              <a className="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+              <a className={dropdownClass(at('/dispatch'))} href="#" data-bs-toggle="dropdown">
                 <i className="bi bi-person-circle me-1" />{fullName}
               </a>
               <ul className="dropdown-menu dropdown-menu-dark dropdown-menu-end">

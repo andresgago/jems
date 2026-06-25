@@ -33,6 +33,13 @@ body {
   background-color: transparent;
 }
 
+.navbar-custom .nav-link.active,
+.navbar-custom .nav-link.active:hover,
+.navbar-custom .nav-link.active:focus {
+  color: #fff !important;
+  background-image: linear-gradient(to bottom, #fff 0%, #34495e 100%);
+}
+
 .navbar-custom .navbar-toggler {
   border-color: white;
 }
