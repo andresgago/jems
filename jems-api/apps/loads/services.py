@@ -111,17 +111,17 @@ def _accounting_day_from(dropoff: Any) -> int:
 
 # Status actions mirror the legacy loads grid dropdown, not a strict workflow state
 # machine. The legacy UI shows Delivered and Detention for every non-detention load.
+# Cancellation is intentionally absent here — it goes through cancel_load() which
+# mirrors the legacy cancel() side effects (execute, history, miles flags).
 _ALLOWED_TRANSITIONS: dict[int, set[int]] = {
     Load.Status.REGISTERED: {
         Load.Status.STARTED,
         Load.Status.FINISHED,
         Load.Status.DETENTION_PENDING,
-        Load.Status.CANCELLED,
     },
     Load.Status.STARTED: {
         Load.Status.FINISHED,
         Load.Status.DETENTION_PENDING,
-        Load.Status.CANCELLED,
     },
     Load.Status.DETENTION_PENDING: {Load.Status.FINISHED, Load.Status.CANCELLED},
     Load.Status.FINISHED: {
@@ -228,6 +228,33 @@ def set_load_status(
     if updated_by is not None:
         load.updated_by = updated_by
     load.save(update_fields=["status", "updated_by"])
+    return load
+
+
+def cancel_load(*, load: Load, updated_by: Optional[Any] = None) -> Load:
+    """Cancel a REGISTERED load with the same side effects as the legacy cancel().
+
+    Legacy cancel() toggles execute and history flags so that a cancelled load
+    is hidden from the dispatch grid (execute=True, history=True) and its mileage
+    is zeroed out.  This mirrors that exact behaviour.
+    """
+    if load.status != Load.Status.REGISTERED:
+        raise InvalidStatusTransition(
+            f"Cannot cancel a load with status {load.get_status_display()}. "
+            "Only Registered loads can be cancelled from the grid."
+        )
+    was_executed = load.execute
+    load.status = Load.Status.CANCELLED
+    # Mirror legacy: not-yet-executed loads move to history so they disappear
+    # from the dispatch grid (history filter = False hides them).
+    load.history = not was_executed
+    load.execute = not was_executed
+    load.miles = 0.0
+    load.miles_empty = 0.0
+    if updated_by is not None:
+        load.updated_by = updated_by
+        load.executed_by = updated_by
+    load.save()
     return load
 
 

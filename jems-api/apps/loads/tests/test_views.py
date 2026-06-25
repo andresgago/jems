@@ -804,6 +804,36 @@ class TestLoadSetStatus:
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_cancel_registered_load_applies_legacy_side_effects(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(
+            status=Load.Status.REGISTERED,
+            execute=False,
+            history=False,
+            miles=1000.0,
+            miles_empty=50.0,
+        )
+        response = client.post(
+            reverse("load-set-status", kwargs={"pk": load.pk}),
+            {"status": Load.Status.CANCELLED},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        load.refresh_from_db()
+        assert load.status == Load.Status.CANCELLED
+        assert load.execute is True
+        assert load.history is True
+        assert load.miles == 0.0
+        assert load.miles_empty == 0.0
+
+    def test_cancel_non_registered_load_returns_400(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(status=Load.Status.FINISHED)
+        response = client.post(
+            reverse("load-set-status", kwargs={"pk": load.pk}),
+            {"status": Load.Status.CANCELLED},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
 
 @pytest.mark.django_db
 class TestLoadInvoiced:

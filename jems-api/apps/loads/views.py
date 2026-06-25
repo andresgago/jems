@@ -28,6 +28,7 @@ from .services import (
     FILE_SLOTS,
     assign_load,
     bulk_delete_loads,
+    cancel_load,
     clear_load_file,
     create_load,
     create_load_stop,
@@ -336,9 +337,12 @@ class LoadViewSet(ViewSet):
                 {"error": "status is required"}, status=status.HTTP_400_BAD_REQUEST
             )
         try:
-            load = set_load_status(
-                load=load, new_status=int(new_status), updated_by=request.user
-            )
+            if int(new_status) == Load.Status.CANCELLED:
+                load = cancel_load(load=load, updated_by=request.user)
+            else:
+                load = set_load_status(
+                    load=load, new_status=int(new_status), updated_by=request.user
+                )
         except InvalidStatusTransition as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(LoadSerializer(load).data)

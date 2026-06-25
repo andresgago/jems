@@ -15,6 +15,7 @@ from apps.loads.services import (
     _accounting_day_from,
     assign_load,
     bulk_delete_loads,
+    cancel_load,
     clear_load_file,
     create_load,
     create_load_stop,
@@ -356,10 +357,12 @@ class TestSetLoadStatus:
         updated = set_load_status(load=load, new_status=Load.Status.DETENTION_PENDING)
         assert updated.status == Load.Status.DETENTION_PENDING
 
-    def test_registered_to_cancelled(self):
+    def test_registered_to_cancelled_via_set_status_raises(self):
+        # CANCELLED is no longer in _ALLOWED_TRANSITIONS[REGISTERED]; cancellation
+        # must go through cancel_load() to apply legacy side effects.
         load = LoadFactory(status=Load.Status.REGISTERED)
-        updated = set_load_status(load=load, new_status=Load.Status.CANCELLED)
-        assert updated.status == Load.Status.CANCELLED
+        with pytest.raises(InvalidStatusTransition):
+            set_load_status(load=load, new_status=Load.Status.CANCELLED)
 
     def test_invalid_transition_raises(self):
         load = LoadFactory(status=Load.Status.FINISHED)
@@ -390,6 +393,59 @@ class TestSetLoadStatus:
         load = LoadFactory(status=Load.Status.CANCELLED)
         with pytest.raises(InvalidStatusTransition):
             set_load_status(load=load, new_status=Load.Status.REGISTERED)
+
+
+@pytest.mark.django_db
+class TestCancelLoad:
+    def test_registered_load_becomes_cancelled(self):
+        load = LoadFactory(status=Load.Status.REGISTERED, execute=False, history=False)
+        updated = cancel_load(load=load)
+        assert updated.status == Load.Status.CANCELLED
+
+    def test_execute_flips_to_true_when_not_yet_executed(self):
+        load = LoadFactory(status=Load.Status.REGISTERED, execute=False)
+        updated = cancel_load(load=load)
+        assert updated.execute is True
+
+    def test_history_flips_to_true_when_not_yet_executed(self):
+        load = LoadFactory(status=Load.Status.REGISTERED, execute=False)
+        updated = cancel_load(load=load)
+        assert updated.history is True
+
+    def test_miles_zeroed_out(self):
+        load = LoadFactory(
+            status=Load.Status.REGISTERED, miles=1250.5, miles_empty=80.0
+        )
+        updated = cancel_load(load=load)
+        assert updated.miles == 0.0
+        assert updated.miles_empty == 0.0
+
+    def test_executed_by_set_when_user_provided(self):
+        from apps.users.tests.factories import UserFactory
+
+        user = UserFactory()
+        load = LoadFactory(status=Load.Status.REGISTERED)
+        updated = cancel_load(load=load, updated_by=user)
+        assert updated.executed_by == user
+
+    def test_non_registered_load_raises(self):
+        for bad_status in (
+            Load.Status.STARTED,
+            Load.Status.FINISHED,
+            Load.Status.DETENTION_PENDING,
+            Load.Status.CANCELLED,
+        ):
+            load = LoadFactory(status=bad_status)
+            with pytest.raises(InvalidStatusTransition):
+                cancel_load(load=load)
+
+    def test_persisted_to_db(self):
+        load = LoadFactory(status=Load.Status.REGISTERED, execute=False, miles=500.0)
+        cancel_load(load=load)
+        load.refresh_from_db()
+        assert load.status == Load.Status.CANCELLED
+        assert load.execute is True
+        assert load.miles == 0.0
 
 
 @pytest.mark.django_db
