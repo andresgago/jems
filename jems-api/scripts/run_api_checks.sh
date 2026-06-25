@@ -1185,8 +1185,13 @@ resp="$(post "/api/v1/brokers/business/" '{}')"
 assert_status "business no name" "400" "$(code "$resp")"
 
 # ── Loads ─────────────────────────────────────────────────────────────────────
+step "Loads: broker contact fixture"
+resp="$(post "/api/v1/brokers/${BROKER_ID}/contacts/" '{"name":"Load Broker Contact","email":"load-contact@echo.com","phone":"8005550002"}')"
+assert_status "load broker contact create" "201" "$(code "$resp")" "$(body "$resp")"
+LOAD_BROKER_CONTACT_ID="$(body "$resp" | json_get_num id)"
+
 step "Loads: create"
-resp="$(post "/api/v1/loads/" "{\"number\":\"L-0001\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"123 Warehouse Rd\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"456 Dock St\",\"payment\":\"2500.00\",\"miles\":800,\"miles_empty\":50,\"broker\":${BROKER_ID},\"dispatcher\":${DISPATCHER_USER_ID},\"truck\":${TRUCK_ID},\"trailer\":${TRAILER_ID},\"driver\":${DRIVER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"status\":1}")"
+resp="$(post "/api/v1/loads/" "{\"number\":\"L-0001\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"123 Warehouse Rd\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"456 Dock St\",\"payment\":\"2500.00\",\"miles\":800,\"miles_empty\":50,\"broker\":${BROKER_ID},\"broker_contacts\":\"${LOAD_BROKER_CONTACT_ID}\",\"dispatcher\":${DISPATCHER_USER_ID},\"truck\":${TRUCK_ID},\"trailer\":${TRAILER_ID},\"driver\":${DRIVER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"status\":1}")"
 assert_status "load create" "201" "$(code "$resp")" "$(body "$resp")"
 LOAD_ID="$(body "$resp" | json_get_num id)"
 LOAD_NUMBER="$(body "$resp" | json_get_num number)"
@@ -1203,6 +1208,12 @@ step "Loads: retrieve"
 resp="$(get "/api/v1/loads/${LOAD_ID}/")"
 assert_status "load retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "load number" "$(body "$resp")" "${LOAD_NUMBER}"
+
+step "Loads: broker contacts modal data"
+resp="$(get "/api/v1/loads/${LOAD_ID}/broker-contacts/")"
+assert_status "load broker contacts" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "load broker contacts includes broker" "$(body "$resp")" '"broker"'
+assert_contains "load broker contacts includes selected contact" "$(body "$resp")" "Load Broker Contact"
 
 step "Loads: list"
 resp="$(get "/api/v1/loads/")"
@@ -1368,7 +1379,13 @@ assert_status "category update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "category updated" "$(body "$resp")" "Medical Certificate"
 
 step "Accounting: record create"
-resp="$(post "/api/v1/accounting/records/" "{\"date\":\"2024-08-01\",\"account\":${ACCOUNT_ID},\"amount\":\"-350.00\",\"detail\":\"Diesel fill-up Houston\",\"record_type\":2,\"load\":${LOAD_ID},\"truck\":${TRUCK_ID},\"driver\":${DRIVER_ID}}")"
+set +e
+resp="$(post "/api/v1/accounting/records/" "{\"date\":\"2024-08-01\",\"account\":${ACCOUNT_ID},\"amount\":\"-350.00\",\"detail\":\"Diesel fill-up Houston\",\"record_type\":2,\"load\":${LOAD_ID},\"truck\":${TRUCK_ID},\"driver\":${DRIVER_ID},\"carrier\":${CARRIER_ID}}")"
+curl_status=$?
+set -e
+if [[ "${curl_status}" -ne 0 ]]; then
+  fail "record create request failed (curl exit ${curl_status})" "${resp}"
+fi
 assert_status "record create" "201" "$(code "$resp")" "$(body "$resp")"
 RECORD_ID="$(body "$resp" | json_get_num id)"
 
@@ -1627,7 +1644,13 @@ resp="$(delete "/api/v1/documents/import-record-files/${IMPORT_FILE_ID}/")"
 assert_status "import record file delete" "204" "$(code "$resp")"
 
 step "Documents: import record file deleted → 404"
+set +e
 resp="$(delete "/api/v1/documents/import-record-files/${IMPORT_FILE_ID}/")"
+curl_status=$?
+set -e
+if [[ "${curl_status}" -ne 0 ]]; then
+  fail "import record file gone request failed (curl exit ${curl_status})" "${resp}"
+fi
 assert_status "import record file gone" "404" "$(code "$resp")"
 
 # driver-files, truck-files, trailer-files require multipart file upload.

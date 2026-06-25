@@ -18,6 +18,7 @@ from apps.locations.models import City
 from .exceptions import InvalidStatusTransition, NotReadyToExecute
 from .models import Load, LoadStop
 from .serializers import (
+    LoadBrokerContactsSerializer,
     LoadFileSerializer,
     LoadListSerializer,
     LoadSerializer,
@@ -32,6 +33,7 @@ from .services import (
     create_load_stop,
     delete_load,
     delete_load_stop,
+    get_load_broker_contacts,
     send_driver_info,
     set_executed,
     set_history,
@@ -245,6 +247,22 @@ class LoadViewSet(ViewSet):
         except Load.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(LoadSerializer(load).data)
+
+    @action(detail=True, methods=["get"], url_path="broker-contacts")
+    def broker_contacts(self, request, pk=None):
+        try:
+            load = self._base_queryset().get(pk=pk)
+        except Load.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        if load.broker is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        contacts = get_load_broker_contacts(load=load)
+        serializer = LoadBrokerContactsSerializer(
+            {"broker": load.broker, "contacts": contacts},
+            context={"request": request},
+        )
+        return Response(serializer.data)
 
     def update(self, request, pk=None):
         try:

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
-from apps.brokers.models import Business
+from apps.brokers.models import Broker, Business
+from apps.brokers.serializers import BrokerContactSerializer
 from .models import Load, LoadStop
 
 
@@ -351,3 +352,47 @@ class LoadListSerializer(serializers.ModelSerializer):
 
 class LoadFileSerializer(serializers.Serializer):
     file = serializers.FileField()
+
+
+class LoadBrokerInfoSerializer(serializers.ModelSerializer):
+    carrier_name = serializers.CharField(
+        source="carrier.name", read_only=True, default=None
+    )
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    created_by_name = serializers.CharField(
+        source="created_by.full_name", read_only=True, default=""
+    )
+    updated_by_name = serializers.CharField(
+        source="updated_by.full_name", read_only=True, default=""
+    )
+
+    class Meta:
+        model = Broker
+        fields = [
+            "id",
+            "mc",
+            "name",
+            "dba_name",
+            "email",
+            "phone",
+            "accounting_email",
+            "status",
+            "status_display",
+            "carrier",
+            "carrier_name",
+            "buy_status",
+            "debtor_buy_status",
+            "details",
+            "checked_at",
+            "created_by",
+            "created_by_name",
+            "created_at",
+            "updated_by",
+            "updated_by_name",
+            "updated_at",
+        ]
+
+
+class LoadBrokerContactsSerializer(serializers.Serializer):
+    broker = LoadBrokerInfoSerializer(read_only=True)
+    contacts = BrokerContactSerializer(many=True, read_only=True)

@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounting.models import Account
+from apps.brokers.tests.factories import BrokerContactFactory
 from apps.drivers.models import DriverType
 from apps.loads.models import Load
 from apps.loads.tests.factories import (
@@ -342,6 +343,86 @@ class TestLoadList:
         response = api_client.get(reverse("load-list"))
 
         assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.django_db
+class TestLoadBrokerContacts:
+    def test_requires_authentication(self, api_client):
+        load = LoadFactory()
+
+        response = api_client.get(
+            reverse("load-broker-contacts", kwargs={"pk": load.pk})
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_returns_broker_and_selected_contacts(self, auth_client):
+        client, _ = auth_client
+        user = UserFactory(first_name="System", last_name="User")
+        broker = BrokerFactory(
+            name="Acme Logistics",
+            dba_name="Acme DBA",
+            debtor_buy_status="Approved For Purchases",
+            created_by=user,
+            updated_by=user,
+        )
+        zed = BrokerContactFactory(
+            broker=broker,
+            name="Zed Contact",
+            email="zed@example.com",
+            phone="555-0002",
+        )
+        amy = BrokerContactFactory(
+            broker=broker,
+            name="Amy Contact",
+            email="amy@example.com",
+            phone="555-0001",
+        )
+        BrokerContactFactory(
+            broker=broker,
+            name="Other Contact",
+            email="other@example.com",
+        )
+        load = LoadFactory(broker=broker, broker_contacts=f"{zed.id},{amy.id}")
+
+        response = client.get(reverse("load-broker-contacts", kwargs={"pk": load.pk}))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["broker"]["id"] == broker.id
+        assert response.data["broker"]["name"] == "Acme Logistics"
+        assert response.data["broker"]["dba_name"] == "Acme DBA"
+        assert response.data["broker"]["status_display"] == "Active"
+        assert response.data["broker"]["debtor_buy_status"] == "Approved For Purchases"
+        assert response.data["broker"]["created_by_name"] == "System User"
+        assert response.data["broker"]["updated_by_name"] == "System User"
+        assert "created_at" in response.data["broker"]
+        assert "updated_at" in response.data["broker"]
+        assert [contact["name"] for contact in response.data["contacts"]] == [
+            "Amy Contact",
+            "Zed Contact",
+        ]
+        assert [contact["email"] for contact in response.data["contacts"]] == [
+            "amy@example.com",
+            "zed@example.com",
+        ]
+
+    def test_returns_empty_contacts_when_load_has_no_selected_contacts(
+        self, auth_client
+    ):
+        client, _ = auth_client
+        load = LoadFactory(broker_contacts="")
+
+        response = client.get(reverse("load-broker-contacts", kwargs={"pk": load.pk}))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["contacts"] == []
+
+    def test_returns_404_for_missing_load(self, auth_client):
+        client, _ = auth_client
+
+        response = client.get(reverse("load-broker-contacts", kwargs={"pk": 999999}))
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.django_db

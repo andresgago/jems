@@ -82,6 +82,20 @@ def send_driver_info(
     msg.send()
 
 
+def get_load_broker_contacts(*, load: Load):
+    """Return the selected broker contacts stored on a load, matching TMS CSV IDs."""
+    from apps.brokers.models import BrokerContact
+
+    contact_ids = [
+        int(value)
+        for value in str(load.broker_contacts or "").split(",")
+        if value.strip().isdigit()
+    ]
+    if not contact_ids:
+        return BrokerContact.objects.none()
+    return BrokerContact.objects.filter(id__in=contact_ids).order_by("name")
+
+
 # Maps PHP date('w') weekday (0=Sun…6=Sat) to TMS accounting_day (Tue=1…Mon=7, Sun=6).
 _ACCOUNTING_DAYS: dict[int, int] = {0: 6, 1: 7, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5}
 _ET = ZoneInfo("America/New_York")

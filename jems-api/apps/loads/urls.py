@@ -17,6 +17,7 @@ load_set_rating = LoadViewSet.as_view({"post": "set_rating_action"})
 load_set_file = LoadViewSet.as_view({"post": "set_file", "delete": "clear_file"})
 load_bulk_delete = LoadViewSet.as_view({"post": "bulk_delete"})
 load_stops = LoadViewSet.as_view({"get": "stops", "post": "stops"})
+load_broker_contacts = LoadViewSet.as_view({"get": "broker_contacts"})
 
 # Stops detail
 stop_detail = LoadStopViewSet.as_view(
@@ -37,6 +38,11 @@ urlpatterns = [
     path("<int:pk>/set-history/", load_set_history, name="load-set-history"),
     path("<int:pk>/set-executed/", load_set_executed, name="load-set-executed"),
     path("<int:pk>/set-rating/", load_set_rating, name="load-set-rating"),
+    path(
+        "<int:pk>/broker-contacts/",
+        load_broker_contacts,
+        name="load-broker-contacts",
+    ),
     re_path(
         r"^(?P<pk>\d+)/files/(?P<slot>[^/.]+)/$", load_set_file, name="load-set-file"
     ),

@@ -20,6 +20,7 @@ from apps.loads.services import (
     create_load_stop,
     delete_load,
     delete_load_stop,
+    get_load_broker_contacts,
     set_executed,
     set_invoiced,
     set_load_file,
@@ -29,6 +30,7 @@ from apps.loads.services import (
     update_load,
     update_load_stop,
 )
+from apps.brokers.tests.factories import BrokerContactFactory
 from apps.loads.tests.factories import (
     BrokerFactory,
     BusinessFactory,
@@ -180,6 +182,34 @@ class TestCreateLoad:
                 pickup_address="x",
                 dropoff_address="x",
             )
+
+
+@pytest.mark.django_db
+class TestGetLoadBrokerContacts:
+    def test_returns_selected_contacts_sorted_by_name(self):
+        broker = BrokerFactory()
+        zed = BrokerContactFactory(broker=broker, name="Zed Contact")
+        amy = BrokerContactFactory(broker=broker, name="Amy Contact")
+        BrokerContactFactory(broker=broker, name="Other Contact")
+        load = LoadFactory(broker=broker, broker_contacts=f"{zed.id},{amy.id}")
+
+        contacts = list(get_load_broker_contacts(load=load))
+
+        assert contacts == [amy, zed]
+
+    def test_ignores_blank_and_non_numeric_csv_values(self):
+        broker = BrokerFactory()
+        contact = BrokerContactFactory(broker=broker, name="Selected Contact")
+        load = LoadFactory(broker=broker, broker_contacts=f",abc,{contact.id},")
+
+        contacts = list(get_load_broker_contacts(load=load))
+
+        assert contacts == [contact]
+
+    def test_empty_csv_returns_no_contacts(self):
+        load = LoadFactory(broker_contacts="")
+
+        assert list(get_load_broker_contacts(load=load)) == []
 
 
 @pytest.mark.django_db
