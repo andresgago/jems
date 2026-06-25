@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BrokersStatusModal from '../../components/BrokersStatusModal';
 import DateRangePicker from '../../components/DateRangePicker';
 import SendDriverInfoModal from '../../components/SendDriverInfoModal';
 import { useAuth } from '../../contexts/useAuth';
 import { useLoads } from '../../hooks/useLoads';
+import { brokersService } from '../../services/brokers';
+import { citiesService } from '../../services/cities';
+import { driversService } from '../../services/drivers';
 import { loadsService, LOAD_STATUS } from '../../services/loads';
 import { usersService } from '../../services/users';
 
@@ -270,6 +273,87 @@ function DispatcherSelect({ value, onChange, currentUser, onScopeChange }) {
   );
 }
 
+function FilterSelect({ value, displayValue, placeholder, onSelect, onClear, fetchOptions }) {
+  const wrapperRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [options, setOptions] = useState([]);
+  const [optLoading, setOptLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setOptLoading(true);
+    fetchOptions(query)
+      .then((items) => { if (!cancelled) { setOptions(items); setOptLoading(false); } })
+      .catch(() => { if (!cancelled) { setOptions([]); setOptLoading(false); } });
+    return () => { cancelled = true; };
+  }, [open, query, fetchOptions]);
+
+  useEffect(() => {
+    const handler = (e) => { if (!wrapperRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSelect = (opt) => { onSelect(opt); setQuery(''); setOpen(false); };
+  const handleClear = (e) => { e.stopPropagation(); onClear(); setQuery(''); setOpen(false); };
+
+  return (
+    <div className="filter-select-wrap" ref={wrapperRef}>
+      <button
+        type="button"
+        className={`filter-select-trigger form-control form-control-sm${open ? ' active' : ''}`}
+        onClick={() => setOpen((p) => !p)}
+      >
+        <span className={displayValue ? '' : 'text-muted'}>{displayValue || placeholder}</span>
+        <span className="filter-select-icons">
+          {displayValue ? (
+            <i
+              className="bi bi-x-lg"
+              role="button"
+              tabIndex={0}
+              onClick={handleClear}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClear(e); }}
+            />
+          ) : null}
+          <i className={`bi ${open ? 'bi-caret-up-fill' : 'bi-caret-down-fill'}`} />
+        </span>
+      </button>
+      {open && (
+        <div className="dispatcher-select-menu">
+          <div className="dispatcher-select-search">
+            <input
+              autoFocus
+              className="form-control form-control-sm"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search…"
+            />
+            <i className="bi bi-search" />
+          </div>
+          <div className="dispatcher-select-options">
+            {optLoading && <div className="dispatcher-select-empty">Loading…</div>}
+            {!optLoading && options.length === 0 && (
+              <div className="dispatcher-select-empty">{query ? 'No results' : 'Type to search'}</div>
+            )}
+            {!optLoading && options.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={String(opt.id) === String(value) ? 'active' : ''}
+                onClick={() => handleSelect(opt)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LoadRow({ load, selected, onSelect, onChanged }) {
   const [actioning, setActioning] = useState(false);
   const trailerType = load.load_trailer_type_short_name || load.trailer_type_short_name || '-';
@@ -431,7 +515,37 @@ export default function LoadsPage() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [showDriverInfoModal, setShowDriverInfoModal] = useState(false);
   const [showBrokersStatusModal, setShowBrokersStatusModal] = useState(false);
+  const [filterLabels, setFilterLabels] = useState({});
+  const driverCacheRef = useRef(null);
   const { loads, count = 0, loading, error, refresh } = useLoads(filters);
+
+  const fetchBrokerOptions = useCallback(async (q) => {
+    if (!q.trim()) {
+      const { data } = await brokersService.options();
+      return Array.isArray(data) ? data : [];
+    }
+    const { data } = await brokersService.search(q);
+    const items = Array.isArray(data) ? data : [];
+    return items.map((b) => ({ id: b.id, label: `${b.dba_name || b.name} (${b.mc})` }));
+  }, []);
+
+  const fetchDriverOptions = useCallback(async (q) => {
+    if (!driverCacheRef.current) {
+      const { data } = await driversService.list();
+      driverCacheRef.current = Array.isArray(data) ? data : (data.results || []);
+    }
+    const norm = q.trim().toLowerCase();
+    return driverCacheRef.current
+      .filter((d) => !norm || (d.full_name || `${d.first_name} ${d.last_name}`).toLowerCase().includes(norm))
+      .map((d) => ({ id: d.id, label: d.full_name || `${d.first_name} ${d.last_name}` }));
+  }, []);
+
+  const fetchCityOptions = useCallback(async (q) => {
+    if (!q.trim()) return [];
+    const { data } = await citiesService.list({ q, active: true });
+    const items = Array.isArray(data) ? data : (data.results || []);
+    return items.map((c) => ({ id: c.id, label: `${c.name} (${c.state_abbreviation}) ${c.zip}` }));
+  }, []);
   const visibleLoads = gridCleared ? EMPTY_LOADS : loads;
 
   useEffect(() => {
@@ -468,6 +582,7 @@ export default function LoadsPage() {
 
   const handleReset = () => {
     setDraft(initialDraft);
+    setFilterLabels({});
     setShowAllRows(false);
     setPage(1);
     setFilters(buildLoadParams(initialDraft, { page: 1, showAllRows: false }));
@@ -519,6 +634,7 @@ export default function LoadsPage() {
       });
       return next;
     });
+    setFilterLabels({});
     setSelectedIds(new Set());
     setGridCleared(true);
   };
@@ -543,6 +659,7 @@ export default function LoadsPage() {
   const handleListMyLoads = () => {
     const nextDraft = { date_type: 'all', status: '', dispatcher: String(user.user_id) };
     setDraft(nextDraft);
+    setFilterLabels({});
     setShowAllRows(false);
     setPage(1);
     setFilters(buildLoadParams(nextDraft, { page: 1, showAllRows: false }));
@@ -645,7 +762,24 @@ export default function LoadsPage() {
                 <th className="text-center"><i className="bi bi-image text-primary" /></th>
                 <th>
                   <label>Broker</label>
-                  <input className="form-control form-control-sm" value={draft.broker || ''} onChange={(e) => setField('broker', e.target.value)} onKeyDown={submitOnEnter} placeholder="Broker" />
+                  <FilterSelect
+                    value={draft.broker || ''}
+                    displayValue={filterLabels.broker || ''}
+                    placeholder="Broker"
+                    fetchOptions={fetchBrokerOptions}
+                    onSelect={(opt) => {
+                      const nd = { ...draft, broker: String(opt.id) };
+                      setDraft(nd);
+                      setFilterLabels((p) => ({ ...p, broker: opt.label }));
+                      applyFilters(nd);
+                    }}
+                    onClear={() => {
+                      const nd = { ...draft, broker: '' };
+                      setDraft(nd);
+                      setFilterLabels((p) => ({ ...p, broker: '' }));
+                      applyFilters(nd);
+                    }}
+                  />
                 </th>
                 <th>
                   <label>Order</label>
@@ -653,30 +787,81 @@ export default function LoadsPage() {
                 </th>
                 <th>
                   <label>Pick up City</label>
-                  <input className="form-control form-control-sm" value={draft.pickup_city || ''} onChange={(e) => setField('pickup_city', e.target.value)} onKeyDown={submitOnEnter} placeholder="Filter by Pick up city" />
+                  <FilterSelect
+                    value={draft.pickup_city || ''}
+                    displayValue={filterLabels.pickup_city || ''}
+                    placeholder="Filter by Pick up city"
+                    fetchOptions={fetchCityOptions}
+                    onSelect={(opt) => {
+                      const nd = { ...draft, pickup_city: String(opt.id) };
+                      setDraft(nd);
+                      setFilterLabels((p) => ({ ...p, pickup_city: opt.label }));
+                      applyFilters(nd);
+                    }}
+                    onClear={() => {
+                      const nd = { ...draft, pickup_city: '' };
+                      setDraft(nd);
+                      setFilterLabels((p) => ({ ...p, pickup_city: '' }));
+                      applyFilters(nd);
+                    }}
+                  />
                 </th>
                 <th>
                   <label>Delivery City</label>
-                  <input className="form-control form-control-sm" value={draft.dropoff_city || ''} onChange={(e) => setField('dropoff_city', e.target.value)} onKeyDown={submitOnEnter} placeholder="Filter by Drop off city" />
+                  <FilterSelect
+                    value={draft.dropoff_city || ''}
+                    displayValue={filterLabels.dropoff_city || ''}
+                    placeholder="Filter by Drop off city"
+                    fetchOptions={fetchCityOptions}
+                    onSelect={(opt) => {
+                      const nd = { ...draft, dropoff_city: String(opt.id) };
+                      setDraft(nd);
+                      setFilterLabels((p) => ({ ...p, dropoff_city: opt.label }));
+                      applyFilters(nd);
+                    }}
+                    onClear={() => {
+                      const nd = { ...draft, dropoff_city: '' };
+                      setDraft(nd);
+                      setFilterLabels((p) => ({ ...p, dropoff_city: '' }));
+                      applyFilters(nd);
+                    }}
+                  />
                 </th>
                 <th>
                   <label>Driver</label>
-                  <input className="form-control form-control-sm" value={draft.driver || ''} onChange={(e) => setField('driver', e.target.value)} onKeyDown={submitOnEnter} placeholder="Driver" />
+                  <FilterSelect
+                    value={draft.driver || ''}
+                    displayValue={filterLabels.driver || ''}
+                    placeholder="Driver"
+                    fetchOptions={fetchDriverOptions}
+                    onSelect={(opt) => {
+                      const nd = { ...draft, driver: String(opt.id) };
+                      setDraft(nd);
+                      setFilterLabels((p) => ({ ...p, driver: opt.label }));
+                      applyFilters(nd);
+                    }}
+                    onClear={() => {
+                      const nd = { ...draft, driver: '' };
+                      setDraft(nd);
+                      setFilterLabels((p) => ({ ...p, driver: '' }));
+                      applyFilters(nd);
+                    }}
+                  />
                 </th>
-                <th className="text-center"><i className="bi bi-file-earmark-ruled text-primary" /><i className="bi bi-file-earmark-medical text-danger ms-1" /></th>
-                <th className="text-center"><i className="bi bi-file-earmark-text text-success" /><i className="bi bi-file-earmark-clock text-warning ms-1" /></th>
+                <th className="text-center"><i className="bi bi-file-earmark-ruled text-primary" title="Rate Confirmation" /><i className="bi bi-file-earmark-medical text-danger ms-1" title="Lumper file" /></th>
+                <th className="text-center"><i className="bi bi-file-earmark-text text-success" title="Bill of lading" /><i className="bi bi-file-earmark-clock text-warning ms-1" title="Detention file" /></th>
                 <th className="text-center">Actions</th>
                 <th className="text-center">
                   <select className="form-select form-select-sm" value={draft.status || ''} onChange={(e) => { setField('status', e.target.value); applyFilters({ ...draft, status: e.target.value }); }}>
                     {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </th>
-                <th className="text-center"><i className="bi bi-check-circle-fill text-success" /></th>
-                <th className="text-center"><i className="bi bi-star-fill text-warning" /></th>
-                <th className="text-center"><i className="bi bi-arrow-right-circle-fill text-primary" /></th>
+                <th className="text-center"><i className="bi bi-check-circle-fill text-success" title="Truck, Trailer and Driver Assignment" /></th>
+                <th className="text-center"><i className="bi bi-star-fill text-warning" title="Set Rating" /></th>
+                <th className="text-center"><i className="bi bi-arrow-right-circle-fill text-primary" title="Send to executed" /></th>
                 <th className="text-center">Status</th>
-                <th className="text-center"><i className="bi bi-receipt" /></th>
-                <th className="text-center"><i className="bi bi-cash-coin" /></th>
+                <th className="text-center"><i className="bi bi-receipt" title="Invoiced" /></th>
+                <th className="text-center"><i className="bi bi-cash-coin" title="Paid" /></th>
               </tr>
             </thead>
             <tbody>

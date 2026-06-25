@@ -33,9 +33,21 @@ vi.mock('../../../services/users', async () => {
   };
 });
 
+vi.mock('../../../services/brokers', async () => {
+  const actual = await vi.importActual('../../../services/brokers');
+  return { ...actual, brokersService: { options: vi.fn(), search: vi.fn() } };
+});
+
+vi.mock('../../../services/drivers', async () => {
+  const actual = await vi.importActual('../../../services/drivers');
+  return { ...actual, driversService: { list: vi.fn() } };
+});
+
 import { useLoads } from '../../../hooks/useLoads';
 import { useAuth } from '../../../contexts/useAuth';
 import { usersService } from '../../../services/users';
+import { brokersService } from '../../../services/brokers';
+import { driversService } from '../../../services/drivers';
 
 const dispatchers = [
   { id: 17, label: 'Beatriz Gago Alonso', full_name: 'Beatriz Gago Alonso', is_dispatcher: true },
@@ -95,6 +107,9 @@ beforeEach(() => {
     user: { user_id: 17, full_name: 'Beatriz Gago Alonso', roles: ['dispatcher'] },
   });
   usersService.options.mockResolvedValue({ data: dispatchers });
+  brokersService.options.mockResolvedValue({ data: [] });
+  brokersService.search.mockResolvedValue({ data: [] });
+  driversService.list.mockResolvedValue({ data: [] });
   mockLoadsReturn();
 });
 
@@ -109,13 +124,14 @@ describe('LoadsPage', () => {
   });
 
   it('applies column filters through useLoads params', async () => {
+    brokersService.options.mockResolvedValue({ data: [{ id: 5, label: 'Jobee Express (123456)' }] });
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
 
-    fireEvent.change(screen.getByPlaceholderText('Broker'), { target: { value: 'jobee' } });
-    fireEvent.keyDown(screen.getByPlaceholderText('Broker'), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Broker' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jobee Express (123456)' }));
 
     await waitFor(() => {
-      expect(useLoads).toHaveBeenLastCalledWith(expect.objectContaining({ broker: 'jobee' }));
+      expect(useLoads).toHaveBeenLastCalledWith(expect.objectContaining({ broker: '5' }));
     });
   });
 
@@ -168,29 +184,31 @@ describe('LoadsPage', () => {
   });
 
   it('returns from All mode to paged mode without changing the applied filters', async () => {
+    brokersService.options.mockResolvedValue({ data: [{ id: 7, label: 'Local Broker (654321)' }] });
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
 
-    fireEvent.change(screen.getByPlaceholderText('Broker'), { target: { value: 'local' } });
-    fireEvent.keyDown(screen.getByPlaceholderText('Broker'), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Broker' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Local Broker (654321)' }));
     fireEvent.click(screen.getByRole('button', { name: /^All$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Page$/i }));
 
     await waitFor(() => {
-      expect(useLoads).toHaveBeenLastCalledWith(expect.objectContaining({ broker: 'local', page: 1, page_size: 25 }));
+      expect(useLoads).toHaveBeenLastCalledWith(expect.objectContaining({ broker: '7', page: 1, page_size: 25 }));
     });
     expect(useLoads.mock.calls.at(-1)[0]).not.toHaveProperty('all');
   });
 
   it('keeps filters when moving to the next page', async () => {
+    driversService.list.mockResolvedValue({ data: [{ id: 4, full_name: 'Alain Reynier' }] });
     mockLoadsReturn({ count: 52 });
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
 
-    fireEvent.change(screen.getByPlaceholderText('Driver'), { target: { value: 'alain' } });
-    fireEvent.keyDown(screen.getByPlaceholderText('Driver'), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Driver' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Alain Reynier' }));
     fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
     await waitFor(() => {
-      expect(useLoads).toHaveBeenLastCalledWith(expect.objectContaining({ driver: 'alain', page: 2, page_size: 25 }));
+      expect(useLoads).toHaveBeenLastCalledWith(expect.objectContaining({ driver: '4', page: 2, page_size: 25 }));
     });
   });
 
