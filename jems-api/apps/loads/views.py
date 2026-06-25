@@ -280,6 +280,8 @@ class LoadViewSet(ViewSet):
         return Response(LoadSerializer(load).data)
 
     def destroy(self, request, pk=None):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             load = Load.objects.get(pk=pk)
         except Load.DoesNotExist:
@@ -417,6 +419,8 @@ class LoadViewSet(ViewSet):
 
     @action(detail=False, methods=["post"], url_path="bulk-delete")
     def bulk_delete(self, request):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(status=status.HTTP_403_FORBIDDEN)
         ids = request.data.get("ids", [])
         if not isinstance(ids, list):
             return Response(
