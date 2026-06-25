@@ -554,24 +554,24 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate }) {
         </div>
       </td>
       <td className="text-center">
-        <div className="dropdown">
-          <button className="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" disabled={actioning || load.status === 4}>
-            Status
-          </button>
-          <ul className="dropdown-menu dropdown-menu-end">
-            {load.status !== 3 && (
-              <li><button className="dropdown-item" onClick={() => handleStatus(3)}><i className="bi bi-check-circle me-1 text-success" />Delivered</button></li>
-            )}
-            {load.status !== 4 && (
+        {load.status !== 4 && (
+          <div className="dropdown">
+            <button className="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" disabled={actioning}>
+              Status
+            </button>
+            <ul className="dropdown-menu dropdown-menu-end">
+              {load.status !== 3 && (
+                <li><button className="dropdown-item" onClick={() => handleStatus(3)}><i className="bi bi-check-circle me-1 text-success" />Delivered</button></li>
+              )}
               <li><button className="dropdown-item" onClick={() => handleStatus(4)}><i className="bi bi-pause-circle me-1 text-warning" />Mark as Detention</button></li>
-            )}
-            {load.status === 1 && (
-              <li><button className="dropdown-item text-danger" onClick={() => handleStatus(5)}><i className="bi bi-x-circle me-1" />Cancel Load</button></li>
-            )}
-            <li><hr className="dropdown-divider" /></li>
-            <li><button className="dropdown-item" onClick={handleHistory}><i className="bi bi-archive me-1" />Move to History</button></li>
-          </ul>
-        </div>
+              {load.status === 1 && (
+                <li><button className="dropdown-item text-danger" onClick={() => handleStatus(5)}><i className="bi bi-x-circle me-1" />Cancel Load</button></li>
+              )}
+              <li><hr className="dropdown-divider" /></li>
+              <li><button className="dropdown-item" onClick={handleHistory}><i className="bi bi-archive me-1" />Move to History</button></li>
+            </ul>
+          </div>
+        )}
       </td>
       <td className="text-center">
         <button

@@ -453,6 +453,25 @@ describe('LoadsPage', () => {
     expect(screen.queryByTitle('Trailer Drop Here')).not.toBeInTheDocument();
   });
 
+  it('shows the Status dropdown for non-detention loads', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /^Status$/i })).toBeEnabled();
+  });
+
+  it('hides the Status dropdown for detention loads instead of disabling it', async () => {
+    mockLoadsReturn({
+      loads: [{ ...rows[0], status: 4 }],
+    });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.queryByRole('button', { name: /^Status$/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Detention').closest('tr')).toHaveClass('row-detention');
+  });
+
   it('assignment cell is a button that opens assign modal', async () => {
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
     await waitFor(() => expect(usersService.options).toHaveBeenCalled());
