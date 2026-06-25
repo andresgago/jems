@@ -16,9 +16,16 @@ from apps.locations.models import City
 
 from .exceptions import InvalidStatusTransition, NotReadyToExecute
 from .models import Load, LoadStop
-from .serializers import LoadListSerializer, LoadSerializer, LoadStopSerializer
+from .serializers import (
+    LoadFileSerializer,
+    LoadListSerializer,
+    LoadSerializer,
+    LoadStopSerializer,
+)
 from .services import (
+    FILE_SLOTS,
     assign_load,
+    clear_load_file,
     create_load,
     create_load_stop,
     delete_load,
@@ -27,6 +34,7 @@ from .services import (
     set_executed,
     set_history,
     set_invoiced,
+    set_load_file,
     set_load_rating,
     set_load_status,
     set_paid,
@@ -416,6 +424,36 @@ class LoadViewSet(ViewSet):
                 {"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         return Response({"detail": "Driver information sent successfully."})
+
+    def set_file(self, request, pk=None, slot=None):
+        if slot not in FILE_SLOTS:
+            return Response(
+                {"detail": f"Unknown file slot: '{slot}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            load = Load.objects.get(pk=pk)
+        except Load.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = LoadFileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        load = set_load_file(
+            load=load, slot=slot, file=serializer.validated_data["file"]
+        )
+        return Response(LoadSerializer(load).data)
+
+    def clear_file(self, request, pk=None, slot=None):
+        if slot not in FILE_SLOTS:
+            return Response(
+                {"detail": f"Unknown file slot: '{slot}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            load = Load.objects.get(pk=pk)
+        except Load.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        load = clear_load_file(load=load, slot=slot)
+        return Response(LoadSerializer(load).data)
 
 
 class LoadStopViewSet(ViewSet):

@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 
 from .views import CitySearchView, LoadStopViewSet, LoadViewSet
 
@@ -14,6 +14,7 @@ load_set_paid = LoadViewSet.as_view({"post": "toggle_paid"})
 load_set_history = LoadViewSet.as_view({"post": "toggle_history"})
 load_set_executed = LoadViewSet.as_view({"post": "set_executed_action"})
 load_set_rating = LoadViewSet.as_view({"post": "set_rating_action"})
+load_set_file = LoadViewSet.as_view({"post": "set_file", "delete": "clear_file"})
 load_stops = LoadViewSet.as_view({"get": "stops", "post": "stops"})
 
 # Stops detail
@@ -34,6 +35,9 @@ urlpatterns = [
     path("<int:pk>/set-history/", load_set_history, name="load-set-history"),
     path("<int:pk>/set-executed/", load_set_executed, name="load-set-executed"),
     path("<int:pk>/set-rating/", load_set_rating, name="load-set-rating"),
+    re_path(
+        r"^(?P<pk>\d+)/files/(?P<slot>[^/.]+)/$", load_set_file, name="load-set-file"
+    ),
     path("<int:pk>/stops/", load_stops, name="load-stops"),
     path("<int:load_pk>/stops/<int:pk>/", stop_detail, name="load-stop-detail"),
     path("cities/search/", city_search, name="city-search"),

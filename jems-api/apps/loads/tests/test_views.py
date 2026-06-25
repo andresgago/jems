@@ -1269,3 +1269,115 @@ class TestLoadSetRating:
             {"shipper_rating": 5, "receiver_rating": 5},
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestLoadFileUpload:
+    def test_upload_rate_file_returns_200(self, auth_client, tmp_path):
+        client, _ = auth_client
+        load = LoadFactory()
+        fake = tmp_path / "rate.pdf"
+        fake.write_bytes(b"PDF")
+        with open(fake, "rb") as fh:
+            response = client.post(
+                reverse("load-set-file", kwargs={"pk": load.pk, "slot": "rate_file"}),
+                {"file": fh},
+                format="multipart",
+            )
+        assert response.status_code == status.HTTP_200_OK
+        load.refresh_from_db()
+        assert load.rate_file
+
+    def test_upload_bill_file_returns_200(self, auth_client, tmp_path):
+        client, _ = auth_client
+        load = LoadFactory()
+        fake = tmp_path / "bill.pdf"
+        fake.write_bytes(b"PDF")
+        with open(fake, "rb") as fh:
+            response = client.post(
+                reverse("load-set-file", kwargs={"pk": load.pk, "slot": "bill_file"}),
+                {"file": fh},
+                format="multipart",
+            )
+        assert response.status_code == status.HTTP_200_OK
+
+    @pytest.mark.parametrize("slot", ["lumper_file", "detention_file"])
+    def test_upload_other_slots_return_200(self, auth_client, tmp_path, slot):
+        client, _ = auth_client
+        load = LoadFactory()
+        fake = tmp_path / "doc.pdf"
+        fake.write_bytes(b"PDF")
+        with open(fake, "rb") as fh:
+            response = client.post(
+                reverse("load-set-file", kwargs={"pk": load.pk, "slot": slot}),
+                {"file": fh},
+                format="multipart",
+            )
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_unknown_slot_returns_400(self, auth_client, tmp_path):
+        client, _ = auth_client
+        load = LoadFactory()
+        fake = tmp_path / "doc.pdf"
+        fake.write_bytes(b"PDF")
+        with open(fake, "rb") as fh:
+            response = client.post(
+                reverse("load-set-file", kwargs={"pk": load.pk, "slot": "bad_slot"}),
+                {"file": fh},
+                format="multipart",
+            )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_nonexistent_load_returns_404(self, auth_client, tmp_path):
+        client, _ = auth_client
+        fake = tmp_path / "doc.pdf"
+        fake.write_bytes(b"PDF")
+        with open(fake, "rb") as fh:
+            response = client.post(
+                reverse("load-set-file", kwargs={"pk": 999999, "slot": "rate_file"}),
+                {"file": fh},
+                format="multipart",
+            )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_unauthenticated_returns_401(self, tmp_path):
+        load = LoadFactory()
+        fake = tmp_path / "doc.pdf"
+        fake.write_bytes(b"PDF")
+        client = APIClient()
+        with open(fake, "rb") as fh:
+            response = client.post(
+                reverse("load-set-file", kwargs={"pk": load.pk, "slot": "rate_file"}),
+                {"file": fh},
+                format="multipart",
+            )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_delete_clears_file(self, auth_client, tmp_path):
+        client, _ = auth_client
+        load = LoadFactory()
+        fake = tmp_path / "rate.pdf"
+        fake.write_bytes(b"PDF")
+        with open(fake, "rb") as fh:
+            client.post(
+                reverse("load-set-file", kwargs={"pk": load.pk, "slot": "rate_file"}),
+                {"file": fh},
+                format="multipart",
+            )
+        load.refresh_from_db()
+        assert load.rate_file
+
+        response = client.delete(
+            reverse("load-set-file", kwargs={"pk": load.pk, "slot": "rate_file"}),
+        )
+        assert response.status_code == status.HTTP_200_OK
+        load.refresh_from_db()
+        assert not load.rate_file
+
+    def test_delete_unknown_slot_returns_400(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory()
+        response = client.delete(
+            reverse("load-set-file", kwargs={"pk": load.pk, "slot": "bad_slot"}),
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST

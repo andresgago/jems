@@ -294,6 +294,38 @@ def delete_load(*, load: Load) -> None:
     load.delete()
 
 
+FILE_SLOTS: dict[str, str] = {
+    "rate_file": "rate_file",
+    "bill_file": "bill_file",
+    "lumper_file": "lumper_file",
+    "detention_file": "detention_file",
+}
+
+
+def set_load_file(*, load: Load, slot: str, file: Any) -> Load:
+    if slot not in FILE_SLOTS:
+        raise ValidationError(f"Unknown file slot: '{slot}'.")
+    field = FILE_SLOTS[slot]
+    old = getattr(load, field)
+    if old:
+        old.delete(save=False)
+    setattr(load, field, file)
+    load.save(update_fields=[field])
+    return load
+
+
+def clear_load_file(*, load: Load, slot: str) -> Load:
+    if slot not in FILE_SLOTS:
+        raise ValidationError(f"Unknown file slot: '{slot}'.")
+    field = FILE_SLOTS[slot]
+    old = getattr(load, field)
+    if old:
+        old.delete(save=False)
+    setattr(load, field, None)
+    load.save(update_fields=[field])
+    return load
+
+
 # --- Load Stops ---
 
 

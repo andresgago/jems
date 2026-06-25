@@ -337,3 +337,7 @@ class LoadListSerializer(serializers.ModelSerializer):
             "paid",
             "created_at",
         ]
+
+
+class LoadFileSerializer(serializers.Serializer):
+    file = serializers.FileField()

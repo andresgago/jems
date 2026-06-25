@@ -11,13 +11,16 @@ from apps.loads.exceptions import InvalidStatusTransition
 from apps.loads.models import Load, LoadStop
 from apps.loads.exceptions import NotReadyToExecute
 from apps.loads.services import (
+    FILE_SLOTS,
     _accounting_day_from,
     assign_load,
+    clear_load_file,
     create_load,
     create_load_stop,
     delete_load_stop,
     set_executed,
     set_invoiced,
+    set_load_file,
     set_load_rating,
     set_load_status,
     set_paid,
@@ -689,3 +692,70 @@ class TestSetLoadRating:
         result = set_load_rating(load=load, shipper_rating=0, receiver_rating=0)
         assert result.shipper_rating == 0
         assert result.receiver_rating == 0
+
+
+@pytest.mark.django_db
+class TestSetLoadFile:
+    def test_sets_rate_file(self, tmp_path):
+        load = LoadFactory()
+        fake = tmp_path / "rate.pdf"
+        fake.write_bytes(b"PDF")
+        from django.core.files import File as DjangoFile
+
+        with open(fake, "rb") as fh:
+            set_load_file(
+                load=load, slot="rate_file", file=DjangoFile(fh, name="rate.pdf")
+            )
+        load.refresh_from_db()
+        assert load.rate_file
+
+    def test_sets_bill_file(self, tmp_path):
+        load = LoadFactory()
+        fake = tmp_path / "bill.pdf"
+        fake.write_bytes(b"PDF")
+        from django.core.files import File as DjangoFile
+
+        with open(fake, "rb") as fh:
+            set_load_file(
+                load=load, slot="bill_file", file=DjangoFile(fh, name="bill.pdf")
+            )
+        load.refresh_from_db()
+        assert load.bill_file
+
+    def test_raises_on_unknown_slot(self):
+        load = LoadFactory()
+        with pytest.raises(ValidationError):
+            set_load_file(load=load, slot="unknown_slot", file=None)
+
+    def test_all_slots_are_valid(self):
+        assert set(FILE_SLOTS.keys()) == {
+            "rate_file",
+            "bill_file",
+            "lumper_file",
+            "detention_file",
+        }
+
+
+@pytest.mark.django_db
+class TestClearLoadFile:
+    def test_clears_slot(self, tmp_path):
+        load = LoadFactory()
+        fake = tmp_path / "rate.pdf"
+        fake.write_bytes(b"PDF")
+        from django.core.files import File as DjangoFile
+
+        with open(fake, "rb") as fh:
+            set_load_file(
+                load=load, slot="rate_file", file=DjangoFile(fh, name="rate.pdf")
+            )
+        load.refresh_from_db()
+        assert load.rate_file
+
+        clear_load_file(load=load, slot="rate_file")
+        load.refresh_from_db()
+        assert not load.rate_file
+
+    def test_raises_on_unknown_slot(self):
+        load = LoadFactory()
+        with pytest.raises(ValidationError):
+            clear_load_file(load=load, slot="bad_slot")
