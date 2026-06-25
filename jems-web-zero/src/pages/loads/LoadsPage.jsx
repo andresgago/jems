@@ -437,6 +437,8 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate }) {
     try {
       await loadsService.destroy(load.id);
       onChanged();
+    } catch (err) {
+      window.alert(err.response?.data?.detail || 'Could not delete load.');
     } finally {
       setActioning(false);
     }
@@ -731,9 +733,13 @@ export default function LoadsPage() {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
     if (!window.confirm(`Delete ${ids.length} selected load${ids.length === 1 ? '' : 's'}?`)) return;
-    await Promise.all(ids.map((id) => loadsService.destroy(id)));
-    setSelectedIds(new Set());
-    refresh();
+    try {
+      await loadsService.bulkDelete(ids);
+      setSelectedIds(new Set());
+      refresh();
+    } catch (err) {
+      window.alert(err.response?.data?.detail || 'Could not delete selected loads.');
+    }
   };
 
   const handleGridReset = () => {

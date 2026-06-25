@@ -384,6 +384,8 @@ async function mockApi(page) {
     if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({ detail: 'Driver information sent successfully.' })
     if (/\/loads\/\d+\/set-rating\/$/.test(pathname) && method === 'POST') return json({})
     if (/\/loads\/\d+\/files\/[^/]+\/$/.test(pathname)) return json({})
+    if (pathname.endsWith('/loads/bulk-delete/') && method === 'POST') return json({ deleted: 1 })
+    if (/\/loads\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     if (pathname.endsWith('/loads/') && method === 'GET') return json({ results: [], count: 0 })
     if (pathname.endsWith('/loads/cities/search/')) return json([])
     if (pathname.endsWith('/brokers/search/')) return json([])
@@ -1157,4 +1159,77 @@ test('scope toggle: dispatcher trigger shows "All dispatchers" after clicking "L
   await page.goto('/loads')
   await page.locator('button.btn-link', { hasText: 'List all loads' }).click()
   await expect(page.locator('.dispatcher-select-trigger', { hasText: /All dispatchers/i })).toBeVisible()
+})
+
+// ── Load delete buttons ────────────────────────────────────────────────────────
+
+test('loads page: individual delete button is present in action column', async ({ page }) => {
+  await withAuth(page)
+  await mockApi(page)
+  // Load a page with one row
+  await page.route('**/api/v1/loads/**', async (route) => {
+    const method = route.request().method()
+    const url = new URL(route.request().url())
+    const { pathname } = url
+    const json = (data, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) })
+    if (pathname.endsWith('/loads/') && method === 'GET') {
+      return json({ results: [{ id: 1, number: 'LD-001', payment: 1500, status: 1, broker: 1, broker_name: 'Acme', pickup_city_display: 'Dallas (TX)', dropoff_city_display: 'Austin (TX)', pickup_date: '2026-06-01T10:00:00Z', dropoff_date: '2026-06-02T10:00:00Z', assignment_complete: false, ready_to_execute: false, execute: false, invoiced: false, paid: false }], count: 1 })
+    }
+    return route.continue()
+  })
+  await page.goto('/loads')
+  await expect(page.getByTitle('Delete')).toBeVisible()
+})
+
+test('loads page: bulk Delete All button is disabled with no selection', async ({ page }) => {
+  await withAuth(page)
+  await mockApi(page)
+  await page.goto('/loads')
+  const bulkBtn = page.getByRole('button', { name: /Delete All/i })
+  await expect(bulkBtn).toBeDisabled()
+})
+
+test('loads page: bulk-delete endpoint is called after checking a row and confirming', async ({ page }) => {
+  await withAuth(page)
+
+  let bulkDeleteCalled = false
+  await page.route('**/api/v1/**', async (route) => {
+    const url = new URL(route.request().url())
+    const { pathname } = url
+    const method = route.request().method()
+    const json = (data, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) })
+
+    if (pathname.endsWith('/version/') && method === 'GET') return json({ version: '6.0' })
+    if (pathname.endsWith('/auth/login/') && method === 'POST') return json({ access: mockJWT(), refresh: 'test-refresh-token' })
+    if (pathname.endsWith('/auth/refresh/') && method === 'POST') return json({ access: mockJWT() })
+    if (pathname.endsWith('/users/options/') && method === 'GET') return json([])
+    if (pathname.endsWith('/carriers/options/') && method === 'GET') return json([])
+    if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({})
+    if (/\/loads\/\d+\/set-rating\/$/.test(pathname) && method === 'POST') return json({})
+    if (/\/loads\/\d+\/files\/[^/]+\/$/.test(pathname)) return json({})
+    if (/\/loads\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
+    if (pathname.endsWith('/loads/bulk-delete/') && method === 'POST') {
+      bulkDeleteCalled = true
+      return json({ deleted: 1 })
+    }
+    if (pathname.endsWith('/loads/') && method === 'GET') {
+      return json({ results: [{ id: 1, number: 'LD-002', payment: 0, status: 1, broker: 1, broker_name: 'Test', pickup_city_display: 'X', dropoff_city_display: 'Y', pickup_date: '2026-06-01T10:00:00Z', dropoff_date: '2026-06-02T10:00:00Z', assignment_complete: false, ready_to_execute: false, execute: false, invoiced: false, paid: false }], count: 1 })
+    }
+    if (pathname.endsWith('/loads/cities/search/')) return json([])
+    if (pathname.endsWith('/brokers/options/')) return json([])
+    if (pathname.endsWith('/brokers/search/')) return json([])
+    if (pathname.endsWith('/brokers/business/search/')) return json([])
+    return route.continue()
+  })
+
+  page.on('dialog', (dialog) => dialog.accept())
+
+  await page.goto('/loads')
+  await page.getByRole('checkbox', { name: /Select load LD-002/i }).click()
+  await page.getByRole('button', { name: /Delete All/i }).click()
+
+  await page.waitForTimeout(500)
+  expect(bulkDeleteCalled).toBe(true)
 })

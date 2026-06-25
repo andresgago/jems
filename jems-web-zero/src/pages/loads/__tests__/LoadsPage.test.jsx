@@ -19,6 +19,7 @@ vi.mock('../../../services/loads', async () => {
       setStatus: vi.fn(),
       setHistory: vi.fn(),
       destroy: vi.fn(),
+      bulkDelete: vi.fn(),
       setExecuted: vi.fn(),
     },
   };
@@ -498,5 +499,111 @@ describe('LoadsPage', () => {
 
     expect(screen.queryByRole('button', { name: 'Send load to executed' })).not.toBeInTheDocument();
     expect(screen.getByTitle('Already executed')).toBeInTheDocument();
+  });
+
+  it('individual delete calls loadsService.destroy after confirm', async () => {
+    loadsService.destroy.mockResolvedValue({});
+    window.confirm = vi.fn(() => true);
+    const refresh = vi.fn();
+    mockLoadsReturn({ refresh });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTitle('Delete'));
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith('Delete load LD-001?');
+      expect(loadsService.destroy).toHaveBeenCalledWith(1);
+      expect(refresh).toHaveBeenCalled();
+    });
+  });
+
+  it('individual delete shows alert when API fails', async () => {
+    const err = { response: { data: { detail: 'Server error' } } };
+    loadsService.destroy.mockRejectedValue(err);
+    window.confirm = vi.fn(() => true);
+    window.alert = vi.fn();
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTitle('Delete'));
+
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('Server error');
+    });
+  });
+
+  it('individual delete does nothing when confirm is cancelled', async () => {
+    window.confirm = vi.fn(() => false);
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTitle('Delete'));
+
+    expect(loadsService.destroy).not.toHaveBeenCalled();
+  });
+
+  it('bulk delete calls loadsService.bulkDelete with selected ids', async () => {
+    loadsService.bulkDelete.mockResolvedValue({ data: { deleted: 1 } });
+    window.confirm = vi.fn(() => true);
+    const refresh = vi.fn();
+    mockLoadsReturn({ refresh });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select load LD-001' }));
+    fireEvent.click(screen.getByRole('button', { name: /Delete All/i }));
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith('Delete 1 selected load?');
+      expect(loadsService.bulkDelete).toHaveBeenCalledWith([1]);
+      expect(refresh).toHaveBeenCalled();
+    });
+  });
+
+  it('bulk delete is disabled when no load is selected', async () => {
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Delete All/i })).toBeDisabled();
+  });
+
+  it('bulk delete shows alert when API fails', async () => {
+    const err = { response: { data: { detail: 'Bulk delete failed' } } };
+    loadsService.bulkDelete.mockRejectedValue(err);
+    window.confirm = vi.fn(() => true);
+    window.alert = vi.fn();
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select load LD-001' }));
+    fireEvent.click(screen.getByRole('button', { name: /Delete All/i }));
+
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('Bulk delete failed');
+    });
+  });
+
+  it('bulk delete does nothing when confirm is cancelled', async () => {
+    window.confirm = vi.fn(() => false);
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select load LD-001' }));
+    fireEvent.click(screen.getByRole('button', { name: /Delete All/i }));
+
+    expect(loadsService.bulkDelete).not.toHaveBeenCalled();
   });
 });
