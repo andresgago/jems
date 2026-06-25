@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import AssignLoadModal from './AssignLoadModal';
+import RateLoadModal from './RateLoadModal';
 import BrokersStatusModal from '../../components/BrokersStatusModal';
 import DateRangePicker from '../../components/DateRangePicker';
 import SendDriverInfoModal from '../../components/SendDriverInfoModal';
@@ -70,6 +72,27 @@ function formatDateTime(value) {
   });
 }
 
+const RTL_EVENT_LABEL = {
+  DS_D:     'Driving',
+  DS_ON:    'On Duty',
+  DS_SB:    'Sleeper',
+  DS_OFF:   'Off Duty',
+  DS_PC:    'PC',
+  DS_YM:    'YM',
+  DS_WT:    'WT',
+  DR_IND_PC:'Personal Use',
+};
+
+const RTL_BADGE_CLS = {
+  DS_D:  'success',
+  DS_ON: 'success',
+  VIOL:  'danger',
+};
+
+function rtlBadgeCls(code) {
+  return RTL_BADGE_CLS[code] || 'secondary';
+}
+
 function StatusBadge({ status }) {
   const s = LOAD_STATUS[status] || { label: status, cls: 'secondary' };
   return <span className={`badge bg-${s.cls}`}>{s.label}</span>;
@@ -94,12 +117,19 @@ function DocumentLink({ href, icon, label, color }) {
   );
 }
 
-function RatingStar({ complete }) {
+function RatingStar({ complete, onClick }) {
   return (
-    <i
-      className={`bi ${complete ? 'bi-star-fill' : 'bi-star'} ${complete ? 'text-warning' : 'text-warning opacity-75'}`}
-      title={complete ? 'Ratings complete' : 'Ratings pending'}
-    />
+    <button
+      type="button"
+      className="btn btn-link p-0"
+      title={complete ? 'Ratings complete — click to update' : 'Set ratings'}
+      aria-label="Set load ratings"
+      onClick={onClick}
+    >
+      <i
+        className={`bi ${complete ? 'bi-star-fill' : 'bi-star'} ${complete ? 'text-warning' : 'text-warning opacity-75'}`}
+      />
+    </button>
   );
 }
 
@@ -110,12 +140,18 @@ function DriverPhoto({ load }) {
   return <div className="load-driver-photo load-driver-photo-empty"><i className="bi bi-person" /></div>;
 }
 
-function CityCell({ city, zip, date }) {
+function CityCell({ city, zip, date, isDrop, daysInDrop }) {
   return (
     <div className="load-city-cell">
       <div>
         <span>{city || '—'}</span>
         {zip ? <span className="load-zip"> {zip}</span> : null}
+        {isDrop ? (
+          <span className="ms-1 text-info" title="Trailer Drop Here">
+            <i className="bi bi-sign-turn-right" />
+            {daysInDrop ? <small className="ms-1">({daysInDrop}d)</small> : null}
+          </span>
+        ) : null}
       </div>
       <div className="text-muted small">{formatDateTime(date)}</div>
     </div>
@@ -354,11 +390,21 @@ function FilterSelect({ value, displayValue, placeholder, onSelect, onClear, fet
   );
 }
 
-function LoadRow({ load, selected, onSelect, onChanged }) {
+function isLoadStarted(load) {
+  if (!load.pickup_date || !load.dropoff_date) return false;
+  if (![1, 2, 3].includes(load.status)) return false;
+  const now = Date.now();
+  const puB6 = new Date(load.pickup_date).getTime() - 6 * 3600 * 1000;
+  const dropA8 = new Date(load.dropoff_date).getTime() + 8 * 3600 * 1000;
+  return now >= puB6 && now <= dropA8;
+}
+
+function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate }) {
   const [actioning, setActioning] = useState(false);
   const trailerType = load.load_trailer_type_short_name || load.trailer_type_short_name || '-';
   const brokerTitle = load.broker_debtor_buy_status || load.broker_buy_status || 'Broker status';
   const ratingsComplete = Boolean(load.shipper_rating && load.receiver_rating);
+  const showRtlBadge = Boolean(load.driver_rtl_event_code && isLoadStarted(load));
 
   const handleStatus = async (newStatus) => {
     if (!window.confirm(`Change status to ${LOAD_STATUS[newStatus]?.label}?`)) return;
@@ -366,6 +412,8 @@ function LoadRow({ load, selected, onSelect, onChanged }) {
     try {
       await loadsService.setStatus(load.id, newStatus);
       onChanged();
+    } catch (err) {
+      window.alert(err.response?.data?.error || 'Could not change status.');
     } finally {
       setActioning(false);
     }
@@ -387,6 +435,17 @@ function LoadRow({ load, selected, onSelect, onChanged }) {
     setActioning(true);
     try {
       await loadsService.destroy(load.id);
+      onChanged();
+    } finally {
+      setActioning(false);
+    }
+  };
+
+  const handleExecute = async () => {
+    if (!window.confirm('Send this load to executed?')) return;
+    setActioning(true);
+    try {
+      await loadsService.setExecuted(load.id);
       onChanged();
     } finally {
       setActioning(false);
@@ -434,17 +493,27 @@ function LoadRow({ load, selected, onSelect, onChanged }) {
           city={load.dropoff_city_display}
           zip={load.dropoff_city_zip}
           date={load.dropoff_date}
+          isDrop={Boolean(load.is_drop)}
+          daysInDrop={load.days_in_drop}
         />
       </td>
       <td className="text-center">
         {load.driver_name ? (
           <>
-            <Link to={`/drivers/${load.driver}`} className="fw-semibold text-decoration-none">{load.driver_name}</Link>
+            <Link to={`/drivers/${load.driver}`} className="fw-semibold text-decoration-none">
+              {load.driver_name}
+              {load.driver_code ? <span className="text-muted"> ({load.driver_code})</span> : null}
+            </Link>
             {load.team_driver_name ? <div className="small text-muted">Team: {load.team_driver_name}</div> : null}
             <div className="text-success fw-semibold small">
               {load.truck_number || '—'} - {load.trailer_number || '—'}
               {load.trailer_type_short_name ? ` (${load.trailer_type_short_name})` : ''}
             </div>
+            {showRtlBadge ? (
+              <span className={`badge bg-${rtlBadgeCls(load.driver_rtl_event_code)} mt-1`}>
+                {RTL_EVENT_LABEL[load.driver_rtl_event_code] || load.driver_rtl_event_code}
+              </span>
+            ) : null}
           </>
         ) : (
           <span className="text-muted small">Unassigned</span>
@@ -491,9 +560,38 @@ function LoadRow({ load, selected, onSelect, onChanged }) {
           </ul>
         </div>
       </td>
-      <td className="text-center"><BooleanMark active={load.assignment_complete} title="Truck, trailer and driver assignment" activeIcon="bi-check-lg" inactiveIcon="bi-truck" /></td>
-      <td className="text-center"><RatingStar complete={ratingsComplete} /></td>
-      <td className="text-center"><BooleanMark active={load.ready_to_execute} title="Ready to send to executed" activeIcon="bi-arrow-right-circle-fill" inactiveIcon="bi-arrow-right-circle" /></td>
+      <td className="text-center">
+        <button
+          type="button"
+          className="btn btn-link p-0 load-assignment-link"
+          title="Truck, trailer and driver assignment"
+          aria-label="Assign truck, trailer and driver"
+          onClick={() => onAssign(load)}
+        >
+          {load.assignment_complete
+            ? <i className="bi bi-check-lg text-success" />
+            : <i className="bi bi-truck text-muted" />}
+        </button>
+      </td>
+      <td className="text-center"><RatingStar complete={ratingsComplete} onClick={() => onRate(load)} /></td>
+      <td className="text-center">
+        {load.ready_to_execute && !load.execute ? (
+          <button
+            className="btn btn-link p-0 text-primary"
+            title="Send to executed"
+            aria-label="Send load to executed"
+            disabled={actioning}
+            onClick={handleExecute}
+          >
+            <i className="bi bi-arrow-right-circle-fill" />
+          </button>
+        ) : (
+          <i
+            className={`bi bi-arrow-right-circle ${load.execute ? 'text-success' : 'text-muted opacity-25'}`}
+            title={load.execute ? 'Already executed' : 'Not ready to execute'}
+          />
+        )}
+      </td>
       <td className="text-center"><StatusBadge status={load.status} /></td>
       <td className="text-center"><BooleanMark active={load.invoiced} title={load.invoiced ? 'Invoiced' : 'Not invoiced'} /></td>
       <td className="text-center"><BooleanMark active={load.paid} title={load.paid ? 'Paid' : 'Not paid'} /></td>
@@ -515,6 +613,8 @@ export default function LoadsPage() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [showDriverInfoModal, setShowDriverInfoModal] = useState(false);
   const [showBrokersStatusModal, setShowBrokersStatusModal] = useState(false);
+  const [assigningLoad, setAssigningLoad] = useState(null);
+  const [ratingLoad, setRatingLoad] = useState(null);
   const [filterLabels, setFilterLabels] = useState({});
   const driverCacheRef = useRef(null);
   const { loads, count = 0, loading, error, refresh } = useLoads(filters);
@@ -882,6 +982,8 @@ export default function LoadsPage() {
                   selected={selectedIds.has(load.id)}
                   onSelect={toggleSelected}
                   onChanged={refresh}
+                  onAssign={setAssigningLoad}
+                  onRate={setRatingLoad}
                 />
               ))}
             </tbody>
@@ -915,6 +1017,20 @@ export default function LoadsPage() {
       )}
       {showBrokersStatusModal && (
         <BrokersStatusModal onClose={() => setShowBrokersStatusModal(false)} />
+      )}
+      {assigningLoad && (
+        <AssignLoadModal
+          load={assigningLoad}
+          onClose={() => setAssigningLoad(null)}
+          onSaved={() => { setAssigningLoad(null); refresh(); }}
+        />
+      )}
+      {ratingLoad && (
+        <RateLoadModal
+          load={ratingLoad}
+          onClose={() => setRatingLoad(null)}
+          onSaved={() => { setRatingLoad(null); refresh(); }}
+        />
       )}
     </div>
   );

@@ -18,5 +18,7 @@ export const loadsService = {
   toggleInvoiced:(id) => api.post(`/loads/${id}/set-invoiced/`),
   togglePaid:(id)     => api.post(`/loads/${id}/set-paid/`),
   setHistory:(id)     => api.post(`/loads/${id}/set-history/`),
+  setExecuted:(id)    => api.post(`/loads/${id}/set-executed/`),
   assign:    (id, data) => api.post(`/loads/${id}/assign/`, data),
+  setRating: (id, data) => api.post(`/loads/${id}/set-rating/`, data),
 };

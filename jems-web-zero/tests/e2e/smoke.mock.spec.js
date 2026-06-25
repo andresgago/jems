@@ -382,6 +382,7 @@ async function mockApi(page) {
     if (/\/drivers\/\d+\/last-vehicle\/$/.test(pathname) && method === 'GET') return json(DRIVER_LAST_VEHICLE)
     if (/\/drivers\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_DETAIL)
     if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({ detail: 'Driver information sent successfully.' })
+    if (/\/loads\/\d+\/set-rating\/$/.test(pathname) && method === 'POST') return json({})
     if (pathname.endsWith('/loads/') && method === 'GET') return json({ results: [], count: 0 })
     if (pathname.endsWith('/loads/cities/search/')) return json([])
     if (pathname.endsWith('/brokers/search/')) return json([])
