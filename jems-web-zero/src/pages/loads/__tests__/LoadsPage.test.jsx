@@ -626,7 +626,7 @@ describe('LoadsPage', () => {
     });
   });
 
-  it('does not show execute button when load is already executed', async () => {
+  it('shows un-execute button when load is already executed', async () => {
     mockLoadsReturn({
       loads: [{ ...rows[0], ready_to_execute: true, execute: true }],
     });
@@ -635,7 +635,7 @@ describe('LoadsPage', () => {
     await waitFor(() => expect(usersService.options).toHaveBeenCalled());
 
     expect(screen.queryByRole('button', { name: 'Send load to executed' })).not.toBeInTheDocument();
-    expect(screen.getByTitle('Already executed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Un-execute load' })).toBeInTheDocument();
   });
 
   it('delete button is not rendered for dispatcher users', async () => {

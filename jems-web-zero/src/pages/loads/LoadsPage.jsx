@@ -568,7 +568,10 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrok
   };
 
   const handleExecute = async () => {
-    if (!window.confirm('Send this load to executed?')) return;
+    const msg = load.execute
+      ? 'Un-execute this load? It will return to Registered.'
+      : 'Send this load to executed?';
+    if (!window.confirm(msg)) return;
     setActioning(true);
     try {
       await loadsService.setExecuted(load.id);
@@ -711,7 +714,17 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrok
       </td>
       <td className="text-center"><RatingStar complete={ratingsComplete} onClick={() => onRate(load)} /></td>
       <td className="text-center">
-        {load.ready_to_execute && !load.execute ? (
+        {load.execute ? (
+          <button
+            className="btn btn-link p-0 text-success"
+            title="Un-execute this load"
+            aria-label="Un-execute load"
+            disabled={actioning}
+            onClick={handleExecute}
+          >
+            <i className="bi bi-arrow-right-circle-fill" />
+          </button>
+        ) : load.ready_to_execute ? (
           <button
             className="btn btn-link p-0 text-primary"
             title="Send to executed"
@@ -723,8 +736,8 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrok
           </button>
         ) : (
           <i
-            className={`bi bi-arrow-right-circle ${load.execute ? 'text-success' : 'text-muted opacity-25'}`}
-            title={load.execute ? 'Already executed' : 'Not ready to execute'}
+            className="bi bi-arrow-right-circle text-muted opacity-25"
+            title="Not ready to execute"
           />
         )}
       </td>
