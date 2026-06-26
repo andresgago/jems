@@ -2205,6 +2205,38 @@ for driver in d['expiration_alerts']['drivers']:
 print('    OK: MVR alerts labelled Record')
 "
 
+step "Dashboard: every expiration alert has expires_on in YYYY-MM-DD format"
+body "$resp" | python3 -c "
+import sys, json, re
+d = json.load(sys.stdin)
+iso_re = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+for section in ('drivers', 'trucks', 'trailers', 'categories'):
+    for entity in d['expiration_alerts'][section]:
+        for alert in entity['alerts']:
+            assert 'expires_on' in alert, \
+                f'{section} entity {entity.get(\"id\")} alert missing expires_on'
+            assert iso_re.match(alert['expires_on']), \
+                f'{section} expires_on not ISO date: {alert[\"expires_on\"]}'
+print('    OK: all expiration alerts carry expires_on in YYYY-MM-DD format')
+"
+
+step "Dashboard: alert days_until matches expires_on date arithmetic"
+body "$resp" | python3 -c "
+import sys, json
+from datetime import date
+d = json.load(sys.stdin)
+today = date.today()
+for section in ('drivers', 'trucks', 'trailers', 'categories'):
+    for entity in d['expiration_alerts'][section]:
+        for alert in entity['alerts']:
+            expected_days = (date.fromisoformat(alert['expires_on']) - today).days
+            assert alert['days_until'] == expected_days, \
+                f'{section} days_until {alert[\"days_until\"]} != {expected_days} for {alert[\"expires_on\"]}'
+            assert alert['expired'] == (expected_days < 0), \
+                f'{section} expired flag wrong for days_until={expected_days}'
+print('    OK: days_until and expired flag consistent with expires_on')
+"
+
 step "Dashboard: unauthenticated request blocked"
 resp_code="$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/api/v1/dashboard/")"
 assert_status "dashboard 401" "401" "${resp_code}"

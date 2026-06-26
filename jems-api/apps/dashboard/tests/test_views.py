@@ -872,3 +872,256 @@ def test_stats_admin_invoiced_count_correct(admin_client):
 
     response = admin_client.get(DASHBOARD_URL)
     assert response.data["stats"]["invoiced"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — null expiry dates
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_driver_with_all_null_expiry_dates_excluded(auth_client):
+    """Active driver with no expiry dates set must not appear in alerts."""
+    DriverFactory(
+        status=Driver.Status.ACTIVE,
+        license_expiration=None,
+        medical_card_expiration=None,
+        mvr_expiration=None,
+    )
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["expiration_alerts"]["drivers"] == []
+    assert response.data["counts"]["drivers_expiring"] == 0
+
+
+@pytest.mark.django_db
+def test_truck_with_all_null_expiry_dates_excluded(auth_client):
+    """Active truck with no expiry dates set must not appear in alerts."""
+    TruckFactory(
+        status=Truck.Status.ACTIVE,
+        avi_expiration=None,
+        registration_expiration=None,
+    )
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["expiration_alerts"]["trucks"] == []
+    assert response.data["counts"]["trucks_expiring"] == 0
+
+
+@pytest.mark.django_db
+def test_trailer_with_null_annual_inspection_excluded(auth_client):
+    """Active trailer with no annual_inspection_expiration must not appear in alerts."""
+    TrailerFactory(status=Trailer.Status.ACTIVE, annual_inspection_expiration=None)
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["expiration_alerts"]["trailers"] == []
+    assert response.data["counts"]["trailers_expiring"] == 0
+
+
+@pytest.mark.django_db
+def test_driver_partial_null_shows_only_non_null_slot(auth_client):
+    """Driver with license=soon but medical_card=None → only license alert appears."""
+    today = datetime.date.today()
+    driver = DriverFactory(
+        status=Driver.Status.ACTIVE,
+        license_expiration=today + datetime.timedelta(days=5),
+        medical_card_expiration=None,
+        mvr_expiration=None,
+    )
+    response = auth_client.get(DASHBOARD_URL)
+    entry = next(
+        d for d in response.data["expiration_alerts"]["drivers"] if d["id"] == driver.id
+    )
+    types = [a["type"] for a in entry["alerts"]]
+    assert types == ["license"]
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — boundary day (expires_on == today)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_driver_expiry_today_included_as_expired(auth_client):
+    """A document expiring today has days_until=0 and expired=False (it expires today)."""
+    today = datetime.date.today()
+    driver = DriverFactory(status=Driver.Status.ACTIVE, license_expiration=today)
+    response = auth_client.get(DASHBOARD_URL)
+    drivers = response.data["expiration_alerts"]["drivers"]
+    entry = next((d for d in drivers if d["id"] == driver.id), None)
+    assert entry is not None
+    alert = next(a for a in entry["alerts"] if a["type"] == "license")
+    assert alert["days_until"] == 0
+    assert alert["expired"] is False
+
+
+@pytest.mark.django_db
+def test_truck_expiry_today_included(auth_client):
+    """Truck AVI expiring today is inside the 60-day window and must appear."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE, avi_expiration=today)
+    response = auth_client.get(DASHBOARD_URL)
+    ids = [t["id"] for t in response.data["expiration_alerts"]["trucks"]]
+    assert truck.id in ids
+
+
+@pytest.mark.django_db
+def test_driver_expiry_yesterday_shows_as_expired(auth_client):
+    """A document expired yesterday has days_until<0 and expired=True."""
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    driver = DriverFactory(status=Driver.Status.ACTIVE, license_expiration=yesterday)
+    response = auth_client.get(DASHBOARD_URL)
+    entry = next(
+        d for d in response.data["expiration_alerts"]["drivers"] if d["id"] == driver.id
+    )
+    alert = next(a for a in entry["alerts"] if a["type"] == "license")
+    assert alert["days_until"] == -1
+    assert alert["expired"] is True
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — maintenance with time_year=0 AND time_month=0
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_truck_maintenance_zero_years_zero_months_excluded(auth_client):
+    """Maintenance record with time_year=0 and time_month=0 cannot produce an
+    alert date and must be excluded from the maintenance alert list."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today - datetime.timedelta(days=400),
+        time_alert=1,
+        time_year=0,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+        detail="No time configured",
+    )
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["counts"]["trucks_maintenance_alerts"] == 0
+    assert response.data["maintenance_alerts"]["trucks"] == []
+
+
+@pytest.mark.django_db
+def test_trailer_maintenance_zero_years_zero_months_excluded(auth_client):
+    """Same guard for trailers."""
+    today = datetime.date.today()
+    trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+    from apps.fleet.models import TrailerMaintenance as TM
+
+    TM.objects.create(
+        trailer=trailer,
+        date=today - datetime.timedelta(days=400),
+        time_alert=1,
+        time_year=0,
+        time_month=0,
+        detail="No time configured",
+    )
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["counts"]["trailers_maintenance_alerts"] == 0
+    assert response.data["maintenance_alerts"]["trailers"] == []
+
+
+# ---------------------------------------------------------------------------
+# Alert shape — expires_on field is present and ISO-formatted
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_driver_alert_expires_on_field_present_and_iso(auth_client):
+    """Every driver alert entry must include expires_on in YYYY-MM-DD format."""
+    today = datetime.date.today()
+    expiry = today + datetime.timedelta(days=10)
+    driver = DriverFactory(status=Driver.Status.ACTIVE, license_expiration=expiry)
+
+    response = auth_client.get(DASHBOARD_URL)
+    entry = next(
+        d for d in response.data["expiration_alerts"]["drivers"] if d["id"] == driver.id
+    )
+    alert = next(a for a in entry["alerts"] if a["type"] == "license")
+    assert "expires_on" in alert
+    assert alert["expires_on"] == expiry.isoformat()
+
+
+@pytest.mark.django_db
+def test_truck_alert_expires_on_field_present_and_iso(auth_client):
+    today = datetime.date.today()
+    expiry = today + datetime.timedelta(days=20)
+    truck = TruckFactory(status=Truck.Status.ACTIVE, avi_expiration=expiry)
+
+    response = auth_client.get(DASHBOARD_URL)
+    entry = next(
+        t for t in response.data["expiration_alerts"]["trucks"] if t["id"] == truck.id
+    )
+    alert = next(a for a in entry["alerts"] if a["type"] == "avi")
+    assert "expires_on" in alert
+    assert alert["expires_on"] == expiry.isoformat()
+
+
+@pytest.mark.django_db
+def test_trailer_alert_expires_on_field_present_and_iso(auth_client):
+    today = datetime.date.today()
+    expiry = today + datetime.timedelta(days=30)
+    trailer = TrailerFactory(
+        status=Trailer.Status.ACTIVE, annual_inspection_expiration=expiry
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    entry = next(
+        t
+        for t in response.data["expiration_alerts"]["trailers"]
+        if t["id"] == trailer.id
+    )
+    alert = entry["alerts"][0]
+    assert "expires_on" in alert
+    assert alert["expires_on"] == expiry.isoformat()
+
+
+@pytest.mark.django_db
+def test_category_alert_expires_on_field_present_and_iso(auth_client):
+    today = datetime.date.today()
+    expiry = today + datetime.timedelta(days=5)
+    cat = CategoryFactory()
+    rec = RecordFactory(
+        category=cat,
+        category_expire=True,
+        category_expire_date=expiry,
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    entry = next(
+        c for c in response.data["expiration_alerts"]["categories"] if c["id"] == rec.id
+    )
+    alert = entry["alerts"][0]
+    assert "expires_on" in alert
+    assert alert["expires_on"] == expiry.isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — exactly at the 60-day window boundary
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_driver_expiry_at_exact_60_day_boundary_included(auth_client):
+    """A driver with expiry exactly 60 days from today is at the cutoff and must appear."""
+    today = datetime.date.today()
+    cutoff = today + datetime.timedelta(days=60)
+    driver = DriverFactory(status=Driver.Status.ACTIVE, license_expiration=cutoff)
+
+    response = auth_client.get(DASHBOARD_URL)
+    ids = [d["id"] for d in response.data["expiration_alerts"]["drivers"]]
+    assert driver.id in ids
+
+
+@pytest.mark.django_db
+def test_driver_expiry_at_61_days_excluded(auth_client):
+    """61 days out is just beyond the 60-day window and must not appear."""
+    today = datetime.date.today()
+    driver = DriverFactory(
+        status=Driver.Status.ACTIVE,
+        license_expiration=today + datetime.timedelta(days=61),
+    )
+    response = auth_client.get(DASHBOARD_URL)
+    ids = [d["id"] for d in response.data["expiration_alerts"]["drivers"]]
+    assert driver.id not in ids
