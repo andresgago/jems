@@ -410,6 +410,30 @@ describe('LoadsPage', () => {
     expect(screen.getByText('(0149)')).toBeInTheDocument();
   });
 
+  it('driver photo is a link to the driver detail page when a driver is assigned', async () => {
+    mockLoadsReturn({
+      loads: [{ ...rows[0], driver: 4, driver_photo: '/media/photo.jpg' }],
+    });
+    const { container } = render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    const link = container.querySelector('a.load-driver-photo-link');
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/drivers/4');
+    expect(link.querySelector('img.load-driver-photo')).toBeInTheDocument();
+  });
+
+  it('driver photo placeholder has no link when no driver is assigned', async () => {
+    mockLoadsReturn({
+      loads: [{ ...rows[0], driver: null, driver_name: null }],
+    });
+    const { container } = render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(container.querySelector('a.load-driver-photo-link')).not.toBeInTheDocument();
+    expect(container.querySelector('.load-driver-photo-empty')).toBeInTheDocument();
+  });
+
   it('does not show ELD badge when driver_rtl_event_code is null', async () => {
     render(<MemoryRouter><LoadsPage /></MemoryRouter>);
     await waitFor(() => expect(usersService.options).toHaveBeenCalled());

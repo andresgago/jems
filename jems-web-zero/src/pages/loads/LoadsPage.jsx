@@ -152,10 +152,17 @@ function RatingStar({ complete, onClick }) {
 }
 
 function DriverPhoto({ load }) {
-  if (load.driver_photo) {
-    return <img src={load.driver_photo} alt="" className="load-driver-photo" />;
+  const inner = load.driver_photo
+    ? <img src={load.driver_photo} alt="" className="load-driver-photo" />
+    : <div className="load-driver-photo load-driver-photo-empty"><i className="bi bi-person" /></div>;
+  if (load.driver) {
+    return (
+      <Link to={`/drivers/${load.driver}`} className="load-driver-photo-link" tabIndex={-1}>
+        {inner}
+      </Link>
+    );
   }
-  return <div className="load-driver-photo load-driver-photo-empty"><i className="bi bi-person" /></div>;
+  return inner;
 }
 
 function CityCell({ city, zip, date, isDrop, daysInDrop }) {
