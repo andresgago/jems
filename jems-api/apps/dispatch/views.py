@@ -1,3 +1,5 @@
+import datetime
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
@@ -19,6 +21,7 @@ from .serializers import (
 from .services import (
     calculate_amount_by_hour,
     calculate_amount_by_percent,
+    calendar_events,
     close_invoice_by_hour,
     close_invoice_by_percent,
     create_dispatcher_work,
@@ -27,6 +30,7 @@ from .services import (
     delete_dispatcher_work,
     finish_dispatcher_work,
     mark_dispatcher_work_paid,
+    move_work_event,
     open_invoice_by_hour,
     open_invoice_by_percent,
     update_dispatcher_work,
@@ -92,6 +96,66 @@ class DispatcherWorkMarkPaidView(APIView):
     def post(self, request: Request, pk: int) -> Response:
         work = get_object_or_404(DispatcherWork, pk=pk)
         work = mark_dispatcher_work_paid(work=work)
+        return Response(DispatcherWorkSerializer(work).data)
+
+
+class DispatcherWorkCalendarView(APIView):
+    """Return FullCalendar-compatible events for the given date window.
+
+    Query params:
+      start (required) — ISO date or datetime, start of visible range
+      end   (required) — ISO date or datetime, end of visible range
+      self_only         — "true" (default) shows only current user; "false" shows all
+    """
+
+    def get(self, request: Request) -> Response:
+        start_str = request.query_params.get("start")
+        end_str = request.query_params.get("end")
+        if not start_str or not end_str:
+            return Response(
+                {"detail": "start and end query params are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            start = datetime.date.fromisoformat(start_str[:10])
+            end = datetime.date.fromisoformat(end_str[:10])
+        except ValueError:
+            return Response(
+                {"detail": "Invalid date format. Use ISO 8601 (YYYY-MM-DD)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        self_only = request.query_params.get("self_only", "true").lower() != "false"
+        events = calendar_events(
+            user=request.user, start=start, end=end, self_only=self_only
+        )
+        return Response(events)
+
+
+class DispatcherWorkMoveView(APIView):
+    """Shift a work session's start (and end by the same delta) via drag-and-drop."""
+
+    def post(self, request: Request, pk: int) -> Response:
+        work = get_object_or_404(DispatcherWork, pk=pk)
+        new_start_str = request.data.get("start")
+        if not new_start_str:
+            return Response(
+                {"detail": "start is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            new_start = datetime.datetime.fromisoformat(
+                str(new_start_str).replace("Z", "+00:00")
+            )
+        except ValueError:
+            return Response(
+                {"detail": "Invalid datetime format. Use ISO 8601."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new_start.tzinfo is None:
+            new_start = new_start.replace(tzinfo=datetime.timezone.utc)
+
+        work = move_work_event(work=work, new_start=new_start)
         return Response(DispatcherWorkSerializer(work).data)
 
 

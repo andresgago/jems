@@ -1,10 +1,12 @@
 from django.urls import path
 
 from .views import (
+    DispatcherWorkCalendarView,
     DispatcherWorkDetailView,
     DispatcherWorkFinishView,
     DispatcherWorkListView,
     DispatcherWorkMarkPaidView,
+    DispatcherWorkMoveView,
     DispatchersOptionsView,
     InvoiceByHourAmountView,
     InvoiceByHourCloseView,
@@ -21,8 +23,13 @@ from .views import (
 urlpatterns = [
     # Dispatchers options (must be before any pk patterns)
     path("dispatchers/", DispatchersOptionsView.as_view(), name="dispatch-dispatchers"),
-    # Dispatcher Work
+    # Dispatcher Work — collection / calendar endpoints before pk patterns
     path("work/", DispatcherWorkListView.as_view(), name="dispatcher-work-list"),
+    path(
+        "work/calendar/",
+        DispatcherWorkCalendarView.as_view(),
+        name="dispatcher-work-calendar",
+    ),
     path(
         "work/<int:pk>/",
         DispatcherWorkDetailView.as_view(),
@@ -37,6 +44,11 @@ urlpatterns = [
         "work/<int:pk>/mark-paid/",
         DispatcherWorkMarkPaidView.as_view(),
         name="dispatcher-work-mark-paid",
+    ),
+    path(
+        "work/<int:pk>/move/",
+        DispatcherWorkMoveView.as_view(),
+        name="dispatcher-work-move",
     ),
     # Invoices By Percent
     path(

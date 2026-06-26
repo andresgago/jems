@@ -20,6 +20,69 @@ from .models import (
 
 User = get_user_model()
 
+# ── Calendar helpers ──────────────────────────────────────────────────────────
+
+_GREEN = "#00a65a"
+_RED = "red"
+
+
+def calendar_events(
+    *,
+    user: Any,
+    start: datetime.date,
+    end: datetime.date,
+    self_only: bool = True,
+) -> list[dict[str, Any]]:
+    """Return FullCalendar-compatible event dicts for the given date window.
+
+    Mirrors legacy DispatcherWorkController::actionJsoncalendar / actionJsoncalendarall.
+    self_only=True → filter by dispatcher=user (dashboard / personal view)
+    self_only=False → all dispatchers (admin all-calendar view)
+    """
+    qs = DispatcherWork.objects.select_related("dispatcher").filter(
+        start__date__gte=start,
+        start__date__lte=end,
+    )
+    if self_only:
+        qs = qs.filter(dispatcher=user)
+
+    events: list[dict[str, Any]] = []
+    for work in qs:
+        title = work.title
+        if not work.is_finished:
+            title += " (In progress)"
+        events.append(
+            {
+                "id": str(work.id),
+                "title": title,
+                "start": work.start.isoformat(),
+                "end": work.end.isoformat(),
+                "backgroundColor": _GREEN if work.is_paid else _RED,
+                "borderColor": "green",
+                "textColor": "white",
+                "extendedProps": {
+                    "is_finished": work.is_finished,
+                    "is_paid": work.is_paid,
+                },
+            }
+        )
+    return events
+
+
+def move_work_event(
+    *, work: DispatcherWork, new_start: datetime.datetime
+) -> DispatcherWork:
+    """Shift both start and end by the same delta (preserves duration).
+
+    Mirrors legacy actionMoveEvent which computed diff(old_start, new_start)
+    and applied it to end.
+    """
+    delta = new_start - work.start
+    work.start = new_start
+    work.end = work.end + delta
+    work.save(update_fields=["start", "end"])
+    return work
+
 
 # ── Dispatcher Work ───────────────────────────────────────────────────────────
 
