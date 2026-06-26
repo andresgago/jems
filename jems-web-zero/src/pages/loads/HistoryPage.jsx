@@ -1,14 +1,15 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DateRangePicker from '../../components/DateRangePicker';
 import { useLoads } from '../../hooks/useLoads';
+import { brokersService } from '../../services/brokers';
+import { driversService } from '../../services/drivers';
 import { loadsService } from '../../services/loads';
 
 const DATE_TYPE_OPTIONS = [
-  { value: 'all',     label: 'Show all (Ignore dates)' },
-  { value: 'pickup',  label: 'Pickup date' },
-  { value: 'dropoff', label: 'Delivery date' },
-  { value: 'created', label: 'Created date' },
+  { value: '1', label: 'Pick up date' },
+  { value: '2', label: 'Drop off date' },
+  { value: '3', label: 'Show all (Ignore dates)' },
 ];
 
 const LOAD_STATUS_CANCELLED = 5;
@@ -25,11 +26,10 @@ function formatDateTime(value) {
 }
 
 function buildParams(draft) {
-  const params = { history: true, all: true };
-  if (draft.date_type && draft.date_type !== 'all') params.date_type = draft.date_type;
-  if (draft.date_from)  params.date_from  = draft.date_from;
-  if (draft.date_to)    params.date_to    = draft.date_to;
-  if (draft.dispatcher) params.dispatcher = draft.dispatcher;
+  const params = { history_search: true, all: true };
+  if (draft.date_type) params.date_type = draft.date_type;
+  if (draft.date_from) params.date_from = draft.date_from;
+  if (draft.date_to)   params.date_to   = draft.date_to;
   if (draft.broker)     params.broker     = draft.broker;
   if (draft.driver)     params.driver     = draft.driver;
   if (draft.number)     params.number     = draft.number;
@@ -37,8 +37,10 @@ function buildParams(draft) {
 }
 
 export default function HistoryPage() {
-  const [draft, setDraft]     = useState({ date_type: 'pickup' });
-  const [applied, setApplied] = useState({ date_type: 'pickup' });
+  const [draft, setDraft] = useState({ date_type: '3' });
+  const [applied, setApplied] = useState({});
+  const [brokers, setBrokers] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [actionLoading, setActionLoading] = useState(false);
 
   const filters = useMemo(() => buildParams(applied), [applied]);
@@ -50,7 +52,29 @@ export default function HistoryPage() {
     setDraft(next);
     setApplied(next);
   };
-  const submitOnEnter = (e) => { if (e.key === 'Enter') applyFilters({}); };
+
+  const handleFilter = (event) => {
+    event.preventDefault();
+    applyFilters({});
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      brokersService.options(),
+      driversService.list(),
+    ]).then(([brokerResponse, driverResponse]) => {
+      if (cancelled) return;
+      setBrokers(Array.isArray(brokerResponse.data) ? brokerResponse.data : []);
+      setDrivers(Array.isArray(driverResponse.data) ? driverResponse.data : []);
+    }).catch(() => {
+      if (!cancelled) {
+        setBrokers([]);
+        setDrivers([]);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // Send back to executed queue (un-history)
   const handleSetHistoryBack = useCallback(async (load) => {
@@ -70,36 +94,50 @@ export default function HistoryPage() {
       {/* Search bar */}
       <div className="card mb-3">
         <div className="card-body py-2">
-          <div className="row g-2 align-items-end">
-            <div className="col-md-3">
-              <label className="form-label mb-1 small">Date range</label>
+          <form className="load-search-band history-search-band mb-0" onSubmit={handleFilter}>
+            <div className="load-filter">
+              <label>Date range</label>
               <DateRangePicker
-                value={{ from: draft.date_from || '', to: draft.date_to || '' }}
-                onChange={({ from, to }) => { setField('date_from', from); setField('date_to', to); }}
+                start={draft.date_from || ''}
+                end={draft.date_to || ''}
+                onApply={({ start, end }) => {
+                  setField('date_from', start);
+                  setField('date_to', end);
+                }}
               />
             </div>
-            <div className="col-md-2">
-              <label className="form-label mb-1 small">Date type</label>
-              <select className="form-select form-select-sm" value={draft.date_type || 'all'} onChange={(e) => setField('date_type', e.target.value)}>
+            <div className="load-filter">
+              <label htmlFor="history-date-type">Date type</label>
+              <select id="history-date-type" className="form-select form-select-sm h-100" value={draft.date_type || '3'} onChange={(e) => setField('date_type', e.target.value)}>
                 {DATE_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
-            <div className="col-md-2">
-              <label className="form-label mb-1 small">Broker</label>
-              <input className="form-control form-control-sm" value={draft.broker || ''} onChange={(e) => setField('broker', e.target.value)} onKeyDown={submitOnEnter} placeholder="Broker name / MC" />
+            <div className="load-filter">
+              <label htmlFor="history-broker">Broker</label>
+              <select id="history-broker" className="form-select form-select-sm h-100" value={draft.broker || ''} onChange={(e) => setField('broker', e.target.value)}>
+                <option value="">Show all broker</option>
+                {brokers.map((broker) => (
+                  <option key={broker.id} value={broker.id}>{broker.label || broker.name}</option>
+                ))}
+              </select>
             </div>
-            <div className="col-md-2">
-              <label className="form-label mb-1 small">Driver</label>
-              <input className="form-control form-control-sm" value={draft.driver || ''} onChange={(e) => setField('driver', e.target.value)} onKeyDown={submitOnEnter} placeholder="Driver name" />
+            <div className="load-filter">
+              <label htmlFor="history-driver">Driver</label>
+              <select id="history-driver" className="form-select form-select-sm h-100" value={draft.driver || ''} onChange={(e) => setField('driver', e.target.value)}>
+                <option value="">Show all driver</option>
+                {drivers.map((driver) => (
+                  <option key={driver.id} value={driver.id}>{driver.full_name || `${driver.first_name || ''} ${driver.last_name || ''}`.trim()}</option>
+                ))}
+              </select>
             </div>
-            <div className="col-md-2">
-              <label className="form-label mb-1 small">Order #</label>
-              <input className="form-control form-control-sm" value={draft.number || ''} onChange={(e) => setField('number', e.target.value)} onKeyDown={submitOnEnter} placeholder="Order #" />
+            <div className="load-filter">
+              <label htmlFor="history-order">Order #</label>
+              <input id="history-order" className="form-control form-control-sm h-100" value={draft.number || ''} onChange={(e) => setField('number', e.target.value)} placeholder="Order #" />
             </div>
-            <div className="col-md-1">
-              <button className="btn btn-primary btn-sm w-100" onClick={() => applyFilters({})}>Search</button>
-            </div>
-          </div>
+            <button type="submit" className="btn btn-primary btn-sm load-search-button">
+              <i className="bi bi-search me-1" />Search
+            </button>
+          </form>
         </div>
       </div>
 
@@ -164,7 +202,10 @@ export default function HistoryPage() {
                   </td>
                   <td className="small">{load.driver_name || '—'}</td>
                   <td className="small">{load.truck_number || '—'}</td>
-                  <td className="small">{load.trailer_number || '—'}</td>
+                  <td className="small">
+                    <div>{load.trailer_number || '—'}</div>
+                    {load.trailer_type_name ? <div className="text-muted" style={{ fontSize: '0.7rem' }}>{load.trailer_type_name}</div> : null}
+                  </td>
                   <td>
                     <div className="d-flex gap-1">
                       {load.rate_file && <a href={load.rate_file} target="_blank" rel="noreferrer" title="Rate Confirmation"><i className="bi bi-file-earmark-text text-primary" /></a>}

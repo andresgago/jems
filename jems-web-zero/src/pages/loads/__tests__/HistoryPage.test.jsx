@@ -4,6 +4,16 @@ import { MemoryRouter } from 'react-router-dom';
 import HistoryPage from '../HistoryPage';
 
 vi.mock('../../../hooks/useLoads', () => ({ useLoads: vi.fn() }));
+vi.mock('../../../services/brokers', () => ({
+  brokersService: {
+    options: vi.fn(),
+  },
+}));
+vi.mock('../../../services/drivers', () => ({
+  driversService: {
+    list: vi.fn(),
+  },
+}));
 vi.mock('../../../services/loads', () => ({
   loadsService: {
     setHistory: vi.fn(),
@@ -11,6 +21,8 @@ vi.mock('../../../services/loads', () => ({
 }));
 
 import { useLoads } from '../../../hooks/useLoads';
+import { brokersService } from '../../../services/brokers';
+import { driversService } from '../../../services/drivers';
 import { loadsService } from '../../../services/loads';
 
 const LOAD = {
@@ -46,12 +58,58 @@ function setup(loads = [LOAD]) {
   return { refresh };
 }
 
+function mockResolvedOptions() {
+  brokersService.options.mockResolvedValue({
+    data: [{ id: 5, label: 'Global Shipping (MC-456)' }],
+  });
+  driversService.list.mockResolvedValue({
+    data: [{ id: 9, first_name: 'Carlos', last_name: 'Perez', full_name: 'Carlos Perez' }],
+  });
+}
+
 describe('HistoryPage', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    brokersService.options.mockReturnValue(new Promise(() => {}));
+    driversService.list.mockReturnValue(new Promise(() => {}));
+  });
 
   it('renders page heading', () => {
     setup();
     expect(screen.getByText(/Load History/i)).toBeDefined();
+  });
+
+  it('loads history search empty by default to mirror legacy initial state', () => {
+    setup();
+    expect(useLoads).toHaveBeenCalledWith({ history_search: true, all: true });
+  });
+
+  it('renders broker and driver option selects', async () => {
+    mockResolvedOptions();
+    setup();
+    await waitFor(() => expect(brokersService.options).toHaveBeenCalled());
+    expect(await screen.findByRole('option', { name: 'Global Shipping (MC-456)' })).toBeDefined();
+    expect(screen.getByRole('option', { name: 'Carlos Perez' })).toBeDefined();
+  });
+
+  it('applies payroll-style history filters with exact ids and order number', async () => {
+    mockResolvedOptions();
+    setup();
+    await screen.findByRole('option', { name: 'Global Shipping (MC-456)' });
+
+    fireEvent.change(screen.getByLabelText('Broker'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('Driver'), { target: { value: '9' } });
+    fireEvent.change(screen.getByLabelText('Order #'), { target: { value: 'LD-004' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(useLoads).toHaveBeenLastCalledWith({
+      history_search: true,
+      all: true,
+      date_type: '3',
+      broker: '5',
+      driver: '9',
+      number: 'LD-004',
+    });
   });
 
   it('renders broker name and order number', () => {

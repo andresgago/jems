@@ -800,6 +800,42 @@ test('payroll page uses legacy filters and aligned select controls (mock)', asyn
   await expect(page.getByText('No executed loads found.')).toBeVisible()
 })
 
+test('history page uses legacy search mode and payroll-style controls (mock)', async ({ page }) => {
+  await withAuth(page)
+  const initialRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname.endsWith('/api/v1/loads/')
+      && url.searchParams.get('history_search') === 'true'
+      && url.searchParams.get('all') === 'true'
+      && !url.searchParams.has('date_type')
+  })
+
+  await page.goto('/loads/history')
+  await initialRequest
+
+  await expect(page.getByRole('heading', { name: /Load History/i })).toBeVisible()
+  await expect(page.getByLabel('Date type')).toHaveValue('3')
+  await expect(page.getByLabel('Broker')).toBeVisible()
+  await expect(page.getByLabel('Driver')).toBeVisible()
+  await expect(page.getByLabel('Order #')).toBeVisible()
+
+  const searchRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname.endsWith('/api/v1/loads/')
+      && url.searchParams.get('history_search') === 'true'
+      && url.searchParams.get('date_type') === '3'
+      && url.searchParams.get('broker') === '1'
+      && url.searchParams.get('driver') === '1'
+      && url.searchParams.get('number') === 'L-0001'
+  })
+
+  await page.getByLabel('Broker').selectOption('1')
+  await page.getByLabel('Driver').selectOption('1')
+  await page.getByLabel('Order #').fill('L-0001')
+  await page.getByRole('button', { name: 'Search' }).click()
+  await searchRequest
+})
+
 // ── New load form ─────────────────────────────────────────────────────────────
 
 test('new load form: weight defaults to 42000', async ({ page }) => {

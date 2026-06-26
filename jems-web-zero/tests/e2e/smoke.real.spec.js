@@ -1064,6 +1064,47 @@ test('payroll page and endpoint use executed driver-unpaid legacy filter (real)'
   await apiPut(page, token, `/brokers/business/${paid.receiver.id}/`, { status: 0 })
 })
 
+test('history page and endpoint use legacy executed search behavior (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const prefix = `HIST-${Date.now()}`
+  const visible = await createTestLoad(page, token, { number: `${prefix}-EXEC`, status: 3 })
+  const pending = await createTestLoad(page, token, { number: `${prefix}-PENDING`, status: 3 })
+
+  await apiPatch(page, token, `/loads/${visible.load.id}/`, {
+    execute: true,
+    history: false,
+  })
+  await apiPatch(page, token, `/loads/${pending.load.id}/`, {
+    execute: false,
+    history: true,
+  })
+
+  const empty = await apiGet(page, token, '/loads/?history_search=true&all=true')
+  expect(empty.results).toHaveLength(0)
+
+  const searched = await apiGet(page, token, `/loads/?history_search=true&all=true&date_type=3&number=${prefix}`)
+  const numbers = searched.results.map((load) => load.number)
+  expect(numbers).toContain(visible.load.number)
+  expect(numbers).not.toContain(pending.load.number)
+
+  await page.goto('/loads/history')
+  await expect(page.getByRole('heading', { name: /Load History/i })).toBeVisible()
+  await expect(page.getByLabel('Date type')).toHaveValue('3')
+  await expect(page.getByLabel('Broker')).toBeVisible()
+  await expect(page.getByLabel('Driver')).toBeVisible()
+  await expect(page.getByLabel('Order #')).toBeVisible()
+
+  await apiDelete(page, token, `/loads/${visible.load.id}/`)
+  await apiDelete(page, token, `/loads/${pending.load.id}/`)
+  await apiPut(page, token, `/brokers/business/${visible.shipper.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${visible.receiver.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${pending.shipper.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${pending.receiver.id}/`, { status: 0 })
+})
+
 test('index_view=true hides executed non-detention loads (real)', async ({ page }) => {
   test.setTimeout(60_000)
   await loginAsAdmin(page)
