@@ -2003,25 +2003,57 @@ assert_status "deleted conversation 404" "404" "$(code "$resp")"
 step "Dashboard: GET /api/v1/dashboard/"
 resp="$(get "/api/v1/dashboard/")"
 assert_status "dashboard ok" "200" "$(code "$resp")"
-assert_contains "dashboard has stats" "$(body "$resp")" '"loads_in_dispatch"'
+assert_contains "dashboard has stats.loads_in_dispatch" "$(body "$resp")" '"loads_in_dispatch"'
 assert_contains "dashboard has expiration_alerts" "$(body "$resp")" '"expiration_alerts"'
-assert_contains "dashboard has counts" "$(body "$resp")" '"drivers_expiring"'
+assert_contains "dashboard has counts.drivers_expiring" "$(body "$resp")" '"drivers_expiring"'
+assert_contains "dashboard has categories list" "$(body "$resp")" '"categories"'
+assert_contains "dashboard has trucks_maintenance_alerts" "$(body "$resp")" '"trucks_maintenance_alerts"'
 
-step "Dashboard: shape validation"
+step "Dashboard: shape and invariants validation"
 body "$resp" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
+
+# Stats
 assert isinstance(d['stats']['loads_in_dispatch'], int), 'loads_in_dispatch not int'
 assert isinstance(d['stats']['executed_loads'], int), 'executed_loads not int'
 assert isinstance(d['stats']['invoiced'], int), 'invoiced not int'
-assert isinstance(d['expiration_alerts']['drivers'], list), 'drivers not list'
-assert isinstance(d['expiration_alerts']['trucks'], list), 'trucks not list'
-assert isinstance(d['expiration_alerts']['trailers'], list), 'trailers not list'
-assert isinstance(d['counts']['drivers_expiring'], int), 'drivers_expiring not int'
-assert isinstance(d['counts']['trucks_expiring'], int), 'trucks_expiring not int'
-assert isinstance(d['counts']['trucks_in_maintenance'], int), 'trucks_in_maintenance not int'
-assert isinstance(d['counts']['trailers_expiring'], int), 'trailers_expiring not int'
-print('    OK: dashboard shape valid')
+# invoiced is always a subset of executed_loads
+assert d['stats']['invoiced'] <= d['stats']['executed_loads'], \
+    f'invoiced ({d[\"stats\"][\"invoiced\"]}) > executed_loads ({d[\"stats\"][\"executed_loads\"]})'
+
+# Expiration alerts — 4 keys (drivers, trucks, trailers, categories)
+for key in ('drivers', 'trucks', 'trailers', 'categories'):
+    assert isinstance(d['expiration_alerts'][key], list), f'{key} not list'
+
+# Counts — new field names
+for key in ('drivers_expiring', 'trucks_expiring', 'trucks_maintenance_alerts',
+            'trailers_expiring', 'trailers_maintenance_alerts', 'categories_expiring'):
+    assert isinstance(d['counts'][key], int), f'{key} not int'
+
+# Badge counts must match list lengths
+assert d['counts']['drivers_expiring'] == len(d['expiration_alerts']['drivers']), \
+    'drivers_expiring count mismatch'
+assert d['counts']['trucks_expiring'] == len(d['expiration_alerts']['trucks']), \
+    'trucks_expiring count mismatch'
+assert d['counts']['trailers_expiring'] == len(d['expiration_alerts']['trailers']), \
+    'trailers_expiring count mismatch'
+assert d['counts']['categories_expiring'] == len(d['expiration_alerts']['categories']), \
+    'categories_expiring count mismatch'
+
+print('    OK: dashboard shape and invariants valid')
+"
+
+step "Dashboard: driver alerts use 'Record' label for MVR document (legacy parity)"
+body "$resp" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for driver in d['expiration_alerts']['drivers']:
+    for alert in driver['alerts']:
+        if alert['type'] == 'record':
+            assert alert['label'] == 'Record', \
+                f'MVR alert label should be Record, got {alert[\"label\"]}'
+print('    OK: MVR alerts labelled Record')
 "
 
 step "Dashboard: unauthenticated request blocked"

@@ -1,22 +1,18 @@
 from datetime import date, timedelta
 from typing import Any
 
+from dateutil.relativedelta import relativedelta
+
+from apps.accounting.models import Record
 from apps.drivers.models import Driver
-from apps.fleet.models import Trailer, Truck
+from apps.fleet.models import Trailer, TrailerMaintenance, Truck, TruckMaintenance
 from apps.loads.models import Load
 
-# Loads counted as "in dispatch": started through detention-pending (legacy parity)
-_IN_DISPATCH_STATUSES = [
-    Load.Status.STARTED,
-    Load.Status.FINISHED,
-    Load.Status.DETENTION_PENDING,
-]
-
-# Window for expiration alerts shown in detail lists
+# Window for expiration alerts shown in detail lists (matches legacy 60-day rule)
 _ALERT_DAYS = 60
 
-# Window for the summary counts shown as badge numbers
-_COUNT_DAYS = 30
+# Category expiration window (legacy default: 30 days)
+_CATEGORY_ALERT_DAYS = 30
 
 
 def _alert_entry(
@@ -37,7 +33,8 @@ def _driver_alerts(today: date) -> list[dict[str, Any]]:
     slots = [
         ("license", "License", "license_expiration"),
         ("medical_card", "Medical Card", "medical_card_expiration"),
-        ("mvr", "MVR", "mvr_expiration"),
+        # Legacy field is recordexpiration, displayed as "Record" in dashboard
+        ("record", "Record", "mvr_expiration"),
     ]
 
     drivers = Driver.objects.filter(status=Driver.Status.ACTIVE).order_by(
@@ -121,34 +118,132 @@ def _trailer_alerts(today: date) -> list[dict[str, Any]]:
     return result
 
 
+def _category_alerts(today: date) -> list[dict[str, Any]]:
+    """Records with a category expiration within the next 30 days (legacy parity)."""
+    cutoff = today + timedelta(days=_CATEGORY_ALERT_DAYS)
+
+    records = (
+        Record.objects.filter(
+            category_expire=True,
+            category_expire_date__isnull=False,
+            category_expire_date__lte=cutoff,
+        )
+        .select_related("category", "truck", "trailer")
+        .order_by("category_expire_date")
+    )
+
+    result: list[dict[str, Any]] = []
+    for rec in records:
+        expires_on = rec.category_expire_date
+        delta = (expires_on - today).days
+        cat = rec.category
+
+        # Build descriptive name: Category / Truck / Trailer (whichever are set)
+        parts = []
+        if cat:
+            parts.append(f"{cat.code} - {cat.name}")
+        if rec.truck:
+            parts.append(f"Truck #{rec.truck.number}")
+        if rec.trailer:
+            parts.append(f"Trailer #{rec.trailer.number}")
+        name = " / ".join(parts) if parts else f"Record #{rec.pk}"
+
+        result.append(
+            {
+                "id": rec.id,
+                "name": name,
+                "category_name": cat.name if cat else "",
+                "category_code": cat.code if cat else "",
+                "truck_number": rec.truck.number if rec.truck else None,
+                "trailer_number": rec.trailer.number if rec.trailer else None,
+                "alerts": [
+                    {
+                        "type": "category",
+                        "label": "Category",
+                        "expires_on": expires_on.isoformat(),
+                        "days_until": delta,
+                        "expired": delta < 0,
+                    }
+                ],
+            }
+        )
+    return result
+
+
+def _get_maintenance_alert_trucks(today: date) -> int:
+    """Count active trucks with at least one time-based maintenance alert due today."""
+    alerted_ids: set[int] = set()
+    records = TruckMaintenance.objects.filter(
+        truck__status=Truck.Status.ACTIVE,
+        time_alert=1,
+    ).select_related("truck")
+
+    for record in records:
+        if record.time_year == 0 and record.time_month == 0:
+            continue
+        alert_date = date.fromisoformat(str(record.date)) + relativedelta(
+            years=record.time_year, months=record.time_month
+        )
+        if today >= alert_date:
+            alerted_ids.add(record.truck_id)
+
+    return len(alerted_ids)
+
+
+def _get_maintenance_alert_trailers(today: date) -> int:
+    """Count active trailers with at least one time-based maintenance alert due today."""
+    alerted_ids: set[int] = set()
+    records = TrailerMaintenance.objects.filter(
+        trailer__status=Trailer.Status.ACTIVE,
+        time_alert=1,
+    ).select_related("trailer")
+
+    for record in records:
+        if record.time_year == 0 and record.time_month == 0:
+            continue
+        alert_date = date.fromisoformat(str(record.date)) + relativedelta(
+            years=record.time_year, months=record.time_month
+        )
+        if today >= alert_date:
+            alerted_ids.add(record.trailer_id)
+
+    return len(alerted_ids)
+
+
 def get_dashboard_data() -> dict[str, Any]:
     today = date.today()
-    # --- Load stats ---
-    loads_in_dispatch = Load.objects.filter(status__in=_IN_DISPATCH_STATUSES).count()
-    executed_loads = Load.objects.filter(status=Load.Status.FINISHED).count()
-    invoiced = Load.objects.filter(invoiced=True).count()
+
+    # --- Load stats (legacy parity: uses execute/history/drivers_paid flags) ---
+    # "In dispatch" = not yet executed and not archived
+    loads_in_dispatch = Load.objects.filter(
+        execute=False,
+        history=False,
+    ).count()
+
+    # "Executed" = marked executed, not archived, driver not yet paid
+    executed_loads = Load.objects.filter(
+        execute=True,
+        history=False,
+        drivers_paid=False,
+    ).count()
+
+    # "Invoiced" = subset of executed that also have an invoice
+    invoiced = Load.objects.filter(
+        execute=True,
+        history=False,
+        drivers_paid=False,
+        invoiced=True,
+    ).count()
 
     # --- Expiration alerts ---
     driver_alerts = _driver_alerts(today)
     truck_alerts = _truck_alerts(today)
     trailer_alerts = _trailer_alerts(today)
+    category_alerts = _category_alerts(today)
 
-    # --- Summary counts (30-day window) ---
-    def _count_expiring(alerts: list[dict[str, Any]]) -> int:
-        return sum(
-            1
-            for entity in alerts
-            if any(a["days_until"] <= _COUNT_DAYS for a in entity["alerts"])
-        )
-
-    trucks_in_maintenance = (
-        Truck.objects.filter(
-            status=Truck.Status.ACTIVE,
-            maintenance_records__isnull=False,
-        )
-        .distinct()
-        .count()
-    )
+    # --- Maintenance alerts ---
+    trucks_maintenance_alerts = _get_maintenance_alert_trucks(today)
+    trailers_maintenance_alerts = _get_maintenance_alert_trailers(today)
 
     return {
         "stats": {
@@ -160,11 +255,15 @@ def get_dashboard_data() -> dict[str, Any]:
             "drivers": driver_alerts,
             "trucks": truck_alerts,
             "trailers": trailer_alerts,
+            "categories": category_alerts,
         },
         "counts": {
-            "drivers_expiring": _count_expiring(driver_alerts),
-            "trucks_expiring": _count_expiring(truck_alerts),
-            "trucks_in_maintenance": trucks_in_maintenance,
-            "trailers_expiring": _count_expiring(trailer_alerts),
+            # Badge count = length of 60-day alert list (matches legacy behavior)
+            "drivers_expiring": len(driver_alerts),
+            "trucks_expiring": len(truck_alerts),
+            "trucks_maintenance_alerts": trucks_maintenance_alerts,
+            "trailers_expiring": len(trailer_alerts),
+            "trailers_maintenance_alerts": trailers_maintenance_alerts,
+            "categories_expiring": len(category_alerts),
         },
     }
