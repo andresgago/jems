@@ -66,6 +66,9 @@ function AlertRow({ entity, entityPath, tabKey }) {
                     ? `(expired ${Math.abs(alert.days_until)}d ago)`
                     : `(${alert.days_until}d)`}
                 </span>
+                {alert.expires_on && (
+                  <span className="text-muted ms-1">— {alert.expires_on}</span>
+                )}
               </span>
             ))}
           </div>

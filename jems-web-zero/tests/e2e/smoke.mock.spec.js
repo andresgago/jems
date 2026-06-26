@@ -668,6 +668,44 @@ test('dashboard Drivers tab has no Maintenance Alerts section', async ({ page })
   await expect(page.getByRole('heading', { name: /Maintenance Alerts/i })).not.toBeVisible()
 })
 
+test('dashboard driver alert shows expires_on date for upcoming expiry', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  // License alert has expires_on 2026-07-11 (upcoming, days_until=15)
+  await expect(page.getByText(/— 2026-07-11/)).toBeVisible()
+})
+
+test('dashboard driver alert shows expires_on date for expired doc', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  // Record alert has expires_on 2026-06-22 (expired, days_until=-4)
+  await expect(page.getByText(/— 2026-06-22/)).toBeVisible()
+})
+
+test('dashboard Trucks tab alert shows expires_on date', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /Trucks/i }).click()
+  // AVI expires_on 2026-07-01
+  await expect(page.getByText(/— 2026-07-01/)).toBeVisible()
+})
+
+test('dashboard Trailers tab alert shows expires_on date', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /Trailers/i }).click()
+  // Annual Inspection expires_on 2026-08-01
+  await expect(page.getByText(/— 2026-08-01/)).toBeVisible()
+})
+
+test('dashboard Categories tab alert shows expires_on date', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /Categories/i }).click()
+  // Category expires_on 2026-07-05
+  await expect(page.getByText(/— 2026-07-05/)).toBeVisible()
+})
+
 // ── Loads list ────────────────────────────────────────────────────────────────
 
 test('loads page is reachable after auth', async ({ page }) => {

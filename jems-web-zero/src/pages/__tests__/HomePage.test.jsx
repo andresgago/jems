@@ -310,6 +310,38 @@ describe('HomePage — driver tab (default)', () => {
     renderPage();
     expect(screen.queryByText('Maintenance Alerts')).not.toBeInTheDocument();
   });
+
+  it('shows expires_on date for upcoming alert', () => {
+    renderPage();
+    // Runell Driver has license expires_on 2026-07-11
+    expect(screen.getByText(/— 2026-07-11/)).toBeInTheDocument();
+  });
+
+  it('shows expires_on date for expired alert', () => {
+    renderPage();
+    // John Doe has license expires_on 2026-06-01
+    expect(screen.getByText(/— 2026-06-01/)).toBeInTheDocument();
+  });
+
+  it('omits date span when expires_on is absent', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      expiration_alerts: {
+        ...MOCK_DATA.expiration_alerts,
+        drivers: [
+          {
+            id: 99,
+            name: 'No-Date Driver',
+            alerts: [
+              { type: 'license', label: 'License', days_until: 10, expired: false },
+            ],
+          },
+        ],
+      },
+    });
+    // No "— " date separator in the DOM
+    expect(screen.queryByText(/— \d{4}-\d{2}-\d{2}/)).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -345,6 +377,27 @@ describe('HomePage — tab switching', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
     expect(screen.queryByText('Runell Driver')).not.toBeInTheDocument();
+  });
+
+  it('shows expires_on date in Trucks tab alert', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    // Truck #101 has avi expires_on 2026-07-01
+    expect(screen.getByText(/— 2026-07-01/)).toBeInTheDocument();
+  });
+
+  it('shows expires_on date in Trailers tab alert', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Trailers/i }));
+    // Trailer #200 has annual_inspection expires_on 2026-07-10
+    expect(screen.getByText(/— 2026-07-10/)).toBeInTheDocument();
+  });
+
+  it('shows expires_on date in Categories tab alert', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
+    // Category expires_on 2026-07-05
+    expect(screen.getByText(/— 2026-07-05/)).toBeInTheDocument();
   });
 });
 
