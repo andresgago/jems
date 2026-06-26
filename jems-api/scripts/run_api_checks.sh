@@ -1999,6 +1999,35 @@ step "AI: retrieve deleted conversation (→ 404)"
 resp="$(get "/api/v1/ai/conversations/${CONV_ID}/")"
 assert_status "deleted conversation 404" "404" "$(code "$resp")"
 
+# ── Dashboard ────────────────────────────────────────────────────────────────
+step "Dashboard: GET /api/v1/dashboard/"
+resp="$(get "/api/v1/dashboard/")"
+assert_status "dashboard ok" "200" "$(code "$resp")"
+assert_contains "dashboard has stats" "$(body "$resp")" '"loads_in_dispatch"'
+assert_contains "dashboard has expiration_alerts" "$(body "$resp")" '"expiration_alerts"'
+assert_contains "dashboard has counts" "$(body "$resp")" '"drivers_expiring"'
+
+step "Dashboard: shape validation"
+body "$resp" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert isinstance(d['stats']['loads_in_dispatch'], int), 'loads_in_dispatch not int'
+assert isinstance(d['stats']['executed_loads'], int), 'executed_loads not int'
+assert isinstance(d['stats']['invoiced'], int), 'invoiced not int'
+assert isinstance(d['expiration_alerts']['drivers'], list), 'drivers not list'
+assert isinstance(d['expiration_alerts']['trucks'], list), 'trucks not list'
+assert isinstance(d['expiration_alerts']['trailers'], list), 'trailers not list'
+assert isinstance(d['counts']['drivers_expiring'], int), 'drivers_expiring not int'
+assert isinstance(d['counts']['trucks_expiring'], int), 'trucks_expiring not int'
+assert isinstance(d['counts']['trucks_in_maintenance'], int), 'trucks_in_maintenance not int'
+assert isinstance(d['counts']['trailers_expiring'], int), 'trailers_expiring not int'
+print('    OK: dashboard shape valid')
+"
+
+step "Dashboard: unauthenticated request blocked"
+resp_code="$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/api/v1/dashboard/")"
+assert_status "dashboard 401" "401" "${resp_code}"
+
 # ── Final cleanup (delete remaining resources) ────────────────────────────────
 step "Cleanup: driver soft-delete (sets TERMINATED)"
 resp="$(delete "/api/v1/drivers/${DRIVER_ID}/")"

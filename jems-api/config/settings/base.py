@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "apps.documents",
     "apps.integrations",
     "apps.ai",
+    "apps.dashboard",
 ]
 
 AUTH_USER_MODEL = "users.User"
