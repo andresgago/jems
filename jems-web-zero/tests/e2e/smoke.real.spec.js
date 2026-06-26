@@ -229,6 +229,38 @@ test('dashboard endpoint stats are null for non-admin user (real)', async ({ pag
   }
 })
 
+test('dashboard maintenance alert entries include time/miles alert shape fields (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const data = await apiGet(page, token, '/dashboard/')
+
+  const allEntries = [
+    ...data.maintenance_alerts.trucks,
+    ...data.maintenance_alerts.trailers,
+  ]
+
+  for (const entry of allEntries) {
+    // Every entry must have the new shape fields
+    expect(typeof entry.time_alert_triggered).toBe('boolean')
+    expect(typeof entry.miles_alert_triggered).toBe('boolean')
+    // alert_date is string or null
+    expect(entry.alert_date === null || typeof entry.alert_date === 'string').toBeTruthy()
+    // miles fields are number or null
+    expect(entry.miles_traveled === null || typeof entry.miles_traveled === 'number').toBeTruthy()
+    expect(entry.miles_threshold === null || typeof entry.miles_threshold === 'number').toBeTruthy()
+    // miles-only entries have alert_date null
+    if (!entry.time_alert_triggered) {
+      expect(entry.alert_date).toBeNull()
+    }
+    // time-based entries have non-null alert_date
+    if (entry.time_alert_triggered) {
+      expect(typeof entry.alert_date).toBe('string')
+    }
+  }
+})
+
 // ── Trailer types ─────────────────────────────────────────────────────────────
 
 test('trailer-types endpoint returns short_name for all types (real)', async ({ page }) => {

@@ -101,17 +101,34 @@ const DASHBOARD = {
         maintenance_id: 10,
         date: '2025-01-15',
         detail: 'Oil change due',
+        time_alert_triggered: true,
         alert_date: '2026-01-15',
+        miles_alert_triggered: false,
+        miles_traveled: null,
+        miles_threshold: null,
       },
     ],
-    trailers: [],
+    trailers: [
+      {
+        trailer_id: 7,
+        trailer_number: '555',
+        maintenance_id: 20,
+        date: '2025-03-01',
+        detail: 'Tire rotation',
+        time_alert_triggered: false,
+        alert_date: null,
+        miles_alert_triggered: true,
+        miles_traveled: 14500.0,
+        miles_threshold: 13000.0,
+      },
+    ],
   },
   counts: {
     drivers_expiring: 1,
     trucks_expiring: 1,
     trucks_maintenance_alerts: 1,
     trailers_expiring: 1,
-    trailers_maintenance_alerts: 0,
+    trailers_maintenance_alerts: 1,
     categories_expiring: 1,
   },
 }
@@ -653,12 +670,11 @@ test('dashboard Trucks tab shows Maintenance Alerts section with detail', async 
   await expect(page.getByText(/Oil change due/)).toBeVisible()
 })
 
-test('dashboard Trailers tab shows No maintenance alerts when list is empty', async ({ page }) => {
+test('dashboard Trailers tab shows Maintenance Alerts section heading', async ({ page }) => {
   await withAuth(page)
   await page.goto('/')
   await page.getByRole('button', { name: /Trailers/i }).click()
   await expect(page.getByRole('heading', { name: /Maintenance Alerts/i })).toBeVisible()
-  await expect(page.getByText('No maintenance alerts.')).toBeVisible()
 })
 
 test('dashboard Drivers tab has no Maintenance Alerts section', async ({ page }) => {
@@ -704,6 +720,33 @@ test('dashboard Categories tab alert shows expires_on date', async ({ page }) =>
   await page.getByRole('button', { name: /Categories/i }).click()
   // Category expires_on 2026-07-05
   await expect(page.getByText(/— 2026-07-05/)).toBeVisible()
+})
+
+test('dashboard Trailers tab shows miles-based maintenance alert text', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /Trailers/i }).click()
+  // Trailer #555 has miles-only alert (14500 traveled, 13000 threshold)
+  await expect(page.getByText('Trailer #555')).toBeVisible()
+  await expect(page.getByText(/miles traveled 14500/)).toBeVisible()
+  await expect(page.getByText(/Alert at 13000/)).toBeVisible()
+  await expect(page.getByText(/Tire rotation/)).toBeVisible()
+})
+
+test('dashboard Trailers tab miles alert has no time-based alert text', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /Trailers/i }).click()
+  // The miles-only alert must NOT show "Alert for maintenance at" text
+  await expect(page.getByText(/Alert for maintenance at/)).not.toBeVisible()
+})
+
+test('dashboard Trailers tab shows wrench badge when miles alerts present', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  const trailersTab = page.getByRole('button', { name: /Trailers/i })
+  const wrenchBadge = trailersTab.locator('.badge .bi-wrench-adjustable')
+  await expect(wrenchBadge).toBeVisible()
 })
 
 // ── Loads list ────────────────────────────────────────────────────────────────

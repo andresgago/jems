@@ -40,7 +40,11 @@ const MOCK_MAINTENANCE_TRUCKS = [
     maintenance_id: 10,
     date: '2025-01-01',
     detail: 'Oil change',
+    time_alert_triggered: true,
     alert_date: '2026-01-01',
+    miles_alert_triggered: false,
+    miles_traveled: null,
+    miles_threshold: null,
   },
 ];
 
@@ -51,7 +55,11 @@ const MOCK_MAINTENANCE_TRAILERS = [
     maintenance_id: 20,
     date: '2025-03-01',
     detail: 'Brake check',
+    time_alert_triggered: true,
     alert_date: '2026-03-01',
+    miles_alert_triggered: false,
+    miles_traveled: null,
+    miles_threshold: null,
   },
 ];
 
@@ -634,5 +642,125 @@ describe('HomePage — maintenance row without detail', () => {
     expect(
       screen.getByText(/Alert for maintenance at 2026-01-01/)
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Miles-based maintenance alert rendering
+// ---------------------------------------------------------------------------
+
+const MOCK_MILES_ONLY_TRUCK = {
+  truck_id: 77,
+  truck_number: '777',
+  maintenance_id: 30,
+  date: '2025-06-01',
+  detail: 'Tire rotation',
+  time_alert_triggered: false,
+  alert_date: null,
+  miles_alert_triggered: true,
+  miles_traveled: 14500.0,
+  miles_threshold: 13000.0,
+};
+
+const MOCK_BOTH_ALERTS_TRUCK = {
+  truck_id: 78,
+  truck_number: '778',
+  maintenance_id: 31,
+  date: '2025-05-01',
+  detail: 'Full service',
+  time_alert_triggered: true,
+  alert_date: '2026-05-01',
+  miles_alert_triggered: true,
+  miles_traveled: 15000.0,
+  miles_threshold: 13000.0,
+};
+
+describe('HomePage — miles-based maintenance alert rendering (Trucks tab)', () => {
+  it('shows miles-traveled alert text for miles-only alert', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: {
+        trucks: [MOCK_MILES_ONLY_TRUCK],
+        trailers: [],
+      },
+      counts: { ...MOCK_DATA.counts, trucks_maintenance_alerts: 1 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(
+      screen.getByText(/miles traveled 14500/)
+    ).toBeInTheDocument();
+  });
+
+  it('shows miles threshold in miles alert text', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: {
+        trucks: [MOCK_MILES_ONLY_TRUCK],
+        trailers: [],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(screen.getByText(/Alert at 13000/)).toBeInTheDocument();
+  });
+
+  it('shows detail text appended to miles alert', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: {
+        trucks: [MOCK_MILES_ONLY_TRUCK],
+        trailers: [],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(screen.getByText(/Tire rotation/)).toBeInTheDocument();
+  });
+
+  it('does NOT show time-based text when only miles alert is triggered', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: {
+        trucks: [MOCK_MILES_ONLY_TRUCK],
+        trailers: [],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(screen.queryByText(/Alert for maintenance at/)).not.toBeInTheDocument();
+  });
+
+  it('shows BOTH time and miles alert lines when both are triggered', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: {
+        trucks: [MOCK_BOTH_ALERTS_TRUCK],
+        trailers: [],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(screen.getByText(/Alert for maintenance at 2026-05-01/)).toBeInTheDocument();
+    expect(screen.getByText(/miles traveled 15000/)).toBeInTheDocument();
+  });
+
+  it('shows truck number correctly for miles-only alert', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: {
+        trucks: [MOCK_MILES_ONLY_TRUCK],
+        trailers: [],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(screen.getByText('Truck #777')).toBeInTheDocument();
+  });
+
+  it('shows last maintenance date for miles-only alert', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: {
+        trucks: [MOCK_MILES_ONLY_TRUCK],
+        trailers: [],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(screen.getByText(/Last maintenance: 2025-06-01/)).toBeInTheDocument();
   });
 });

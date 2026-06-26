@@ -102,6 +102,10 @@ function AlertList({ entities, buildPath, tabKey }) {
 }
 
 function MaintenanceAlertRow({ record, entityPath }) {
+  const entityLabel = record.truck_number
+    ? `Truck #${record.truck_number}`
+    : `Trailer #${record.trailer_number}`;
+
   return (
     <div className="d-flex align-items-center justify-content-between py-2 border-bottom">
       <div className="d-flex align-items-center gap-2">
@@ -109,34 +113,26 @@ function MaintenanceAlertRow({ record, entityPath }) {
         <div>
           <div className="fw-semibold">
             {entityPath ? (
-              <Link to={entityPath}>
-                {record.truck_number
-                  ? `Truck #${record.truck_number}`
-                  : `Trailer #${record.trailer_number}`}
-              </Link>
+              <Link to={entityPath}>{entityLabel}</Link>
             ) : (
-              <span>
-                {record.truck_number
-                  ? `Truck #${record.truck_number}`
-                  : `Trailer #${record.trailer_number}`}
-              </span>
+              <span>{entityLabel}</span>
             )}
           </div>
           <div className="small text-muted">
             Last maintenance: {record.date}
           </div>
-          {record.detail && (
+          {record.time_alert_triggered && (
             <div className="small">
               <i className="bi bi-exclamation-circle-fill text-danger me-1" />
               Alert for maintenance at {record.alert_date}
-              {' — '}
-              {record.detail}
+              {record.detail ? ` — ${record.detail}` : ''}
             </div>
           )}
-          {!record.detail && (
+          {record.miles_alert_triggered && (
             <div className="small">
               <i className="bi bi-exclamation-circle-fill text-danger me-1" />
-              Alert for maintenance at {record.alert_date}
+              Alert for maintenance, miles traveled {record.miles_traveled} (Alert at {record.miles_threshold})
+              {record.detail ? ` — ${record.detail}` : ''}
             </div>
           )}
         </div>
