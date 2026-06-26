@@ -28,6 +28,8 @@ from .services import (
     FILE_SLOTS,
     assign_load,
     bulk_delete_loads,
+    bulk_invoiced,
+    bulk_paid,
     cancel_load,
     clear_load_file,
     create_load,
@@ -193,6 +195,9 @@ class LoadViewSet(ViewSet):
             if dropoff_city.isdigit():
                 dropoff_city_filter |= Q(dropoff_city_id=dropoff_city)
             qs = qs.filter(dropoff_city_filter)
+        execute = request.query_params.get("execute")
+        if execute is not None:
+            qs = qs.filter(execute=str(execute).lower() in {"1", "true", "yes"})
         invoiced = request.query_params.get("invoiced")
         if invoiced is not None:
             qs = qs.filter(invoiced=invoiced.lower() == "true")
@@ -429,6 +434,28 @@ class LoadViewSet(ViewSet):
             )
         deleted = bulk_delete_loads(ids=ids)
         return Response({"deleted": deleted})
+
+    @action(detail=False, methods=["post"], url_path="bulk-invoiced")
+    def bulk_invoiced_action(self, request):
+        ids = request.data.get("ids", [])
+        if not isinstance(ids, list):
+            return Response(
+                {"detail": "'ids' must be a list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        updated = bulk_invoiced(ids=ids)
+        return Response({"updated": updated})
+
+    @action(detail=False, methods=["post"], url_path="bulk-paid")
+    def bulk_paid_action(self, request):
+        ids = request.data.get("ids", [])
+        if not isinstance(ids, list):
+            return Response(
+                {"detail": "'ids' must be a list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        updated = bulk_paid(ids=ids)
+        return Response({"updated": updated})
 
     # --- Stops nested ---
 

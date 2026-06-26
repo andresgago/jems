@@ -15,6 +15,8 @@ from apps.loads.services import (
     _accounting_day_from,
     assign_load,
     bulk_delete_loads,
+    bulk_invoiced,
+    bulk_paid,
     cancel_load,
     clear_load_file,
     create_load,
@@ -759,6 +761,102 @@ class TestSetExecuted:
         assert load.history is False
         assert load.drivers_paid is False
 
+    def test_execute_sets_status_finished_for_non_detention_load(self):
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+            status=Load.Status.REGISTERED,
+        )
+        result = set_executed(load=load)
+        assert result.status == Load.Status.FINISHED
+        load.refresh_from_db()
+        assert load.status == Load.Status.FINISHED
+
+    def test_execute_preserves_detention_status(self):
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+            status=Load.Status.DETENTION_PENDING,
+        )
+        result = set_executed(load=load)
+        assert result.status == Load.Status.DETENTION_PENDING
+        load.refresh_from_db()
+        assert load.status == Load.Status.DETENTION_PENDING
+
+    def test_execute_records_executed_at_timestamp(self):
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        before = timezone.now()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+        )
+        set_executed(load=load)
+        load.refresh_from_db()
+        assert load.executed_at is not None
+        assert load.executed_at >= before
+
+    def test_execute_records_executed_by_user(self):
+        from apps.users.tests.factories import UserFactory
+
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        user = UserFactory()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=False,
+        )
+        set_executed(load=load, updated_by=user)
+        load.refresh_from_db()
+        assert load.executed_by_id == user.id
+
+    def test_unexecute_does_not_clear_executed_at(self):
+        """Un-execute does not touch executed_at — keeps the audit trail."""
+        truck = TruckFactory()
+        trailer = TrailerFactory()
+        driver = DriverFactory()
+        executed_time = timezone.now()
+        load = LoadFactory(
+            driver=driver,
+            truck=truck,
+            trailer=trailer,
+            rate_file="loads/rates/rate.pdf",
+            bill_file="loads/bills/bill.pdf",
+            execute=True,
+            status=Load.Status.FINISHED,
+            history=True,
+            drivers_paid=True,
+            executed_at=executed_time,
+        )
+        set_executed(load=load)
+        load.refresh_from_db()
+        assert load.execute is False
+        assert load.executed_at == executed_time
+
 
 @pytest.mark.django_db
 class TestSetLoadRating:
@@ -913,3 +1011,73 @@ class TestBulkDeleteLoads:
         remove = LoadFactory()
         bulk_delete_loads(ids=[remove.pk])
         assert Load.objects.filter(pk=keep.pk).exists()
+
+
+@pytest.mark.django_db
+class TestBulkInvoiced:
+    def test_empty_list_returns_zero(self):
+        LoadFactory.create_batch(2, invoiced=False)
+        result = bulk_invoiced(ids=[])
+        assert result == 0
+
+    def test_marks_specified_loads_as_invoiced(self):
+        loads = LoadFactory.create_batch(3, invoiced=False)
+        ids = [load.pk for load in loads]
+        result = bulk_invoiced(ids=ids)
+        assert result == 3
+        assert all(Load.objects.get(pk=pk).invoiced for pk in ids)
+
+    def test_ignores_nonexistent_ids(self):
+        load = LoadFactory(invoiced=False)
+        result = bulk_invoiced(ids=[load.pk, 99999])
+        assert result == 1
+        assert Load.objects.get(pk=load.pk).invoiced
+
+    def test_does_not_change_loads_not_in_ids(self):
+        other = LoadFactory(invoiced=False)
+        target = LoadFactory(invoiced=False)
+        bulk_invoiced(ids=[target.pk])
+        assert not Load.objects.get(pk=other.pk).invoiced
+
+    def test_flag_only_no_accounting_records_created(self, load_accounting_accounts):
+        from apps.accounting.models import Record
+
+        load = LoadFactory(invoiced=False)
+        before = Record.objects.count()
+        bulk_invoiced(ids=[load.pk])
+        assert Record.objects.count() == before
+
+
+@pytest.mark.django_db
+class TestBulkPaid:
+    def test_empty_list_returns_zero(self):
+        LoadFactory.create_batch(2, paid=False)
+        result = bulk_paid(ids=[])
+        assert result == 0
+
+    def test_marks_specified_loads_as_paid(self):
+        loads = LoadFactory.create_batch(3, paid=False)
+        ids = [load.pk for load in loads]
+        result = bulk_paid(ids=ids)
+        assert result == 3
+        assert all(Load.objects.get(pk=pk).paid for pk in ids)
+
+    def test_ignores_nonexistent_ids(self):
+        load = LoadFactory(paid=False)
+        result = bulk_paid(ids=[load.pk, 99999])
+        assert result == 1
+        assert Load.objects.get(pk=load.pk).paid
+
+    def test_does_not_change_loads_not_in_ids(self):
+        other = LoadFactory(paid=False)
+        target = LoadFactory(paid=False)
+        bulk_paid(ids=[target.pk])
+        assert not Load.objects.get(pk=other.pk).paid
+
+    def test_flag_only_no_accounting_records_created(self, load_accounting_accounts):
+        from apps.accounting.models import Record
+
+        load = LoadFactory(paid=False)
+        before = Record.objects.count()
+        bulk_paid(ids=[load.pk])
+        assert Record.objects.count() == before

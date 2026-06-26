@@ -188,6 +188,7 @@ class Load(models.Model):
         blank=True,
         related_name="updated_loads",
     )
+    executed_at = models.DateTimeField(null=True, blank=True)
     executed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

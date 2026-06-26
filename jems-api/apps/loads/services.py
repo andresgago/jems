@@ -310,9 +310,22 @@ def set_executed(*, load: Load, updated_by: Optional[Any] = None) -> Load:
         if not load.bill_file:
             raise NotReadyToExecute("Bill of lading file is required.")
         load.execute = True
+        # Mirror legacy: keep DETENTION status if already in detention, otherwise force FINISHED
+        if load.status != Load.Status.DETENTION_PENDING:
+            load.status = Load.Status.FINISHED
+        load.executed_at = timezone.now()
         if updated_by is not None:
+            load.executed_by = updated_by
             load.updated_by = updated_by
-        load.save(update_fields=["execute", "updated_by"])
+        load.save(
+            update_fields=[
+                "execute",
+                "status",
+                "executed_at",
+                "executed_by",
+                "updated_by",
+            ]
+        )
     return load
 
 
@@ -364,6 +377,20 @@ def bulk_delete_loads(*, ids: list[int]) -> int:
         return 0
     deleted, _ = Load.objects.filter(pk__in=ids).delete()
     return deleted
+
+
+def bulk_invoiced(*, ids: list[int]) -> int:
+    """Mark multiple loads as invoiced. Mirrors legacy actionBulkInvoiced (flag-only, no accounting)."""
+    if not ids:
+        return 0
+    return Load.objects.filter(pk__in=ids).update(invoiced=True)
+
+
+def bulk_paid(*, ids: list[int]) -> int:
+    """Mark multiple loads as paid. Mirrors legacy actionBulkPaid (flag-only)."""
+    if not ids:
+        return 0
+    return Load.objects.filter(pk__in=ids).update(paid=True)
 
 
 FILE_SLOTS: dict[str, str] = {

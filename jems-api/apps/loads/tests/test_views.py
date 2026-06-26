@@ -1682,3 +1682,118 @@ class TestLoadBulkDelete:
             reverse("load-bulk-delete"), {"ids": "1,2,3"}, format="json"
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestLoadBulkInvoiced:
+    def test_unauthenticated_returns_401(self, api_client):
+        response = api_client.post(
+            reverse("load-bulk-invoiced"), {"ids": []}, format="json"
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_dispatcher_can_bulk_invoice(self, auth_client):
+        client, _ = auth_client
+        loads = LoadFactory.create_batch(2, invoiced=False)
+        ids = [load.pk for load in loads]
+        response = client.post(
+            reverse("load-bulk-invoiced"), {"ids": ids}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 2
+        assert all(Load.objects.get(pk=pk).invoiced for pk in ids)
+
+    def test_empty_ids_returns_zero_updated(self, auth_client):
+        client, _ = auth_client
+        LoadFactory.create_batch(2, invoiced=False)
+        response = client.post(
+            reverse("load-bulk-invoiced"), {"ids": []}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 0
+
+    def test_ignores_nonexistent_ids(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(invoiced=False)
+        response = client.post(
+            reverse("load-bulk-invoiced"),
+            {"ids": [load.pk, 99999]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        assert Load.objects.get(pk=load.pk).invoiced
+
+    def test_invalid_ids_type_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("load-bulk-invoiced"), {"ids": "1,2,3"}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestLoadBulkPaid:
+    def test_unauthenticated_returns_401(self, api_client):
+        response = api_client.post(
+            reverse("load-bulk-paid"), {"ids": []}, format="json"
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_dispatcher_can_bulk_pay(self, auth_client):
+        client, _ = auth_client
+        loads = LoadFactory.create_batch(2, paid=False)
+        ids = [load.pk for load in loads]
+        response = client.post(reverse("load-bulk-paid"), {"ids": ids}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 2
+        assert all(Load.objects.get(pk=pk).paid for pk in ids)
+
+    def test_empty_ids_returns_zero_updated(self, auth_client):
+        client, _ = auth_client
+        LoadFactory.create_batch(2, paid=False)
+        response = client.post(reverse("load-bulk-paid"), {"ids": []}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 0
+
+    def test_ignores_nonexistent_ids(self, auth_client):
+        client, _ = auth_client
+        load = LoadFactory(paid=False)
+        response = client.post(
+            reverse("load-bulk-paid"),
+            {"ids": [load.pk, 99999]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        assert Load.objects.get(pk=load.pk).paid
+
+    def test_invalid_ids_type_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("load-bulk-paid"), {"ids": "1,2,3"}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestLoadListExecuteFilter:
+    def test_execute_true_returns_only_executed_loads(self, auth_client):
+        client, _ = auth_client
+        executed = LoadFactory(execute=True, history=False)
+        not_executed = LoadFactory(execute=False)
+        response = client.get(reverse("load-list"), {"execute": "true", "all": "true"})
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {r["number"] for r in response.data["results"]}
+        assert executed.number in numbers
+        assert not_executed.number not in numbers
+
+    def test_execute_false_excludes_executed_loads(self, auth_client):
+        client, _ = auth_client
+        executed = LoadFactory(execute=True)
+        not_executed = LoadFactory(execute=False)
+        response = client.get(reverse("load-list"), {"execute": "false", "all": "true"})
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {r["number"] for r in response.data["results"]}
+        assert not_executed.number in numbers
+        assert executed.number not in numbers
