@@ -301,6 +301,22 @@ class TestLoadList:
             assert load.number in numbers
             assert other_load.number not in numbers
 
+    def test_filter_by_driver_id_matches_primary_or_team_driver(self, auth_client):
+        client, _ = auth_client
+        primary = DriverFactory(first_name="Primary", last_name="Driver")
+        team_driver = DriverFactory(first_name="Team", last_name="Driver")
+        primary_load = LoadFactory(driver=primary)
+        team_load = LoadFactory(team_driver=team_driver)
+        other_load = LoadFactory()
+
+        response = client.get(reverse("load-list"), {"driver": team_driver.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert team_load.number in numbers
+        assert primary_load.number not in numbers
+        assert other_load.number not in numbers
+
     def test_filter_by_pickup_and_dropoff_city_text(self, auth_client):
         client, _ = auth_client
         state = StateFactory(name="North Carolina", abbreviation="NC")

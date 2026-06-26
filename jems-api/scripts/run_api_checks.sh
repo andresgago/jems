@@ -1337,6 +1337,13 @@ resp="$(get "/api/v1/loads/?history_search=true&all=true&date_type=3&number=L-00
 assert_status "history search filtered" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "history search includes executed load" "$(body "$resp")" "L-0001"
 
+step "Loads: invoicing/payments list filters use legacy executed queue"
+resp="$(patch "/api/v1/loads/${LOAD_ID}/" '{"history":false}')"
+assert_status "load restore from history" "200" "$(code "$resp")" "$(body "$resp")"
+resp="$(get "/api/v1/loads/?execute=true&history=false&all=true&date_type=3&broker=${BROKER_ID}&driver=${DRIVER_ID}&number=L-0001")"
+assert_status "executed queue high-use filters" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "executed queue filter includes load" "$(body "$resp")" "L-0001"
+
 step "Loads: payroll list shows executed, unhistoried, driver-unpaid loads only"
 resp="$(post "/api/v1/loads/" "{\"number\":\"PAYROLL-IN\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"500.00\",\"miles\":50,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"status\":3}")"
 assert_status "payroll visible load create" "201" "$(code "$resp")" "$(body "$resp")"

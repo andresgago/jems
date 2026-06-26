@@ -221,7 +221,7 @@ class LoadViewSet(ViewSet):
                     | Q(trailer__number__icontains=driver)
                 )
                 if driver.isdigit():
-                    driver_filter |= Q(driver_id=driver)
+                    driver_filter |= Q(driver_id=driver) | Q(team_driver_id=driver)
             qs = qs.filter(driver_filter)
         truck = request.query_params.get("truck")
         if truck:
