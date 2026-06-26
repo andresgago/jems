@@ -581,6 +581,30 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrok
     }
   };
 
+  const handleToggleInvoiced = async () => {
+    setActioning(true);
+    try {
+      await loadsService.toggleInvoiced(load.id);
+      onChanged();
+    } catch (err) {
+      window.alert(err.response?.data?.error || 'Could not update invoiced status.');
+    } finally {
+      setActioning(false);
+    }
+  };
+
+  const handleTogglePaid = async () => {
+    setActioning(true);
+    try {
+      await loadsService.togglePaid(load.id);
+      onChanged();
+    } catch (err) {
+      window.alert(err.response?.data?.error || 'Could not update paid status.');
+    } finally {
+      setActioning(false);
+    }
+  };
+
   return (
     <tr className={load.status === 4 ? 'row-detention' : ''}>
       <td className="text-center">
@@ -742,8 +766,30 @@ function LoadRow({ load, selected, onSelect, onChanged, onAssign, onRate, onBrok
         )}
       </td>
       <td className="text-center"><StatusBadge status={load.status} /></td>
-      <td className="text-center"><BooleanMark active={load.invoiced} title={load.invoiced ? 'Invoiced' : 'Not invoiced'} /></td>
-      <td className="text-center"><BooleanMark active={load.paid} title={load.paid ? 'Paid' : 'Not paid'} /></td>
+      <td className="text-center">
+        <button
+          type="button"
+          className="btn btn-link p-0"
+          title={load.invoiced ? 'Invoiced — click to unmark' : 'Not invoiced — click to mark'}
+          aria-label="Toggle invoiced"
+          disabled={actioning}
+          onClick={handleToggleInvoiced}
+        >
+          <BooleanMark active={load.invoiced} title="" />
+        </button>
+      </td>
+      <td className="text-center">
+        <button
+          type="button"
+          className="btn btn-link p-0"
+          title={load.paid ? 'Paid — click to unmark' : 'Not paid — click to mark'}
+          aria-label="Toggle paid"
+          disabled={actioning}
+          onClick={handleTogglePaid}
+        >
+          <BooleanMark active={load.paid} title="" />
+        </button>
+      </td>
     </tr>
   );
 }

@@ -21,30 +21,50 @@ function renderNavbar(path = '/') {
 }
 
 describe('Navbar active state', () => {
-  it('marks Loads link active on /loads', () => {
-    renderNavbar('/loads');
-    expect(screen.getByRole('link', { name: /Loads/i })).toHaveClass('active');
+  it('marks Loads dropdown toggle active on /loads', () => {
+    const { container } = renderNavbar('/loads');
+    const active = container.querySelector('.nav-link.dropdown-toggle.active');
+    expect(active).not.toBeNull();
+    expect(active.textContent).toContain('Loads');
   });
 
-  it('marks Loads link active on a load detail page /loads/42', () => {
-    renderNavbar('/loads/42');
-    expect(screen.getByRole('link', { name: /Loads/i })).toHaveClass('active');
+  it('marks Loads dropdown toggle active on a load detail page /loads/42', () => {
+    const { container } = renderNavbar('/loads/42');
+    const active = container.querySelector('.nav-link.dropdown-toggle.active');
+    expect(active).not.toBeNull();
+    expect(active.textContent).toContain('Loads');
   });
 
-  it('does not mark Loads active on /loads/history', () => {
+  it('marks Loads dropdown toggle active on /loads/history', () => {
+    const { container } = renderNavbar('/loads/history');
+    const active = container.querySelector('.nav-link.dropdown-toggle.active');
+    expect(active).not.toBeNull();
+    expect(active.textContent).toContain('Loads');
+  });
+
+  it('renders History as a dropdown item inside the Loads dropdown', () => {
     renderNavbar('/loads/history');
-    expect(screen.getByRole('link', { name: /Loads/i })).not.toHaveClass('active');
+    const historyLink = screen.getByRole('link', { name: /^History$/i });
+    expect(historyLink).toBeDefined();
+    expect(historyLink.classList.contains('dropdown-item')).toBe(true);
   });
 
-  it('marks History active on /loads/history', () => {
-    renderNavbar('/loads/history');
-    expect(screen.getByRole('link', { name: /History/i })).toHaveClass('active');
+  it('renders Executed, Invoicing, Payments links inside Loads dropdown', () => {
+    const { container } = renderNavbar('/loads');
+    const dropdownLinks = container.querySelectorAll('.dropdown-menu .dropdown-item');
+    const texts = Array.from(dropdownLinks).map((el) => el.textContent);
+    expect(texts).toContain('Executed');
+    expect(texts).toContain('Invoicing');
+    expect(texts).toContain('Payments');
+    expect(texts).toContain('History');
   });
 
-  it('no link is active on the homepage', () => {
-    renderNavbar('/');
-    expect(screen.getByRole('link', { name: /Loads/i })).not.toHaveClass('active');
-    expect(screen.getByRole('link', { name: /History/i })).not.toHaveClass('active');
+  it('no dropdown toggle is active on the homepage', () => {
+    const { container } = renderNavbar('/');
+    const loadsToggle = Array.from(
+      container.querySelectorAll('.nav-link.dropdown-toggle')
+    ).find((el) => el.textContent.includes('Loads'));
+    expect(loadsToggle?.classList.contains('active')).toBe(false);
   });
 
   it('marks Accounting dropdown toggle active on /accounting/records', () => {

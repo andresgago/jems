@@ -1331,18 +1331,21 @@ test('loads page: bulk-delete endpoint is called after checking a row and confir
 
 // ── Navbar active state ────────────────────────────────────────────────────────
 
-test('navbar: Loads link is marked active on the loads page', async ({ page }) => {
+test('navbar: Loads dropdown toggle is marked active on the loads page', async ({ page }) => {
   await withAuth(page)
   await mockApi(page)
   await page.goto('/loads')
-  const loadsLink = page.getByRole('link', { name: /Loads/i }).first()
-  await expect(loadsLink).toHaveClass(/\bactive\b/)
+  const loadsToggle = page.locator('.navbar-custom .nav-link.dropdown-toggle.active')
+  await expect(loadsToggle).toHaveCount(1)
+  await expect(loadsToggle).toContainText('Loads')
 })
 
-test('navbar: no dropdown toggle is marked active on the loads page', async ({ page }) => {
+test('navbar: only the Loads dropdown toggle is active on the loads page', async ({ page }) => {
   await withAuth(page)
+  await mockApi(page)
   await page.goto('/loads')
-  // None of the dropdown toggles should be active when browsing loads
+  // Exactly one dropdown toggle active: the Loads menu
   const activeDropdowns = page.locator('.navbar-custom .nav-link.dropdown-toggle.active')
-  await expect(activeDropdowns).toHaveCount(0)
+  await expect(activeDropdowns).toHaveCount(1)
+  await expect(activeDropdowns).toContainText('Loads')
 })

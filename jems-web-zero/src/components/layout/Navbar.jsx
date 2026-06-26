@@ -18,7 +18,6 @@ export default function Navbar() {
   const at = (...prefixes) =>
     prefixes.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
-  const linkClass = (active) => `nav-link${active ? ' active' : ''}`;
   const dropdownClass = (active) => `nav-link dropdown-toggle${active ? ' active' : ''}`;
 
   return (
@@ -35,18 +34,20 @@ export default function Navbar() {
           <ul className="navbar-nav ms-auto">
 
             {haveAnyPermission(['admin', 'dispatcher']) && (
-              <li className="nav-item">
-                <Link className={linkClass(at('/loads') && !at('/loads/history'))} to="/loads">
+              <li className="nav-item dropdown">
+                <a className={dropdownClass(at('/loads'))} href="#" data-bs-toggle="dropdown">
                   <i className="bi bi-box-seam me-1" />Loads
-                </Link>
-              </li>
-            )}
-
-            {can('admin') && (
-              <li className="nav-item">
-                <Link className={linkClass(at('/loads/history'))} to="/loads/history">
-                  <i className="bi bi-clock-history me-1" />History
-                </Link>
+                </a>
+                <ul className="dropdown-menu dropdown-menu-dark">
+                  <li><Link className="dropdown-item" to="/loads">All Loads</Link></li>
+                  <li><hr className="dropdown-divider" /></li>
+                  <li><h6 className="dropdown-header">Processing</h6></li>
+                  <li><Link className="dropdown-item" to="/loads/executed">Executed</Link></li>
+                  <li><Link className="dropdown-item" to="/loads/invoicing">Invoicing</Link></li>
+                  <li><Link className="dropdown-item" to="/loads/payments">Payments</Link></li>
+                  {can('admin') && <li><hr className="dropdown-divider" /></li>}
+                  {can('admin') && <li><Link className="dropdown-item" to="/loads/history">History</Link></li>}
+                </ul>
               </li>
             )}
 

@@ -22,6 +22,8 @@ vi.mock('../../../services/loads', async () => {
       bulkDelete: vi.fn(),
       setExecuted: vi.fn(),
       brokerContacts: vi.fn(),
+      toggleInvoiced: vi.fn(),
+      togglePaid: vi.fn(),
     },
   };
 });
@@ -870,5 +872,101 @@ describe('LoadsPage', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Update location/i })).not.toBeDisabled()
     );
+  });
+
+  // ── Invoiced / Paid toggle ─────────────────────────────────────────────────
+
+  it('renders invoiced cell as a clickable button', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    const btn = screen.getByRole('button', { name: 'Toggle invoiced' });
+    expect(btn).toBeInTheDocument();
+    expect(btn.tagName).toBe('BUTTON');
+  });
+
+  it('renders paid cell as a clickable button', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    const btn = screen.getByRole('button', { name: 'Toggle paid' });
+    expect(btn).toBeInTheDocument();
+    expect(btn.tagName).toBe('BUTTON');
+  });
+
+  it('clicking invoiced button calls loadsService.toggleInvoiced with the load id', async () => {
+    loadsService.toggleInvoiced.mockResolvedValue({ data: {} });
+    const refresh = vi.fn();
+    mockLoadsReturn({ refresh });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle invoiced' }));
+
+    await waitFor(() => {
+      expect(loadsService.toggleInvoiced).toHaveBeenCalledWith(1);
+      expect(refresh).toHaveBeenCalled();
+    });
+  });
+
+  it('clicking paid button calls loadsService.togglePaid with the load id', async () => {
+    loadsService.togglePaid.mockResolvedValue({ data: {} });
+    const refresh = vi.fn();
+    mockLoadsReturn({ refresh });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle paid' }));
+
+    await waitFor(() => {
+      expect(loadsService.togglePaid).toHaveBeenCalledWith(1);
+      expect(refresh).toHaveBeenCalled();
+    });
+  });
+
+  it('invoiced button shows alert when API fails', async () => {
+    loadsService.toggleInvoiced.mockRejectedValue({ response: { data: { error: 'Invoice locked' } } });
+    window.alert = vi.fn();
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle invoiced' }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Invoice locked'));
+  });
+
+  it('paid button shows alert when API fails', async () => {
+    loadsService.togglePaid.mockRejectedValue({ response: { data: { error: 'Payment locked' } } });
+    window.alert = vi.fn();
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle paid' }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Payment locked'));
+  });
+
+  it('invoiced button title reflects current invoiced state', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    // rows[0] has invoiced: false
+    expect(screen.getByRole('button', { name: 'Toggle invoiced' }))
+      .toHaveAttribute('title', 'Not invoiced — click to mark');
+  });
+
+  it('paid button title reflects current paid state', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    // rows[0] has paid: true
+    expect(screen.getByRole('button', { name: 'Toggle paid' }))
+      .toHaveAttribute('title', 'Paid — click to unmark');
   });
 });

@@ -1,0 +1,127 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import PaymentsPage from '../PaymentsPage';
+
+vi.mock('../../../hooks/useLoads', () => ({ useLoads: vi.fn() }));
+vi.mock('../../../services/loads', () => ({
+  loadsService: {
+    togglePaid: vi.fn(),
+    bulkPaid: vi.fn(),
+  },
+}));
+
+import { useLoads } from '../../../hooks/useLoads';
+import { loadsService } from '../../../services/loads';
+
+const LOAD = {
+  id: 3,
+  number: 'LD-003',
+  payment: 2000,
+  miles: 500,
+  weight: 20000,
+  paid: false,
+  driver_name: 'Maria Lopez',
+  truck_number: 'T-05',
+  trailer_number: 'TR-05',
+  pickup_city_name: 'Dallas',
+  pickup_city_state: 'TX',
+  pickup_city_zip: '75201',
+  pickup_date: '2026-06-15T07:00:00Z',
+  dropoff_city_name: 'Houston',
+  dropoff_city_state: 'TX',
+  dropoff_city_zip: '77001',
+  dropoff_date: '2026-06-15T15:00:00Z',
+  rate_file: null,
+  bill_file: null,
+  lumper_file: null,
+  detention_file: null,
+};
+
+function setup(loads = [LOAD]) {
+  const refresh = vi.fn();
+  useLoads.mockReturnValue({ loads, loading: false, error: null, refresh });
+  render(<MemoryRouter><PaymentsPage /></MemoryRouter>);
+  return { refresh };
+}
+
+describe('PaymentsPage', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('renders page heading', () => {
+    setup();
+    expect(screen.getByText(/Payments/i)).toBeDefined();
+  });
+
+  it('renders driver name and order number', () => {
+    setup();
+    expect(screen.getByText(/Maria Lopez/i)).toBeDefined();
+    expect(screen.getByText('LD-003')).toBeDefined();
+  });
+
+  it('shows "Non-Paid" badge when paid is false', () => {
+    setup();
+    expect(screen.getByText('Non-Paid')).toBeDefined();
+  });
+
+  it('shows "Paid" badge when paid is true', () => {
+    setup([{ ...LOAD, paid: true }]);
+    // "Paid" also appears in the <th> header, so find the badge span specifically
+    const badges = screen.getAllByText('Paid');
+    expect(badges.some((el) => el.tagName === 'SPAN')).toBe(true);
+  });
+
+  it('renders totals row with miles, weight, payment', () => {
+    setup();
+    // values appear in both data row and tfoot
+    expect(screen.getAllByText('500.00').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('20000.00').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/\$2,000\.00/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('"Set to Paid" button is disabled when no rows selected', () => {
+    setup();
+    const btn = screen.getByRole('button', { name: /Set to Paid/i });
+    expect(btn.disabled).toBe(true);
+  });
+
+  it('selects all via header checkbox and enables bulk button', () => {
+    setup();
+    fireEvent.click(screen.getAllByRole('checkbox')[0]);
+    expect(screen.getByRole('button', { name: /Set to Paid/i }).disabled).toBe(false);
+  });
+
+  it('calls bulkPaid with selected ids after confirm', async () => {
+    window.confirm = vi.fn(() => true);
+    loadsService.bulkPaid.mockResolvedValue({});
+    setup();
+    fireEvent.click(screen.getAllByRole('checkbox')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /Set to Paid/i }));
+    await waitFor(() => expect(loadsService.bulkPaid).toHaveBeenCalledWith([3]));
+  });
+
+  it('does not call bulkPaid when confirm is cancelled', async () => {
+    window.confirm = vi.fn(() => false);
+    setup();
+    fireEvent.click(screen.getAllByRole('checkbox')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /Set to Paid/i }));
+    expect(loadsService.bulkPaid).not.toHaveBeenCalled();
+  });
+
+  it('calls togglePaid on row action button click', async () => {
+    loadsService.togglePaid.mockResolvedValue({});
+    setup();
+    fireEvent.click(screen.getByTitle(/Not paid/i));
+    await waitFor(() => expect(loadsService.togglePaid).toHaveBeenCalledWith(3));
+  });
+
+  it('renders disabled "Pay the Driver" button', () => {
+    setup();
+    expect(screen.getByTitle(/Requires DriverInvoice module/i)).toBeDefined();
+  });
+
+  it('shows empty state when no loads', () => {
+    setup([]);
+    expect(screen.getByText(/No executed loads found/i)).toBeDefined();
+  });
+});

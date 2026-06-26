@@ -8,6 +8,10 @@ import HomePage from './pages/HomePage';
 import LoadsPage from './pages/loads/LoadsPage';
 import LoadFormPage from './pages/loads/LoadFormPage';
 import LoadDetailPage from './pages/loads/LoadDetailPage';
+import ExecutedPage from './pages/loads/ExecutedPage';
+import InvoicingPage from './pages/loads/InvoicingPage';
+import PaymentsPage from './pages/loads/PaymentsPage';
+import HistoryPage from './pages/loads/HistoryPage';
 import DriversPage from './pages/drivers/DriversPage';
 import DriverFormPage from './pages/drivers/DriverFormPage';
 import DriverDetailPage from './pages/drivers/DriverDetailPage';
@@ -62,12 +66,15 @@ function AppRoutes() {
             <MainLayout>
               <Routes>
                 <Route index element={<HomePage />} />
-                {/* Loads */}
+                {/* Loads — static sub-paths must precede :id to avoid param collisions */}
                 <Route path="loads" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><LoadsPage /></RequireAnyPermission>} />
                 <Route path="loads/create" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><LoadFormPage /></RequireAnyPermission>} />
+                <Route path="loads/executed" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><ExecutedPage /></RequireAnyPermission>} />
+                <Route path="loads/invoicing" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><InvoicingPage /></RequireAnyPermission>} />
+                <Route path="loads/payments" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><PaymentsPage /></RequireAnyPermission>} />
+                <Route path="loads/history" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><HistoryPage /></RequireAnyPermission>} />
                 <Route path="loads/:id" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><LoadDetailPage /></RequireAnyPermission>} />
                 <Route path="loads/:id/edit" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><LoadFormPage /></RequireAnyPermission>} />
-                <Route path="loads/history" element={<RequireAnyPermission permissions={['admin', 'dispatcher']}><div><h5>Load History</h5><p className="text-muted">Coming soon.</p></div></RequireAnyPermission>} />
                 {/* Drivers */}
                 <Route path="drivers" element={<DriversPage />} />
                 <Route path="drivers/create" element={<DriverFormPage />} />
