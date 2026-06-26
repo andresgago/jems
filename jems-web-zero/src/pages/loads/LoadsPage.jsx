@@ -1078,6 +1078,12 @@ export default function LoadsPage() {
             <i className={`bi ${isDispatcher && !isMyLoadsScope ? 'bi-person-fill' : 'bi-list-ul'} me-1`} />
             {isMyLoadsScope ? 'List all loads' : (isDispatcher ? 'List only my loads' : 'List all loads')}
           </button>
+          {isAdmin && (
+            <span className="loads-subviews ms-2">
+              <Link to="/loads/invoicing" className="btn btn-link btn-sm py-0 text-muted">Invoicing</Link>
+              <Link to="/loads/payments" className="btn btn-link btn-sm py-0 text-muted">Payments</Link>
+            </span>
+          )}
           <div className="ms-auto btn-group btn-group-sm">
             <Link to="/loads/create" className="btn btn-primary"><i className="bi bi-plus-lg me-1" />New Load</Link>
             <button className="btn btn-info text-white load-grid-tool-btn" type="button" onClick={handleGridReset} title="Reset Grid" aria-label="Reset Grid"><i className="bi bi-eraser-fill" /></button>

@@ -12,6 +12,7 @@ const ADMIN_PASS = process.env.E2E_PASSWORD || 'admin1234'
 
 // Critical routes that must be reachable after login
 const CRITICAL_ROUTES = [
+  { path: '/', heading: /welcome/i },
   { path: '/loads', heading: /loads/i },
   { path: '/loads/create', heading: /new load/i },
   { path: '/drivers', heading: /drivers/i },
@@ -145,6 +146,34 @@ for (const route of CRITICAL_ROUTES) {
 }
 
 // ── Trailer types from API ────────────────────────────────────────────────────
+
+// ── Dashboard API ─────────────────────────────────────────────────────────────
+
+test('dashboard endpoint returns correct shape (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const data = await apiGet(page, token, '/dashboard/')
+  expect(data).toHaveProperty('stats')
+  expect(data).toHaveProperty('expiration_alerts')
+  expect(data).toHaveProperty('counts')
+
+  expect(typeof data.stats.loads_in_dispatch).toBe('number')
+  expect(typeof data.stats.executed_loads).toBe('number')
+  expect(typeof data.stats.invoiced).toBe('number')
+
+  expect(Array.isArray(data.expiration_alerts.drivers)).toBeTruthy()
+  expect(Array.isArray(data.expiration_alerts.trucks)).toBeTruthy()
+  expect(Array.isArray(data.expiration_alerts.trailers)).toBeTruthy()
+
+  expect(typeof data.counts.drivers_expiring).toBe('number')
+  expect(typeof data.counts.trucks_expiring).toBe('number')
+  expect(typeof data.counts.trucks_in_maintenance).toBe('number')
+  expect(typeof data.counts.trailers_expiring).toBe('number')
+})
+
+// ── Trailer types ─────────────────────────────────────────────────────────────
 
 test('trailer-types endpoint returns short_name for all types (real)', async ({ page }) => {
   test.setTimeout(30_000)
@@ -559,7 +588,7 @@ test('can create a user from the UI and open its detail page (real)', async ({ p
 
     await expect(page.getByRole('heading', { name: /E2E UI User/i })).toBeVisible()
     await expect(page.getByText(username, { exact: true })).toBeVisible()
-    await expect(page.getByText('By Percent', { exact: true })).toBeVisible()
+    await expect(page.locator('.card').getByText('By Percent', { exact: true })).toBeVisible()
   } finally {
     if (createdId) await apiDelete(page, token, `/users/${createdId}/`)
   }

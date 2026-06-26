@@ -48,6 +48,24 @@ async function withAdminAuth(page) {
 
 // ── Mock API ──────────────────────────────────────────────────────────────────
 
+const DASHBOARD = {
+  stats: { loads_in_dispatch: 25, executed_loads: 63, invoiced: 53 },
+  expiration_alerts: {
+    drivers: [
+      {
+        id: 5,
+        name: 'Driver: Runell',
+        alerts: [
+          { type: 'license', label: 'License', expires_on: '2026-07-11', days_until: 15, expired: false },
+        ],
+      },
+    ],
+    trucks: [],
+    trailers: [],
+  },
+  counts: { drivers_expiring: 1, trucks_expiring: 0, trucks_in_maintenance: 0, trailers_expiring: 0 },
+}
+
 const TRAILER_TYPES = [
   { id: 1, name: 'Van', short_name: 'V', is_active: true },
   { id: 2, name: 'Reefer', short_name: 'R', is_active: true },
@@ -429,6 +447,7 @@ async function mockApi(page) {
     if (pathname.endsWith('/dispatch/invoices/hour/') && method === 'GET') return json(HOUR_INVOICES)
     if (/\/dispatch\/invoices\/hour\/\d+\/$/.test(pathname) && method === 'GET') return json(HOUR_INVOICE_DETAIL)
     if (/\/dispatch\/invoices\/hour\/\d+\/amount\/$/.test(pathname)) return json({ amount: '80.00' })
+    if (pathname.endsWith('/dashboard/') && method === 'GET') return json(DASHBOARD)
 
     throw new Error(`Unmocked API call: ${method} ${pathname}${url.search}`)
   })
@@ -478,6 +497,49 @@ test('login page shows username and password fields', async ({ page }) => {
 test('successful login redirects away from /login', async ({ page }) => {
   await loginViaForm(page)
   await expect(page).not.toHaveURL(/\/login/)
+})
+
+// ── Dashboard (Home) ──────────────────────────────────────────────────────────
+
+test('dashboard shows stat cards after login', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await expect(page.getByText('In Dispatch', { exact: true })).toBeVisible()
+  await expect(page.locator('.card.bg-primary .display-6')).toHaveText('25')
+  await expect(page.getByText('Executed', { exact: true })).toBeVisible()
+  await expect(page.locator('.card.bg-success .display-6')).toHaveText('63')
+  await expect(page.getByText('Invoiced', { exact: true })).toBeVisible()
+  await expect(page.locator('.card.bg-info .display-6')).toHaveText('53')
+})
+
+test('dashboard shows invoiced % of executed loads', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  // 53 / 63 = 84%
+  await expect(page.getByText(/84% of executed Loads/i)).toBeVisible()
+})
+
+test('dashboard Drivers tab is active by default and shows alert', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await expect(page.getByText('Driver: Runell')).toBeVisible()
+})
+
+test('dashboard drivers tab has expiring badge count', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  // badge inside the Drivers nav button
+  const driversTab = page.getByRole('button', { name: /Drivers/i })
+  await expect(driversTab).toBeVisible()
+  await expect(driversTab.locator('.badge')).toHaveText('1')
+})
+
+test('dashboard has My work Calendar link pointing to /dispatch/my-calendar', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  // Target the nav-link inside the tab bar (not the navbar dropdown)
+  const link = page.locator('.card .nav-link[href="/dispatch/my-calendar"]')
+  await expect(link).toBeVisible()
 })
 
 // ── Loads list ────────────────────────────────────────────────────────────────
@@ -870,27 +932,28 @@ test('new city form: state options render in the select', async ({ page }) => {
 // ── Settings: Users / System ─────────────────────────────────────────────────
 
 test('users list renders a user returned by the API', async ({ page }) => {
-  await withAuth(page)
+  await withAdminAuth(page)
   await page.goto('/settings/users')
   await expect(page.getByRole('link', { name: 'Lilian Hernandez' })).toBeVisible()
   await expect(page.getByText('lilian@example.com')).toBeVisible()
 })
 
 test('user detail renders heading and dispatcher type', async ({ page }) => {
-  await withAuth(page)
+  await withAdminAuth(page)
   await page.goto('/settings/users/1')
   await expect(page.getByRole('heading', { name: 'Lilian Hernandez' })).toBeVisible()
-  await expect(page.getByText('By Percent')).toBeVisible()
+  // dispatcher_type_display rendered inside a .card, not a navbar dropdown
+  await expect(page.locator('.card').getByText('By Percent', { exact: true })).toBeVisible()
 })
 
 test('new user form has Create User button', async ({ page }) => {
-  await withAuth(page)
+  await withAdminAuth(page)
   await page.goto('/settings/users/create')
   await expect(page.getByRole('button', { name: /Create User/i })).toBeVisible()
 })
 
 test('new user form: Username label shows required asterisk', async ({ page }) => {
-  await withAuth(page)
+  await withAdminAuth(page)
   await page.goto('/settings/users/create')
   await expect(page.locator('label').filter({ hasText: /^Username/ })).toContainText('*')
 })
@@ -1331,21 +1394,19 @@ test('loads page: bulk-delete endpoint is called after checking a row and confir
 
 // ── Navbar active state ────────────────────────────────────────────────────────
 
-test('navbar: Loads dropdown toggle is marked active on the loads page', async ({ page }) => {
+test('navbar: Loads link is marked active on the loads page', async ({ page }) => {
   await withAuth(page)
-  await mockApi(page)
   await page.goto('/loads')
-  const loadsToggle = page.locator('.navbar-custom .nav-link.dropdown-toggle.active')
-  await expect(loadsToggle).toHaveCount(1)
-  await expect(loadsToggle).toContainText('Loads')
+  const loadsLink = page.locator('.navbar-custom .nav-link.active')
+  await expect(loadsLink).toHaveCount(1)
+  await expect(loadsLink).toContainText('Loads')
 })
 
-test('navbar: only the Loads dropdown toggle is active on the loads page', async ({ page }) => {
+test('navbar: only the Loads link is active on the loads page', async ({ page }) => {
   await withAuth(page)
-  await mockApi(page)
   await page.goto('/loads')
-  // Exactly one dropdown toggle active: the Loads menu
-  const activeDropdowns = page.locator('.navbar-custom .nav-link.dropdown-toggle.active')
-  await expect(activeDropdowns).toHaveCount(1)
-  await expect(activeDropdowns).toContainText('Loads')
+  // Exactly one nav-link active: the Loads direct link
+  const activeLinks = page.locator('.navbar-custom .nav-link.active')
+  await expect(activeLinks).toHaveCount(1)
+  await expect(activeLinks).toContainText('Loads')
 })

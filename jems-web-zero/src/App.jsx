@@ -91,16 +91,29 @@ function AppRoutes() {
                 <Route path="fleet/trailers/:id/edit" element={<TrailerFormPage />} />
                 <Route path="fleet/truck-maintenance" element={<div><h5>Truck Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/truck-maintenance/create" element={<div><h5>Create Truck Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="fleet/truck-miles-reset" element={<div><h5>Trucks Miles Reset</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="fleet/categories" element={<div><h5>Categories</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/trailer-maintenance" element={<div><h5>Trailer Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/trailer-maintenance/create" element={<div><h5>Create Trailer Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="fleet/reports/truck-parts" element={<div><h5>Parts and Pieces Used By Trucks</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="fleet/accidents" element={<div><h5>Accidents</h5><p className="text-muted">Coming soon.</p></div>} />
                 {/* Accounting */}
                 <Route path="accounting/records" element={<RecordsPage />} />
                 <Route path="accounting/records/create" element={<RecordFormPage />} />
+                <Route path="accounting/records/create-assistant" element={<div><h5>Add Record (Assistant)</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/records/:id" element={<RecordDetailPage />} />
                 <Route path="accounting/records/:id/edit" element={<RecordFormPage />} />
                 <Route path="accounting/invoices/drivers" element={<DriverInvoicesPage />} />
                 <Route path="accounting/invoices/drivers/:id" element={<DriverInvoiceDetailPage />} />
+                <Route path="accounting/categories" element={<div><h5>Categories</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/category-types" element={<div><h5>Types of Categories</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/units" element={<div><h5>Units of Measurements</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/positions" element={<div><h5>Positions</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/cards" element={<div><h5>Cards</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/accounts" element={<div><h5>Accounts</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/factor-percent" element={<div><h5>Factor Percent List</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/driver-vacations" element={<div><h5>Vacations of Drivers</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/fix-invoices" element={<div><h5>Fix Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/owner-operator" element={<div><h5>Owner Operator</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/dispatcher-percent" element={<DispatchPercentInvoicesPage />} />
                 <Route path="accounting/dispatcher-hour" element={<DispatchHourInvoicesPage />} />
@@ -122,6 +135,12 @@ function AppRoutes() {
                 <Route path="dispatch/calendar" element={<DispatchWorkPage />} />
                 <Route path="dispatch/work/create" element={<DispatchWorkFormPage />} />
                 <Route path="dispatch/work/:id/edit" element={<DispatchWorkFormPage />} />
+                {/* Factoring */}
+                <Route path="factoring/loads" element={<div><h5>Factoring Loads</h5><p className="text-muted">Coming soon.</p></div>} />
+                {/* Tools */}
+                <Route path="tools/drivers-last-loads" element={<div><h5>Drivers Last Loads</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="tools/send-packet" element={<div><h5>Send Packet</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="tools/brokers-status" element={<div><h5>Brokers Status</h5><p className="text-muted">Coming soon.</p></div>} />
                 {/* RTL */}
                 <Route path="rtl" element={<RtlPage />} />
                 <Route path="rtl/drivers/:id" element={<RtlDriverDetailPage />} />
@@ -130,26 +149,39 @@ function AppRoutes() {
                 {/* Reports */}
                 <Route path="reports/financial" element={<div><h5>Profit and Loss</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="reports/invoice" element={<div><h5>Profit and Loss By Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="reports/balance-sheet" element={<div><h5>Balance Sheet</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="reports/company-invoices" element={<div><h5>Invoice Analysis</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="reports/ifta" element={<div><h5>IFTA Report</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="reports/tax" element={<div><h5>Tax Report</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="reports/category-tracking" element={<div><h5>Category Tracking</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="reports/broker-summary" element={<div><h5>Broker Summary</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="reports/shipper-receiver" element={<div><h5>Deliveries from Shipper to Receiver</h5><p className="text-muted">Coming soon.</p></div>} />
                 {/* Settings */}
                 <Route path="settings/carriers" element={<div><h5>Carriers</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/eld" element={<div><h5>ELD</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/truck-owners" element={<div><h5>Truck Owners</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/loss-payees" element={<div><h5>Loss Payees</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/driver-types" element={<div><h5>Driver Types</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/trailer-types" element={<div><h5>Trailer Types</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/truck-types" element={<div><h5>Truck Types</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/engines" element={<div><h5>Engines</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/models" element={<div><h5>Models</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/transmission" element={<div><h5>Transmission</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/tires-size" element={<div><h5>Tires Size</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/make" element={<div><h5>Make</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/roles" element={<div><h5>Roles</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/permissions" element={<div><h5>Permission</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/role-assignment" element={<div><h5>Role Assignment</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/rules" element={<div><h5>Rules</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/business" element={<div><h5>Business</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/cities" element={<CitiesPage />} />
                 <Route path="settings/cities/create" element={<CityFormPage />} />
                 <Route path="settings/cities/:id" element={<CityDetailPage />} />
                 <Route path="settings/cities/:id/edit" element={<CityFormPage />} />
-                <Route path="settings/users" element={<UsersPage />} />
-                <Route path="settings/users/create" element={<UserFormPage />} />
-                <Route path="settings/users/:id" element={<UserDetailPage />} />
-                <Route path="settings/users/:id/edit" element={<UserFormPage />} />
+                <Route path="settings/users" element={<RequireAnyPermission permissions={['admin']}><UsersPage /></RequireAnyPermission>} />
+                <Route path="settings/users/create" element={<RequireAnyPermission permissions={['admin']}><UserFormPage /></RequireAnyPermission>} />
+                <Route path="settings/users/:id" element={<RequireAnyPermission permissions={['admin']}><UserDetailPage /></RequireAnyPermission>} />
+                <Route path="settings/users/:id/edit" element={<RequireAnyPermission permissions={['admin']}><UserFormPage /></RequireAnyPermission>} />
                 <Route path="settings/system" element={<SystemSettingsPage />} />
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />
