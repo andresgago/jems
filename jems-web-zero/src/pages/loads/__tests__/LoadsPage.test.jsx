@@ -20,6 +20,8 @@ vi.mock('../../../services/loads', async () => {
       setHistory: vi.fn(),
       destroy: vi.fn(),
       bulkDelete: vi.fn(),
+      bulkInvoiced: vi.fn(),
+      bulkPaid: vi.fn(),
       setExecuted: vi.fn(),
       brokerContacts: vi.fn(),
       toggleInvoiced: vi.fn(),
@@ -607,7 +609,8 @@ describe('LoadsPage', () => {
     await waitFor(() => expect(usersService.options).toHaveBeenCalled());
 
     expect(screen.queryByRole('button', { name: /^Status$/i })).not.toBeInTheDocument();
-    expect(screen.getByText('Detention').closest('tr')).toHaveClass('row-detention');
+    const badge = screen.getAllByText('Detention').find((el) => el.className.includes('badge'));
+    expect(badge.closest('tr')).toHaveClass('row-detention');
   });
 
   it('assignment cell is a button that opens assign modal', async () => {
@@ -992,5 +995,170 @@ describe('LoadsPage', () => {
     // rows[0] has paid: true
     expect(screen.getByRole('button', { name: 'Toggle paid' }))
       .toHaveAttribute('title', 'Paid — click to unmark');
+  });
+
+  // ── Bulk Invoiced / Paid ──────────────────────────────────────────────────
+
+  it('renders "Mark Invoiced" bulk button visible to all users', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Mark Invoiced/i })).toBeInTheDocument();
+  });
+
+  it('renders "Mark Paid" bulk button visible to all users', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Mark Paid/i })).toBeInTheDocument();
+  });
+
+  it('"Mark Invoiced" is disabled when no loads are selected', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Mark Invoiced/i })).toBeDisabled();
+  });
+
+  it('"Mark Paid" is disabled when no loads are selected', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Mark Paid/i })).toBeDisabled();
+  });
+
+  it('"Mark Invoiced" calls loadsService.bulkInvoiced with selected ids and refreshes', async () => {
+    loadsService.bulkInvoiced.mockResolvedValue({ data: { updated: 1 } });
+    const refresh = vi.fn();
+    mockLoadsReturn({ refresh });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select load LD-001' }));
+    fireEvent.click(screen.getByRole('button', { name: /Mark Invoiced/i }));
+
+    await waitFor(() => {
+      expect(loadsService.bulkInvoiced).toHaveBeenCalledWith([1]);
+      expect(refresh).toHaveBeenCalled();
+    });
+  });
+
+  it('"Mark Paid" calls loadsService.bulkPaid with selected ids and refreshes', async () => {
+    loadsService.bulkPaid.mockResolvedValue({ data: { updated: 1 } });
+    const refresh = vi.fn();
+    mockLoadsReturn({ refresh });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select load LD-001' }));
+    fireEvent.click(screen.getByRole('button', { name: /Mark Paid/i }));
+
+    await waitFor(() => {
+      expect(loadsService.bulkPaid).toHaveBeenCalledWith([1]);
+      expect(refresh).toHaveBeenCalled();
+    });
+  });
+
+  it('"Mark Invoiced" shows alert when API fails', async () => {
+    loadsService.bulkInvoiced.mockRejectedValue({ response: { data: { detail: 'Invoiced failed' } } });
+    window.alert = vi.fn();
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select load LD-001' }));
+    fireEvent.click(screen.getByRole('button', { name: /Mark Invoiced/i }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Invoiced failed'));
+  });
+
+  it('"Mark Paid" shows alert when API fails', async () => {
+    loadsService.bulkPaid.mockRejectedValue({ response: { data: { detail: 'Paid failed' } } });
+    window.alert = vi.fn();
+    mockLoadsReturn();
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select load LD-001' }));
+    fireEvent.click(screen.getByRole('button', { name: /Mark Paid/i }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Paid failed'));
+  });
+
+  // ── index_view filter (legacy main-index behavior) ─────────────────────────
+
+  it('passes index_view=true by default to useLoads (legacy index filter)', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    expect(useLoads).toHaveBeenCalledWith(expect.objectContaining({ index_view: true }));
+  });
+
+  it('"List all loads" removes index_view and adds execute=false (legacy indexall)', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^List all loads$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^List all loads$/i }));
+
+    await waitFor(() => {
+      const lastCall = useLoads.mock.calls.at(-1)[0];
+      expect(lastCall).not.toHaveProperty('dispatcher');
+      expect(lastCall.execute).toBe(false);
+      expect(lastCall.index_view).toBeFalsy();
+    });
+  });
+
+  it('"List only my loads" restores index_view=true with dispatcher filter', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByRole('button', { name: /^List all loads$/i })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /^List all loads$/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^List only my loads$/i })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /^List only my loads$/i }));
+
+    await waitFor(() => {
+      expect(useLoads).toHaveBeenLastCalledWith(expect.objectContaining({
+        dispatcher: '17',
+        index_view: true,
+      }));
+    });
+  });
+
+  // ── Status filter label parity with legacy ────────────────────────────────
+
+  it('status filter dropdown shows "Detention" (not "Detention Pending") matching legacy TMS', async () => {
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    // Multiple comboboxes exist — find the status filter by its "All statuses" option
+    const selects = screen.getAllByRole('combobox');
+    const statusSelect = selects.find((s) =>
+      Array.from(s.querySelectorAll('option')).some((o) => o.textContent === 'All Statuses')
+    );
+    expect(statusSelect).toBeTruthy();
+    const options = Array.from(statusSelect.querySelectorAll('option')).map((o) => o.textContent);
+    expect(options).toContain('Detention');
+    expect(options).not.toContain('Detention Pending');
+  });
+
+  it('status badge for status=4 reads "Detention"', async () => {
+    mockLoadsReturn({
+      loads: [{ ...rows[0], status: 4 }],
+    });
+
+    render(<MemoryRouter><LoadsPage /></MemoryRouter>);
+    await waitFor(() => expect(usersService.options).toHaveBeenCalled());
+
+    // "Detention" also appears as an <option> in the status filter; find the badge specifically
+    const badge = screen.getAllByText('Detention').find((el) => el.className.includes('badge'));
+    expect(badge).toBeTruthy();
+    expect(badge.className).toMatch(/badge/);
   });
 });

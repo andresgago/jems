@@ -115,6 +115,15 @@ async function apiPatch(page, token, path, data) {
   return res.json()
 }
 
+async function apiPut(page, token, path, data) {
+  const res = await page.request.put(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data,
+  })
+  expect(res.ok()).toBeTruthy()
+  return res.json()
+}
+
 async function apiDelete(page, token, path) {
   const res = await page.request.delete(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -885,4 +894,163 @@ test('broker status-search returns 400 when q is missing (real)', async ({ page 
     headers: { Authorization: `Bearer ${token}` },
   })
   expect(res.status()).toBe(400)
+})
+
+// ── index_view filter (legacy main-index parity) ───────────────────────────────
+
+async function createTestLoad(page, token, overrides = {}) {
+  const trailerTypes = await apiGet(page, token, '/fleet/trailer-types/')
+  const carriers = await apiGet(page, token, '/carriers/')
+  const brokers = await apiGet(page, token, '/brokers/search/?q=axle')
+  const cities = await apiGet(page, token, '/loads/cities/search/?q=Charlotte')
+
+  const trailerTypeId = trailerTypes.find((t) => t.name === 'Van')?.id || trailerTypes[0]?.id
+  const carrierId = carriers[0]?.id
+  const brokerId = brokers[0]?.id
+  const cityId = cities[0]?.id
+
+  const shipper = await apiPost(page, token, '/brokers/business/', { name: `E2E Shipper ${Date.now()}` })
+  const receiver = await apiPost(page, token, '/brokers/business/', { name: `E2E Receiver ${Date.now()}` })
+
+  const load = await apiPost(page, token, '/loads/', {
+    number: `TV-${Date.now()}`,
+    pickup_date: '2026-06-25',
+    pickup_city: cityId,
+    pickup_address: 'E2E pickup',
+    dropoff_date: '2026-06-26',
+    dropoff_city: cityId,
+    dropoff_address: 'E2E dropoff',
+    payment: 1000,
+    miles: 100,
+    trailer_type: trailerTypeId,
+    carrier: carrierId,
+    broker: brokerId,
+    shipper: shipper.id,
+    receiver: receiver.id,
+    ...overrides,
+  })
+  return { load, shipper, receiver }
+}
+
+test('index_view=true hides cancelled loads from list (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const { load, shipper, receiver } = await createTestLoad(page, token, { status: 1 })
+
+  // Cancel the load via set-status
+  const cancelRes = await page.request.post(`${API_BASE}/loads/${load.id}/set-status/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { status: 5 },
+  })
+  expect(cancelRes.ok()).toBeTruthy()
+
+  // Verify it's hidden in index_view
+  const listWithIndex = await apiGet(page, token, '/loads/?index_view=true&all=true')
+  const numbers = listWithIndex.results.map((l) => l.number)
+  expect(numbers).not.toContain(load.number)
+
+  // Verify it's visible without index_view
+  const listAll = await apiGet(page, token, `/loads/?all=true&number=${load.number}`)
+  expect(listAll.results.map((l) => l.number)).toContain(load.number)
+
+  // Cleanup
+  await apiDelete(page, token, `/loads/${load.id}/`)
+  await apiPut(page, token, `/brokers/business/${shipper.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${receiver.id}/`, { status: 0 })
+})
+
+test('index_view=true hides executed non-detention loads (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const { load, shipper, receiver } = await createTestLoad(page, token, { status: 3 })
+
+  // Set execute=true via PATCH
+  const patchRes = await page.request.patch(`${API_BASE}/loads/${load.id}/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { execute: true },
+  })
+  expect(patchRes.ok()).toBeTruthy()
+
+  // Verify hidden in index_view
+  const listWithIndex = await apiGet(page, token, `/loads/?index_view=true&all=true&number=${load.number}`)
+  expect(listWithIndex.results.map((l) => l.number)).not.toContain(load.number)
+
+  // Verify visible without index_view
+  const listAll = await apiGet(page, token, `/loads/?all=true&number=${load.number}`)
+  expect(listAll.results.map((l) => l.number)).toContain(load.number)
+
+  // Cleanup
+  await apiDelete(page, token, `/loads/${load.id}/`)
+  await apiPut(page, token, `/brokers/business/${shipper.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${receiver.id}/`, { status: 0 })
+})
+
+test('bulk-invoiced marks selected loads as invoiced (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const { load: loadA, shipper: shipperA, receiver: receiverA } = await createTestLoad(page, token)
+  const { load: loadB, shipper: shipperB, receiver: receiverB } = await createTestLoad(page, token)
+
+  expect(loadA.invoiced).toBe(false)
+  expect(loadB.invoiced).toBe(false)
+
+  const res = await page.request.post(`${API_BASE}/loads/bulk-invoiced/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { ids: [loadA.id, loadB.id] },
+  })
+  expect(res.ok()).toBeTruthy()
+  const body = await res.json()
+  expect(body.updated).toBe(2)
+
+  const updatedA = await apiGet(page, token, `/loads/${loadA.id}/`)
+  const updatedB = await apiGet(page, token, `/loads/${loadB.id}/`)
+  expect(updatedA.invoiced).toBe(true)
+  expect(updatedB.invoiced).toBe(true)
+
+  // Cleanup
+  await apiDelete(page, token, `/loads/${loadA.id}/`)
+  await apiDelete(page, token, `/loads/${loadB.id}/`)
+  await apiPut(page, token, `/brokers/business/${shipperA.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${receiverA.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${shipperB.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${receiverB.id}/`, { status: 0 })
+})
+
+test('bulk-paid marks selected loads as paid (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const { load: loadA, shipper: shipperA, receiver: receiverA } = await createTestLoad(page, token)
+  const { load: loadB, shipper: shipperB, receiver: receiverB } = await createTestLoad(page, token)
+
+  expect(loadA.paid).toBe(false)
+  expect(loadB.paid).toBe(false)
+
+  const res = await page.request.post(`${API_BASE}/loads/bulk-paid/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { ids: [loadA.id, loadB.id] },
+  })
+  expect(res.ok()).toBeTruthy()
+  const body = await res.json()
+  expect(body.updated).toBe(2)
+
+  const updatedA = await apiGet(page, token, `/loads/${loadA.id}/`)
+  const updatedB = await apiGet(page, token, `/loads/${loadB.id}/`)
+  expect(updatedA.paid).toBe(true)
+  expect(updatedB.paid).toBe(true)
+
+  // Cleanup
+  await apiDelete(page, token, `/loads/${loadA.id}/`)
+  await apiDelete(page, token, `/loads/${loadB.id}/`)
+  await apiPut(page, token, `/brokers/business/${shipperA.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${receiverA.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${shipperB.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${receiverB.id}/`, { status: 0 })
 })

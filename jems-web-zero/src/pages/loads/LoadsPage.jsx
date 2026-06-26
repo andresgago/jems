@@ -19,7 +19,7 @@ const STATUS_OPTIONS = [
   { value: '1', label: 'Registered' },
   { value: '2', label: 'Started' },
   { value: '3', label: 'Finished' },
-  { value: '4', label: 'Detention Pending' },
+  { value: '4', label: 'Detention' },
   { value: '5', label: 'Cancelled' },
 ];
 
@@ -31,6 +31,7 @@ const DATE_TYPE_OPTIONS = [
 ];
 
 const GRID_FILTER_FIELDS = ['broker', 'number', 'pickup_city', 'dropoff_city', 'driver', 'status'];
+const INITIAL_DRAFT = { date_type: 'all', status: '', index_view: true };
 const EMPTY_LOADS = [];
 const LOADS_PAGE_SIZE = 25;
 
@@ -805,7 +806,7 @@ export default function LoadsPage() {
   const auth = useAuth() || {};
   const user = auth.user;
   const didDefaultDispatcher = useRef(false);
-  const initialDraft = useMemo(() => ({ date_type: 'all', status: '' }), []);
+  const initialDraft = useMemo(() => INITIAL_DRAFT, []);
   const [draft, setDraft] = useState(initialDraft);
   const [filters, setFilters] = useState(buildLoadParams(initialDraft));
   const [page, setPage] = useState(1);
@@ -934,6 +935,30 @@ export default function LoadsPage() {
     }
   };
 
+  const handleBulkInvoiced = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    try {
+      await loadsService.bulkInvoiced(ids);
+      setSelectedIds(new Set());
+      refresh();
+    } catch (err) {
+      window.alert(err.response?.data?.detail || 'Could not update invoiced status.');
+    }
+  };
+
+  const handleBulkPaid = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    try {
+      await loadsService.bulkPaid(ids);
+      setSelectedIds(new Set());
+      refresh();
+    } catch (err) {
+      window.alert(err.response?.data?.detail || 'Could not update paid status.');
+    }
+  };
+
   const handleGridReset = () => {
     setDraft((current) => {
       const next = { ...current };
@@ -956,8 +981,11 @@ export default function LoadsPage() {
   );
 
   const handleListAllLoads = () => {
-    const nextDraft = { ...draft, status: '', dispatcher: '', date_type: 'all', date_from: '', date_to: '' };
+    // Mirror PHP indexall: show all non-executed loads (execute=false), no dispatcher,
+    // no date filter, no index_view restriction (cancelled loads visible here).
+    const nextDraft = { status: '', dispatcher: '', date_type: 'all', date_from: '', date_to: '', execute: false };
     setDraft(nextDraft);
+    setFilterLabels({});
     setShowAllRows(false);
     setPage(1);
     setFilters(buildLoadParams(nextDraft, { page: 1, showAllRows: false }));
@@ -966,7 +994,7 @@ export default function LoadsPage() {
   };
 
   const handleListMyLoads = () => {
-    const nextDraft = { date_type: 'all', status: '', dispatcher: String(user.user_id) };
+    const nextDraft = { date_type: 'all', status: '', dispatcher: String(user.user_id), index_view: true };
     setDraft(nextDraft);
     setFilterLabels({});
     setShowAllRows(false);
@@ -1248,6 +1276,12 @@ export default function LoadsPage() {
               <i className="bi bi-trash me-1" />Delete All
             </button>
           )}
+          <button className="btn btn-outline-secondary btn-sm" type="button" disabled={selectedIds.size === 0} onClick={handleBulkInvoiced}>
+            <i className="bi bi-receipt me-1" />Mark Invoiced
+          </button>
+          <button className="btn btn-outline-secondary btn-sm" type="button" disabled={selectedIds.size === 0} onClick={handleBulkPaid}>
+            <i className="bi bi-cash-coin me-1" />Mark Paid
+          </button>
           {!showAllRows && totalPages > 1 ? (
             <div className="loads-pagination ms-auto">
               <button className="btn btn-outline-secondary btn-sm" type="button" disabled={page <= 1 || loading} onClick={() => goToPage(page - 1)}>

@@ -461,6 +461,8 @@ async function mockApi(page) {
     if (/\/loads\/\d+\/set-status\/$/.test(pathname) && method === 'POST') return json({ id: 1, status: 3 })
     if (/\/loads\/\d+\/files\/[^/]+\/$/.test(pathname)) return json({})
     if (pathname.endsWith('/loads/bulk-delete/') && method === 'POST') return json({ deleted: 1 })
+    if (pathname.endsWith('/loads/bulk-invoiced/') && method === 'POST') return json({ updated: 1 })
+    if (pathname.endsWith('/loads/bulk-paid/') && method === 'POST') return json({ updated: 1 })
     if (/\/loads\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     if (pathname.endsWith('/loads/') && method === 'GET') return json({ results: [], count: 0 })
     if (pathname.endsWith('/loads/cities/search/')) return json([])
@@ -1477,4 +1479,152 @@ test('navbar: only the Loads link is active on the loads page', async ({ page })
   const activeLinks = page.locator('.navbar-custom .nav-link.active')
   await expect(activeLinks).toHaveCount(1)
   await expect(activeLinks).toContainText('Loads')
+})
+
+// ── Index view (legacy default filter) ────────────────────────────────────────
+
+test('loads page sends index_view=true by default (legacy main-index filter)', async ({ page }) => {
+  await withAuth(page)
+
+  let capturedParams = null
+  await page.route('**/api/v1/loads/**', async (route) => {
+    const url = new URL(route.request().url())
+    const { pathname, searchParams } = url
+    const method = route.request().method()
+    const json = (data, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) })
+
+    if (pathname.endsWith('/loads/') && method === 'GET') {
+      capturedParams = Object.fromEntries(searchParams.entries())
+      return json({ results: [], count: 0 })
+    }
+    if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({})
+    if (pathname.endsWith('/loads/cities/search/')) return json([])
+    if (pathname.endsWith('/brokers/options/')) return json([])
+    if (pathname.endsWith('/brokers/search/')) return json([])
+    if (pathname.endsWith('/users/options/') && method === 'GET') return json([])
+    return route.continue()
+  })
+
+  await page.goto('/loads')
+  await page.waitForTimeout(600)
+
+  expect(capturedParams).not.toBeNull()
+  expect(capturedParams.index_view).toBe('true')
+})
+
+test('loads page "List all loads" button sends execute=false without index_view', async ({ page }) => {
+  await withAuth(page)
+
+  const capturedCalls = []
+  await page.route('**/api/v1/loads/**', async (route) => {
+    const url = new URL(route.request().url())
+    const { pathname, searchParams } = url
+    const method = route.request().method()
+    const json = (data, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) })
+
+    if (pathname.endsWith('/loads/') && method === 'GET') {
+      capturedCalls.push(Object.fromEntries(searchParams.entries()))
+      return json({ results: [], count: 0 })
+    }
+    if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({})
+    if (pathname.endsWith('/loads/cities/search/')) return json([])
+    if (pathname.endsWith('/brokers/options/')) return json([])
+    if (pathname.endsWith('/brokers/search/')) return json([])
+    if (pathname.endsWith('/users/options/') && method === 'GET') return json([
+      { id: 1, label: 'Test User', full_name: 'Test User', is_dispatcher: true },
+    ])
+    return route.continue()
+  })
+
+  await page.goto('/loads')
+  await page.waitForTimeout(500)
+
+  await page.getByRole('button', { name: /List all loads/i }).click()
+  await page.waitForTimeout(500)
+
+  const lastCall = capturedCalls.at(-1)
+  expect(lastCall.execute).toBe('false')
+  expect(lastCall.index_view).toBeFalsy()
+})
+
+// ── Bulk Invoiced / Paid buttons ──────────────────────────────────────────────
+
+test('loads page shows "Mark Invoiced" and "Mark Paid" bulk action buttons', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+
+  await expect(page.getByRole('button', { name: /Mark Invoiced/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Mark Paid/i })).toBeVisible()
+})
+
+test('"Mark Invoiced" button is disabled when no rows selected', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+
+  await expect(page.getByRole('button', { name: /Mark Invoiced/i })).toBeDisabled()
+})
+
+test('"Mark Paid" button is disabled when no rows selected', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+
+  await expect(page.getByRole('button', { name: /Mark Paid/i })).toBeDisabled()
+})
+
+test('"Mark Invoiced" calls bulk-invoiced endpoint when row selected', async ({ page }) => {
+  await withAdminAuth(page)
+
+  let bulkInvoicedCalled = false
+  await page.route('**/api/v1/**', async (route) => {
+    const url = new URL(route.request().url())
+    const { pathname } = url
+    const method = route.request().method()
+    const json = (data, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) })
+
+    if (pathname.endsWith('/version/') && method === 'GET') return json({ version: '6.0' })
+    if (pathname.endsWith('/auth/login/') && method === 'POST') return json({ access: mockAdminJWT(), refresh: 'r' })
+    if (pathname.endsWith('/auth/refresh/') && method === 'POST') return json({ access: mockAdminJWT() })
+    if (pathname.endsWith('/users/options/') && method === 'GET') return json([])
+    if (pathname.endsWith('/carriers/options/') && method === 'GET') return json([])
+    if (pathname.endsWith('/loads/send-driver-info/') && method === 'POST') return json({})
+    if (/\/loads\/\d+\/set-rating\/$/.test(pathname) && method === 'POST') return json({})
+    if (/\/loads\/\d+\/set-status\/$/.test(pathname) && method === 'POST') return json({ id: 1, status: 3 })
+    if (/\/loads\/\d+\/files\/[^/]+\/$/.test(pathname)) return json({})
+    if (/\/loads\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
+    if (pathname.endsWith('/loads/bulk-delete/') && method === 'POST') return json({ deleted: 1 })
+    if (pathname.endsWith('/loads/bulk-invoiced/') && method === 'POST') {
+      bulkInvoicedCalled = true
+      return json({ updated: 1 })
+    }
+    if (pathname.endsWith('/loads/bulk-paid/') && method === 'POST') return json({ updated: 1 })
+    if (pathname.endsWith('/loads/') && method === 'GET') {
+      return json({ results: [{ id: 5, number: 'LD-INV', payment: 0, status: 1, broker: 1, broker_name: 'Test', pickup_city_display: 'X', dropoff_city_display: 'Y', pickup_date: '2026-06-01T10:00:00Z', dropoff_date: '2026-06-02T10:00:00Z', assignment_complete: false, ready_to_execute: false, execute: false, invoiced: false, paid: false }], count: 1 })
+    }
+    if (pathname.endsWith('/loads/cities/search/')) return json([])
+    if (pathname.endsWith('/brokers/options/')) return json([])
+    if (pathname.endsWith('/brokers/search/')) return json([])
+    if (pathname.endsWith('/brokers/business/search/')) return json([])
+    return route.continue()
+  })
+
+  await page.goto('/loads')
+  await page.getByRole('checkbox', { name: /Select load LD-INV/i }).click()
+  await page.getByRole('button', { name: /Mark Invoiced/i }).click()
+
+  await page.waitForTimeout(500)
+  expect(bulkInvoicedCalled).toBe(true)
+})
+
+// ── Status filter label parity ────────────────────────────────────────────────
+
+test('loads status filter dropdown shows "Detention" matching legacy TMS label', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+
+  const select = page.locator('thead select')
+  await expect(select.locator('option', { hasText: 'Detention' })).toHaveCount(1)
+  await expect(select.locator('option', { hasText: 'Detention Pending' })).toHaveCount(0)
 })
