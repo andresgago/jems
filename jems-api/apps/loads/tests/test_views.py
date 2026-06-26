@@ -354,6 +354,122 @@ class TestLoadList:
 
 
 @pytest.mark.django_db
+class TestLoadIndexView:
+    """index_view=true mirrors the legacy PHP main-index filter:
+    (execute=True AND status=DETENTION_PENDING) OR (execute=False AND status!=CANCELLED)
+    """
+
+    def test_hides_executed_non_detention_loads(self, auth_client):
+        client, _ = auth_client
+        executed_finished = LoadFactory(execute=True, status=Load.Status.FINISHED)
+        executed_registered = LoadFactory(execute=True, status=Load.Status.REGISTERED)
+
+        response = client.get(reverse("load-list"), {"index_view": "true"})
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert executed_finished.number not in numbers
+        assert executed_registered.number not in numbers
+
+    def test_shows_executed_detention_loads(self, auth_client):
+        client, _ = auth_client
+        executed_detention = LoadFactory(
+            execute=True, status=Load.Status.DETENTION_PENDING
+        )
+
+        response = client.get(reverse("load-list"), {"index_view": "true"})
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert executed_detention.number in numbers
+
+    def test_hides_cancelled_non_executed_loads(self, auth_client):
+        client, _ = auth_client
+        cancelled = LoadFactory(execute=False, status=Load.Status.CANCELLED)
+
+        response = client.get(reverse("load-list"), {"index_view": "true"})
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert cancelled.number not in numbers
+
+    def test_shows_non_executed_non_cancelled_loads(self, auth_client):
+        client, _ = auth_client
+        registered = LoadFactory(execute=False, status=Load.Status.REGISTERED)
+        started = LoadFactory(execute=False, status=Load.Status.STARTED)
+        finished = LoadFactory(execute=False, status=Load.Status.FINISHED)
+        detention = LoadFactory(execute=False, status=Load.Status.DETENTION_PENDING)
+
+        response = client.get(reverse("load-list"), {"index_view": "true"})
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert registered.number in numbers
+        assert started.number in numbers
+        assert finished.number in numbers
+        assert detention.number in numbers
+
+    def test_without_index_view_shows_all_execute_values(self, auth_client):
+        client, _ = auth_client
+        executed = LoadFactory(execute=True, status=Load.Status.FINISHED)
+        cancelled = LoadFactory(execute=False, status=Load.Status.CANCELLED)
+
+        response = client.get(reverse("load-list"))
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert executed.number in numbers
+        assert cancelled.number in numbers
+
+    def test_index_view_combined_with_status_filter(self, auth_client):
+        client, _ = auth_client
+        started = LoadFactory(execute=False, status=Load.Status.STARTED)
+        executed_started = LoadFactory(execute=True, status=Load.Status.STARTED)
+        registered = LoadFactory(execute=False, status=Load.Status.REGISTERED)
+
+        response = client.get(
+            reverse("load-list"),
+            {"index_view": "true", "status": str(Load.Status.STARTED)},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert started.number in numbers
+        assert executed_started.number not in numbers
+        assert registered.number not in numbers
+
+    def test_index_view_false_ignores_filter(self, auth_client):
+        client, _ = auth_client
+        executed_finished = LoadFactory(execute=True, status=Load.Status.FINISHED)
+        cancelled = LoadFactory(execute=False, status=Load.Status.CANCELLED)
+
+        response = client.get(reverse("load-list"), {"index_view": "false"})
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert executed_finished.number in numbers
+        assert cancelled.number in numbers
+
+    def test_index_view_false_with_execute_false_shows_only_non_executed(
+        self, auth_client
+    ):
+        client, _ = auth_client
+        non_executed = LoadFactory(execute=False, status=Load.Status.REGISTERED)
+        executed = LoadFactory(execute=True, status=Load.Status.FINISHED)
+        cancelled = LoadFactory(execute=False, status=Load.Status.CANCELLED)
+
+        response = client.get(
+            reverse("load-list"), {"index_view": "false", "execute": "false"}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert non_executed.number in numbers
+        assert cancelled.number in numbers
+        assert executed.number not in numbers
+
+
+@pytest.mark.django_db
 class TestLoadBrokerContacts:
     def test_requires_authentication(self, api_client):
         load = LoadFactory()

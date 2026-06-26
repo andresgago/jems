@@ -4,7 +4,6 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.accounting.models import Record
 from apps.accounting.tests.factories import CategoryFactory, RecordFactory
 from apps.drivers.models import Driver
 from apps.fleet.models import Trailer, Truck, TruckMaintenance, TrailerMaintenance

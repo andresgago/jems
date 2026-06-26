@@ -135,6 +135,8 @@ def _category_alerts(today: date) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for rec in records:
         expires_on = rec.category_expire_date
+        if expires_on is None:
+            continue
         delta = (expires_on - today).days
         cat = rec.category
 

@@ -195,9 +195,19 @@ class LoadViewSet(ViewSet):
             if dropoff_city.isdigit():
                 dropoff_city_filter |= Q(dropoff_city_id=dropoff_city)
             qs = qs.filter(dropoff_city_filter)
-        execute = request.query_params.get("execute")
-        if execute is not None:
-            qs = qs.filter(execute=str(execute).lower() in {"1", "true", "yes"})
+        index_view = request.query_params.get("index_view")
+        if index_view and str(index_view).lower() in {"1", "true", "yes"}:
+            # Legacy main-index filter: show non-executed (excluding cancelled)
+            # and executed loads only when in detention status.
+            # Mirrors PHP: (execute=1 AND status=4) OR (execute=0 AND status<>5)
+            qs = qs.filter(
+                Q(execute=True, status=Load.Status.DETENTION_PENDING)
+                | (Q(execute=False) & ~Q(status=Load.Status.CANCELLED))
+            )
+        else:
+            execute = request.query_params.get("execute")
+            if execute is not None:
+                qs = qs.filter(execute=str(execute).lower() in {"1", "true", "yes"})
         invoiced = request.query_params.get("invoiced")
         if invoiced is not None:
             qs = qs.filter(invoiced=invoiced.lower() == "true")

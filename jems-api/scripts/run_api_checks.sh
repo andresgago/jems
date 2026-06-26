@@ -1337,6 +1337,127 @@ resp="$(post "/api/v1/loads/send-driver-info/" '{"carrier_id":1}')"
 assert_status "send-driver-info missing fields" "400" "$(code "$resp")" "$(body "$resp")"
 assert_contains "send-driver-info error detail" "$(body "$resp")" "Missing fields"
 
+# ── index_view filter (legacy main-index parity) ─────────────────────────────
+step "Loads: index_view=true hides cancelled loads"
+resp="$(post "/api/v1/loads/" "{\"number\":\"IDX-CANCEL\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"500.00\",\"miles\":50,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"status\":5}")"
+assert_status "index cancel create" "201" "$(code "$resp")" "$(body "$resp")"
+IDX_CANCEL_ID="$(body "$resp" | json_get_num id)"
+
+resp="$(get "/api/v1/loads/?index_view=true&all=true")"
+assert_status "index_view list" "200" "$(code "$resp")" "$(body "$resp")"
+# Cancelled load must NOT appear in the index view
+if body "$resp" | grep -q "IDX-CANCEL"; then
+  fail "index_view=true should hide cancelled loads" "$(body "$resp")"
+else
+  pass "index_view=true hides cancelled loads (IDX-CANCEL absent)"
+fi
+
+resp="$(get "/api/v1/loads/?all=true&number=IDX-CANCEL")"
+assert_status "index_view cancel visible without filter" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "cancelled load exists without filter" "$(body "$resp")" "IDX-CANCEL"
+
+resp="$(delete "/api/v1/loads/${IDX_CANCEL_ID}/")"
+assert_status "index cancel cleanup" "204" "$(code "$resp")"
+
+step "Loads: index_view=true hides executed non-detention loads"
+resp="$(post "/api/v1/loads/" "{\"number\":\"IDX-EXEC\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"500.00\",\"miles\":50,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"status\":3}")"
+assert_status "index exec create" "201" "$(code "$resp")" "$(body "$resp")"
+IDX_EXEC_ID="$(body "$resp" | json_get_num id)"
+
+resp="$(patch "/api/v1/loads/${IDX_EXEC_ID}/" '{"execute":true}')"
+assert_status "index exec mark executed" "200" "$(code "$resp")" "$(body "$resp")"
+
+resp="$(get "/api/v1/loads/?index_view=true&all=true&number=IDX-EXEC")"
+assert_status "index exec filter" "200" "$(code "$resp")" "$(body "$resp")"
+if body "$resp" | grep -q "IDX-EXEC"; then
+  fail "index_view=true should hide executed non-detention loads" "$(body "$resp")"
+else
+  pass "index_view=true hides executed non-detention loads (IDX-EXEC absent)"
+fi
+
+resp="$(delete "/api/v1/loads/${IDX_EXEC_ID}/")"
+assert_status "index exec cleanup" "204" "$(code "$resp")"
+
+step "Loads: index_view=true shows executed detention (status=4) loads"
+resp="$(post "/api/v1/loads/" "{\"number\":\"IDX-DET\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"500.00\",\"miles\":50,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"status\":4}")"
+assert_status "index det create" "201" "$(code "$resp")" "$(body "$resp")"
+IDX_DET_ID="$(body "$resp" | json_get_num id)"
+
+resp="$(patch "/api/v1/loads/${IDX_DET_ID}/" '{"execute":true}')"
+assert_status "index det mark executed" "200" "$(code "$resp")" "$(body "$resp")"
+
+resp="$(get "/api/v1/loads/?index_view=true&all=true&number=IDX-DET")"
+assert_status "index det filter" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "index_view=true shows executed detention load" "$(body "$resp")" "IDX-DET"
+
+resp="$(delete "/api/v1/loads/${IDX_DET_ID}/")"
+assert_status "index det cleanup" "204" "$(code "$resp")"
+
+# ── Bulk invoiced / paid ───────────────────────────────────────────────────────
+step "Loads: bulk-invoiced marks loads as invoiced"
+resp="$(post "/api/v1/loads/" "{\"number\":\"BULK-INV-A\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"500.00\",\"miles\":50,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID}}")"
+assert_status "bulk-inv load A create" "201" "$(code "$resp")" "$(body "$resp")"
+BULK_INV_A="$(body "$resp" | json_get_num id)"
+
+resp="$(post "/api/v1/loads/" "{\"number\":\"BULK-INV-B\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"500.00\",\"miles\":50,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID}}")"
+assert_status "bulk-inv load B create" "201" "$(code "$resp")" "$(body "$resp")"
+BULK_INV_B="$(body "$resp" | json_get_num id)"
+
+resp="$(post "/api/v1/loads/bulk-invoiced/" "{\"ids\":[${BULK_INV_A},${BULK_INV_B}]}")"
+assert_status "bulk-invoiced" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "bulk-invoiced updated=2" "$(body "$resp")" '"updated":2'
+
+resp="$(get "/api/v1/loads/${BULK_INV_A}/")"
+assert_contains "load A is invoiced" "$(body "$resp")" '"invoiced":true'
+resp="$(get "/api/v1/loads/${BULK_INV_B}/")"
+assert_contains "load B is invoiced" "$(body "$resp")" '"invoiced":true'
+
+resp="$(delete "/api/v1/loads/${BULK_INV_A}/")"
+assert_status "bulk-inv A cleanup" "204" "$(code "$resp")"
+resp="$(delete "/api/v1/loads/${BULK_INV_B}/")"
+assert_status "bulk-inv B cleanup" "204" "$(code "$resp")"
+
+step "Loads: bulk-paid marks loads as paid"
+resp="$(post "/api/v1/loads/" "{\"number\":\"BULK-PAID-A\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"500.00\",\"miles\":50,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID}}")"
+assert_status "bulk-paid load A create" "201" "$(code "$resp")" "$(body "$resp")"
+BULK_PAID_A="$(body "$resp" | json_get_num id)"
+
+resp="$(post "/api/v1/loads/" "{\"number\":\"BULK-PAID-B\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"500.00\",\"miles\":50,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID}}")"
+assert_status "bulk-paid load B create" "201" "$(code "$resp")" "$(body "$resp")"
+BULK_PAID_B="$(body "$resp" | json_get_num id)"
+
+resp="$(post "/api/v1/loads/bulk-paid/" "{\"ids\":[${BULK_PAID_A},${BULK_PAID_B}]}")"
+assert_status "bulk-paid" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "bulk-paid updated=2" "$(body "$resp")" '"updated":2'
+
+resp="$(get "/api/v1/loads/${BULK_PAID_A}/")"
+assert_contains "load A is paid" "$(body "$resp")" '"paid":true'
+resp="$(get "/api/v1/loads/${BULK_PAID_B}/")"
+assert_contains "load B is paid" "$(body "$resp")" '"paid":true'
+
+resp="$(delete "/api/v1/loads/${BULK_PAID_A}/")"
+assert_status "bulk-paid A cleanup" "204" "$(code "$resp")"
+resp="$(delete "/api/v1/loads/${BULK_PAID_B}/")"
+assert_status "bulk-paid B cleanup" "204" "$(code "$resp")"
+
+step "Loads: bulk-invoiced with empty ids returns updated=0"
+resp="$(post "/api/v1/loads/bulk-invoiced/" '{"ids":[]}')"
+assert_status "bulk-invoiced empty" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "bulk-invoiced empty updated=0" "$(body "$resp")" '"updated":0'
+
+step "Loads: bulk-paid with empty ids returns updated=0"
+resp="$(post "/api/v1/loads/bulk-paid/" '{"ids":[]}')"
+assert_status "bulk-paid empty" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "bulk-paid empty updated=0" "$(body "$resp")" '"updated":0'
+
+step "Loads: bulk-invoiced with non-list ids returns 400"
+resp="$(post "/api/v1/loads/bulk-invoiced/" '{"ids":"1,2"}')"
+assert_status "bulk-invoiced non-list" "400" "$(code "$resp")" "$(body "$resp")"
+
+step "Loads: bulk-paid with non-list ids returns 400"
+resp="$(post "/api/v1/loads/bulk-paid/" '{"ids":"1,2"}')"
+assert_status "bulk-paid non-list" "400" "$(code "$resp")" "$(body "$resp")"
+
 # ── Accounting ────────────────────────────────────────────────────────────────
 step "Accounting: account create"
 resp="$(post "/api/v1/accounting/accounts/" '{"code":"4010","name":"Fuel Expenses","is_active":true,"is_main":false,"is_assistant":false,"no_tax":false}')"
