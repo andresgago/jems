@@ -2,6 +2,8 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
 
 from dateutil.relativedelta import relativedelta
+from django.conf import settings
+from django.db.models import Sum
 
 from apps.accounting.models import Record
 from apps.drivers.models import Driver
@@ -13,9 +15,6 @@ if TYPE_CHECKING:
 
 # Window for expiration alerts shown in detail lists (matches legacy 60-day rule)
 _ALERT_DAYS = 60
-
-# Category expiration window (legacy default: 30 days)
-_CATEGORY_ALERT_DAYS = 30
 
 
 def _alert_entry(
@@ -123,7 +122,7 @@ def _trailer_alerts(today: date) -> list[dict[str, Any]]:
 
 def _category_alerts(today: date) -> list[dict[str, Any]]:
     """Records with a category expiration within the next 30 days (legacy parity)."""
-    cutoff = today + timedelta(days=_CATEGORY_ALERT_DAYS)
+    cutoff = today + timedelta(days=settings.CATEGORY_ALERT_DAYS)
 
     records = (
         Record.objects.filter(
@@ -175,22 +174,38 @@ def _category_alerts(today: date) -> list[dict[str, Any]]:
     return result
 
 
+def _compute_miles_since(entity_id: int, since_date: date, entity: str) -> float:
+    """
+    Sum miles + miles_empty from loads for the given truck/trailer after since_date.
+    Mirrors legacy getMilesForAlert() logic.
+    """
+    filter_kwargs = {
+        f"{entity}_id": entity_id,
+        "dropoff_date__date__gt": since_date,
+    }
+    data = Load.objects.filter(**filter_kwargs).aggregate(
+        m=Sum("miles"),
+        me=Sum("miles_empty"),
+    )
+    return (data["m"] or 0.0) + (data["me"] or 0.0)
+
+
 def _maintenance_detail_trucks(today: date) -> list[dict[str, Any]]:
     """
     Legacy parity (getAlertedWithMaintenance): for each active truck check only the
-    most-recent maintenance record (ordered date DESC). If its time-based alert has
-    triggered return one entry for that truck. One row per truck, never per record.
+    most-recent maintenance record. Include the truck if its time-based alert has
+    triggered OR its miles-based alert has triggered. One row per truck, never per record.
     """
     result: list[dict[str, Any]] = []
 
-    # Collect the most-recent record per truck using Python grouping so we avoid
-    # a subquery-per-truck. Records are already ordered -date by model Meta.
     seen_trucks: set[int] = set()
+    from django.db.models import Q
+
     records = (
         TruckMaintenance.objects.filter(
             truck__status=Truck.Status.ACTIVE,
-            time_alert=1,
         )
+        .filter(Q(time_alert=1) | Q(miles_alert=1))
         .select_related("truck")
         .order_by("-date", "-id")
     )
@@ -200,40 +215,66 @@ def _maintenance_detail_trucks(today: date) -> list[dict[str, Any]]:
             continue
         seen_trucks.add(record.truck_id)
 
-        if record.time_year == 0 and record.time_month == 0:
-            continue
-        alert_date = date.fromisoformat(str(record.date)) + relativedelta(
-            years=record.time_year, months=record.time_month
-        )
-        if today >= alert_date:
-            result.append(
-                {
-                    "truck_id": record.truck_id,
-                    "truck_number": record.truck.number,
-                    "maintenance_id": record.id,
-                    "date": record.date.isoformat(),
-                    "detail": record.detail,
-                    "alert_date": alert_date.isoformat(),
-                }
+        # Time-based alert check
+        time_triggered = False
+        alert_date: date | None = None
+        if record.time_alert == 1 and (record.time_year != 0 or record.time_month != 0):
+            alert_date = date.fromisoformat(str(record.date)) + relativedelta(
+                years=record.time_year, months=record.time_month
             )
+            if today >= alert_date:
+                time_triggered = True
 
-    result.sort(key=lambda r: r["alert_date"])
+        # Miles-based alert check — compare miles traveled since maintenance against threshold
+        miles_triggered = False
+        miles_traveled: float | None = None
+        miles_threshold: float | None = None
+        if record.miles_alert == 1 and record.maintenance_miles > 0:
+            miles_traveled = _compute_miles_since(record.truck_id, record.date, "truck")
+            miles_threshold = record.maintenance_miles
+            if miles_traveled >= miles_threshold:
+                miles_triggered = True
+
+        if not time_triggered and not miles_triggered:
+            continue
+
+        result.append(
+            {
+                "truck_id": record.truck_id,
+                "truck_number": record.truck.number,
+                "maintenance_id": record.id,
+                "date": record.date.isoformat(),
+                "detail": record.detail,
+                "time_alert_triggered": time_triggered,
+                "alert_date": alert_date.isoformat() if alert_date else None,
+                "miles_alert_triggered": miles_triggered,
+                "miles_traveled": (
+                    round(miles_traveled, 1) if miles_traveled is not None else None
+                ),
+                "miles_threshold": miles_threshold,
+            }
+        )
+
+    result.sort(key=lambda r: r["alert_date"] or "9999-99-99")
     return result
 
 
 def _maintenance_detail_trailers(today: date) -> list[dict[str, Any]]:
     """
     Legacy parity (getAlertedWithMaintenance): for each active trailer check only the
-    most-recent maintenance record. One row per trailer, never per record.
+    most-recent maintenance record. Include if time-based OR miles-based alert triggered.
+    One row per trailer, never per record.
     """
     result: list[dict[str, Any]] = []
 
     seen_trailers: set[int] = set()
+    from django.db.models import Q
+
     records = (
         TrailerMaintenance.objects.filter(
             trailer__status=Trailer.Status.ACTIVE,
-            time_alert=1,
         )
+        .filter(Q(time_alert=1) | Q(miles_alert=1))
         .select_related("trailer")
         .order_by("-date", "-id")
     )
@@ -243,24 +284,49 @@ def _maintenance_detail_trailers(today: date) -> list[dict[str, Any]]:
             continue
         seen_trailers.add(record.trailer_id)
 
-        if record.time_year == 0 and record.time_month == 0:
-            continue
-        alert_date = date.fromisoformat(str(record.date)) + relativedelta(
-            years=record.time_year, months=record.time_month
-        )
-        if today >= alert_date:
-            result.append(
-                {
-                    "trailer_id": record.trailer_id,
-                    "trailer_number": record.trailer.number,
-                    "maintenance_id": record.id,
-                    "date": record.date.isoformat(),
-                    "detail": record.detail,
-                    "alert_date": alert_date.isoformat(),
-                }
+        # Time-based alert check
+        time_triggered = False
+        alert_date: date | None = None
+        if record.time_alert == 1 and (record.time_year != 0 or record.time_month != 0):
+            alert_date = date.fromisoformat(str(record.date)) + relativedelta(
+                years=record.time_year, months=record.time_month
             )
+            if today >= alert_date:
+                time_triggered = True
 
-    result.sort(key=lambda r: r["alert_date"])
+        # Miles-based alert check — trailer uses the `miles` field as threshold
+        miles_triggered = False
+        miles_traveled: float | None = None
+        miles_threshold: float | None = None
+        if record.miles_alert == 1 and record.miles > 0:
+            miles_traveled = _compute_miles_since(
+                record.trailer_id, record.date, "trailer"
+            )
+            miles_threshold = record.miles
+            if miles_traveled >= miles_threshold:
+                miles_triggered = True
+
+        if not time_triggered and not miles_triggered:
+            continue
+
+        result.append(
+            {
+                "trailer_id": record.trailer_id,
+                "trailer_number": record.trailer.number,
+                "maintenance_id": record.id,
+                "date": record.date.isoformat(),
+                "detail": record.detail,
+                "time_alert_triggered": time_triggered,
+                "alert_date": alert_date.isoformat() if alert_date else None,
+                "miles_alert_triggered": miles_triggered,
+                "miles_traveled": (
+                    round(miles_traveled, 1) if miles_traveled is not None else None
+                ),
+                "miles_threshold": miles_threshold,
+            }
+        )
+
+    result.sort(key=lambda r: r["alert_date"] or "9999-99-99")
     return result
 
 

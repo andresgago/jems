@@ -2162,6 +2162,21 @@ for record in d['maintenance_alerts']['trucks']:
     assert 'date' in record, 'truck maintenance record missing date'
     assert 'detail' in record, 'truck maintenance record missing detail'
     assert 'alert_date' in record, 'truck maintenance record missing alert_date'
+    assert 'time_alert_triggered' in record, 'truck maintenance record missing time_alert_triggered'
+    assert 'miles_alert_triggered' in record, 'truck maintenance record missing miles_alert_triggered'
+    assert 'miles_traveled' in record, 'truck maintenance record missing miles_traveled'
+    assert 'miles_threshold' in record, 'truck maintenance record missing miles_threshold'
+    assert isinstance(record['time_alert_triggered'], bool), 'time_alert_triggered not bool'
+    assert isinstance(record['miles_alert_triggered'], bool), 'miles_alert_triggered not bool'
+    # time-only: alert_date is set, miles fields are null
+    if record['time_alert_triggered'] and not record['miles_alert_triggered']:
+        assert record['alert_date'] is not None, 'time-only alert must have alert_date'
+        assert record['miles_traveled'] is None, 'time-only alert must have miles_traveled null'
+    # miles-only: alert_date is null, miles fields are set
+    if record['miles_alert_triggered'] and not record['time_alert_triggered']:
+        assert record['alert_date'] is None, 'miles-only alert must have alert_date null'
+        assert record['miles_traveled'] is not None, 'miles-only alert must have miles_traveled'
+        assert record['miles_threshold'] is not None, 'miles-only alert must have miles_threshold'
 for record in d['maintenance_alerts']['trailers']:
     assert 'trailer_id' in record, 'trailer maintenance record missing trailer_id'
     assert 'trailer_number' in record, 'trailer maintenance record missing trailer_number'
@@ -2169,6 +2184,18 @@ for record in d['maintenance_alerts']['trailers']:
     assert 'date' in record, 'trailer maintenance record missing date'
     assert 'detail' in record, 'trailer maintenance record missing detail'
     assert 'alert_date' in record, 'trailer maintenance record missing alert_date'
+    assert 'time_alert_triggered' in record, 'trailer maintenance record missing time_alert_triggered'
+    assert 'miles_alert_triggered' in record, 'trailer maintenance record missing miles_alert_triggered'
+    assert 'miles_traveled' in record, 'trailer maintenance record missing miles_traveled'
+    assert 'miles_threshold' in record, 'trailer maintenance record missing miles_threshold'
+    assert isinstance(record['time_alert_triggered'], bool), 'trailer time_alert_triggered not bool'
+    assert isinstance(record['miles_alert_triggered'], bool), 'trailer miles_alert_triggered not bool'
+    if record['time_alert_triggered'] and not record['miles_alert_triggered']:
+        assert record['alert_date'] is not None, 'trailer time-only alert must have alert_date'
+        assert record['miles_traveled'] is None, 'trailer time-only alert must have miles_traveled null'
+    if record['miles_alert_triggered'] and not record['time_alert_triggered']:
+        assert record['alert_date'] is None, 'trailer miles-only alert must have alert_date null'
+        assert record['miles_traveled'] is not None, 'trailer miles-only alert must have miles_traveled'
 
 # Counts — all present
 for key in ('drivers_expiring', 'trucks_expiring', 'trucks_maintenance_alerts',

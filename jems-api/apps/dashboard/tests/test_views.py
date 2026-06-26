@@ -1,6 +1,7 @@
 import datetime
 
 import pytest
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -427,6 +428,31 @@ def test_category_alerts_null_expiry_excluded(auth_client):
 
     response = auth_client.get(DASHBOARD_URL)
     assert response.data["expiration_alerts"]["categories"] == []
+
+
+@pytest.mark.django_db
+def test_category_alerts_respects_category_alert_days_setting(auth_client, settings):
+    """CATEGORY_ALERT_DAYS env setting is honoured (legacy category-expired-days parity)."""
+    settings.CATEGORY_ALERT_DAYS = 15
+    today = datetime.date.today()
+    cat = CategoryFactory()
+    # Record at day 10 — inside 15-day window
+    RecordFactory(
+        category=cat,
+        category_expire=True,
+        category_expire_date=today + datetime.timedelta(days=10),
+    )
+    # Record at day 20 — outside 15-day window
+    RecordFactory(
+        category=cat,
+        category_expire=True,
+        category_expire_date=today + datetime.timedelta(days=20),
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    cats = response.data["expiration_alerts"]["categories"]
+    assert len(cats) == 1
+    assert cats[0]["alerts"][0]["days_until"] == 10
 
 
 # ---------------------------------------------------------------------------
@@ -1125,3 +1151,368 @@ def test_driver_expiry_at_61_days_excluded(auth_client):
     response = auth_client.get(DASHBOARD_URL)
     ids = [d["id"] for d in response.data["expiration_alerts"]["drivers"]]
     assert driver.id not in ids
+
+
+# ---------------------------------------------------------------------------
+# Response shape — time-based entries now include new fields
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_time_based_response_shape(auth_client):
+    """Time-based alert entry includes all new fields with correct values."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE, number="SHAPE-T")
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today - datetime.timedelta(days=400),
+        time_alert=1,
+        time_year=1,
+        time_month=0,
+        miles_alert=0,
+        maintenance_miles=0,
+        odometer_start=0,
+        odometer_current=0,
+    )
+    response = auth_client.get(DASHBOARD_URL)
+    trucks = response.data["maintenance_alerts"]["trucks"]
+    entry = next(t for t in trucks if t["truck_id"] == truck.id)
+    assert entry["time_alert_triggered"] is True
+    assert entry["alert_date"] is not None
+    assert entry["miles_alert_triggered"] is False
+    assert entry["miles_traveled"] is None
+    assert entry["miles_threshold"] is None
+
+
+# ---------------------------------------------------------------------------
+# Miles-based maintenance alerts — trucks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_miles_based_triggered(auth_client):
+    """Truck miles alert fires when miles traveled since maintenance >= maintenance_miles."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    maint_date = today - datetime.timedelta(days=100)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=maint_date,
+        miles_alert=1,
+        maintenance_miles=13000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+    )
+    # Load with 10k miles + 4k empty = 14k total, after maintenance date
+    LoadFactory(
+        truck=truck,
+        miles=10000,
+        miles_empty=4000,
+        dropoff_date=timezone.now(),
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    trucks = response.data["maintenance_alerts"]["trucks"]
+    assert len(trucks) == 1
+    entry = trucks[0]
+    assert entry["truck_id"] == truck.id
+    assert entry["miles_alert_triggered"] is True
+    assert entry["time_alert_triggered"] is False
+    assert entry["miles_traveled"] == 14000.0
+    assert entry["miles_threshold"] == 13000.0
+    assert entry["alert_date"] is None
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_miles_below_threshold_no_alert(auth_client):
+    """No alert when miles traveled since maintenance < maintenance_miles."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    maint_date = today - datetime.timedelta(days=100)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=maint_date,
+        miles_alert=1,
+        maintenance_miles=13000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+    )
+    LoadFactory(truck=truck, miles=5000, miles_empty=2000, dropoff_date=timezone.now())
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["maintenance_alerts"]["trucks"] == []
+    assert response.data["counts"]["trucks_maintenance_alerts"] == 0
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_miles_exactly_at_threshold_triggers(auth_client):
+    """Miles exactly equal to threshold should trigger the alert (>=)."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    maint_date = today - datetime.timedelta(days=100)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=maint_date,
+        miles_alert=1,
+        maintenance_miles=13000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+    )
+    LoadFactory(truck=truck, miles=13000, miles_empty=0, dropoff_date=timezone.now())
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert len(response.data["maintenance_alerts"]["trucks"]) == 1
+    assert (
+        response.data["maintenance_alerts"]["trucks"][0]["miles_alert_triggered"]
+        is True
+    )
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_miles_only_counts_loads_after_maintenance_date(
+    auth_client,
+):
+    """Loads with dropoff_date <= maintenance date must NOT count toward miles total."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    maint_date = today - datetime.timedelta(days=50)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=maint_date,
+        miles_alert=1,
+        maintenance_miles=5000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+    )
+    # Load BEFORE maintenance date — must not count
+    LoadFactory(
+        truck=truck,
+        miles=10000,
+        miles_empty=0,
+        dropoff_date=timezone.make_aware(
+            datetime.datetime.combine(
+                maint_date - datetime.timedelta(days=1), datetime.time()
+            )
+        ),
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["maintenance_alerts"]["trucks"] == []
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_both_time_and_miles_triggered(auth_client):
+    """When both time and miles alerts fire, both flags are True in the response."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    maint_date = today - datetime.timedelta(days=400)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=maint_date,
+        time_alert=1,
+        time_year=1,
+        time_month=0,
+        miles_alert=1,
+        maintenance_miles=5000,
+        odometer_start=0,
+        odometer_current=0,
+        detail="Full service",
+    )
+    LoadFactory(truck=truck, miles=6000, miles_empty=0, dropoff_date=timezone.now())
+
+    response = auth_client.get(DASHBOARD_URL)
+    trucks = response.data["maintenance_alerts"]["trucks"]
+    assert len(trucks) == 1
+    entry = trucks[0]
+    assert entry["time_alert_triggered"] is True
+    assert entry["miles_alert_triggered"] is True
+    assert entry["alert_date"] is not None
+    assert entry["miles_traveled"] is not None
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_miles_zero_threshold_no_alert(auth_client):
+    """miles_alert=1 but maintenance_miles=0 must NOT trigger (division by zero guard)."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today - datetime.timedelta(days=100),
+        miles_alert=1,
+        maintenance_miles=0,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+    )
+    LoadFactory(truck=truck, miles=50000, miles_empty=0, dropoff_date=timezone.now())
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["maintenance_alerts"]["trucks"] == []
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_inactive_excluded_for_miles_alert(auth_client):
+    """Inactive truck must not appear even if miles alert would otherwise trigger."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.INACTIVE)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today - datetime.timedelta(days=100),
+        miles_alert=1,
+        maintenance_miles=5000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+    )
+    LoadFactory(truck=truck, miles=6000, miles_empty=0, dropoff_date=timezone.now())
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["maintenance_alerts"]["trucks"] == []
+
+
+# ---------------------------------------------------------------------------
+# Miles-based maintenance alerts — trailers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trailers_miles_based_triggered(auth_client):
+    """Trailer miles alert fires when miles traveled since maintenance >= miles threshold."""
+    today = datetime.date.today()
+    trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+    maint_date = today - datetime.timedelta(days=100)
+    from apps.fleet.models import TrailerMaintenance as TM
+
+    TM.objects.create(
+        trailer=trailer,
+        date=maint_date,
+        miles_alert=1,
+        miles=13000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+    )
+    LoadFactory(
+        trailer=trailer, miles=10000, miles_empty=4000, dropoff_date=timezone.now()
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    trailers = response.data["maintenance_alerts"]["trailers"]
+    assert len(trailers) == 1
+    entry = trailers[0]
+    assert entry["trailer_id"] == trailer.id
+    assert entry["miles_alert_triggered"] is True
+    assert entry["time_alert_triggered"] is False
+    assert entry["miles_traveled"] == 14000.0
+    assert entry["miles_threshold"] == 13000.0
+    assert entry["alert_date"] is None
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trailers_miles_below_threshold_no_alert(auth_client):
+    """No trailer alert when miles traveled < threshold."""
+    today = datetime.date.today()
+    trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+    from apps.fleet.models import TrailerMaintenance as TM
+
+    TM.objects.create(
+        trailer=trailer,
+        date=today - datetime.timedelta(days=100),
+        miles_alert=1,
+        miles=13000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+    )
+    LoadFactory(trailer=trailer, miles=5000, miles_empty=0, dropoff_date=timezone.now())
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["maintenance_alerts"]["trailers"] == []
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trailers_miles_only_response_shape(auth_client):
+    """Miles-only trailer alert has alert_date=None and miles fields set."""
+    today = datetime.date.today()
+    trailer = TrailerFactory(status=Trailer.Status.ACTIVE, number="TRL-MILES")
+    from apps.fleet.models import TrailerMaintenance as TM
+
+    TM.objects.create(
+        trailer=trailer,
+        date=today - datetime.timedelta(days=100),
+        miles_alert=1,
+        miles=5000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+        detail="Tire check",
+    )
+    LoadFactory(trailer=trailer, miles=6000, miles_empty=0, dropoff_date=timezone.now())
+
+    response = auth_client.get(DASHBOARD_URL)
+    entry = response.data["maintenance_alerts"]["trailers"][0]
+    assert entry["trailer_number"] == "TRL-MILES"
+    assert entry["alert_date"] is None
+    assert entry["miles_alert_triggered"] is True
+    assert entry["miles_threshold"] == 5000.0
+    assert entry["detail"] == "Tire check"
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trailers_count_includes_miles_alerts(auth_client):
+    """counts.trailers_maintenance_alerts must count miles-only alerts too."""
+    today = datetime.date.today()
+    trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+    from apps.fleet.models import TrailerMaintenance as TM
+
+    TM.objects.create(
+        trailer=trailer,
+        date=today - datetime.timedelta(days=100),
+        miles_alert=1,
+        miles=1000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+    )
+    LoadFactory(trailer=trailer, miles=5000, miles_empty=0, dropoff_date=timezone.now())
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["counts"]["trailers_maintenance_alerts"] == 1
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_count_includes_miles_alerts(auth_client):
+    """counts.trucks_maintenance_alerts must count miles-only alerts too."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today - datetime.timedelta(days=100),
+        miles_alert=1,
+        maintenance_miles=1000,
+        time_alert=0,
+        time_year=0,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+    )
+    LoadFactory(truck=truck, miles=5000, miles_empty=0, dropoff_date=timezone.now())
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["counts"]["trucks_maintenance_alerts"] == 1

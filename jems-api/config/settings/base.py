@@ -123,3 +123,6 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 
 ANTHROPIC_API_KEY: str = env("ANTHROPIC_API_KEY", default="")
+
+# Dashboard: days ahead to show category expiration alerts (mirrors legacy category-expired-days param)
+CATEGORY_ALERT_DAYS: int = env.int("CATEGORY_ALERT_DAYS", default=30)
