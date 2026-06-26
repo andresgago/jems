@@ -508,7 +508,14 @@ async function mockApi(page) {
     if (pathname.endsWith('/brokers/business/search/')) return json([])
     // Dispatch
     if (pathname.endsWith('/dispatch/dispatchers/')) return json(DISPATCHERS)
+    if (pathname.endsWith('/dispatch/work/calendar/')) return json([{
+      id: '1', title: 'Morning shift (In progress)',
+      start: '2024-01-15T09:00:00+00:00', end: '2024-01-15T17:00:00+00:00',
+      backgroundColor: 'red', borderColor: 'green', textColor: 'white',
+      extendedProps: { is_finished: false, is_paid: false },
+    }])
     if (pathname.endsWith('/dispatch/work/') && method === 'GET') return json(DISPATCH_WORK)
+    if (/\/dispatch\/work\/\d+\/move\/$/.test(pathname) && method === 'POST') return json(DISPATCH_WORK[0])
     if (/\/dispatch\/work\/\d+\/$/.test(pathname) && method === 'GET') return json(DISPATCH_WORK[0])
     if (pathname.endsWith('/dispatch/invoices/percent/') && method === 'GET') return json(PERCENT_INVOICES)
     if (/\/dispatch\/invoices\/percent\/\d+\/$/.test(pathname) && method === 'GET') return json(PERCENT_INVOICE_DETAIL)
@@ -650,12 +657,27 @@ test('dashboard Categories tab has expiring badge count', async ({ page }) => {
   await expect(categoriesTab.locator('.badge').first()).toHaveText('1')
 })
 
-test('dashboard has My work Calendar link pointing to /dispatch/my-calendar', async ({ page }) => {
+test('dashboard has a My work Calendar tab button', async ({ page }) => {
   await withAuth(page)
   await page.goto('/')
-  // Target the nav-link inside the tab bar (not the navbar dropdown)
-  const link = page.locator('.card .nav-link[href="/dispatch/my-calendar"]')
+  await expect(page.getByRole('button', { name: /My work Calendar/i })).toBeVisible()
+})
+
+test('dashboard My work Calendar tab renders the embedded FullCalendar widget', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /My work Calendar/i }).click()
+  // FullCalendar renders a .fc root element
+  await expect(page.locator('.fc')).toBeVisible()
+})
+
+test('dashboard My work Calendar tab shows View Full List link', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /My work Calendar/i }).click()
+  const link = page.getByRole('link', { name: /View Full List/i })
   await expect(link).toBeVisible()
+  await expect(link).toHaveAttribute('href', '/dispatch/my-calendar')
 })
 
 test('dashboard Trucks tab shows Maintenance Alerts section with detail', async ({ page }) => {

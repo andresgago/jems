@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
 import { useDashboard } from '../hooks/useDashboard';
+import WorkCalendar from '../components/WorkCalendar';
 
 // Tabs with their expiration-count key and optional maintenance-alert key
 const TABS = [
@@ -19,6 +20,7 @@ const TABS = [
     maintenanceKey: 'trailers_maintenance_alerts',
   },
   { key: 'categories', label: 'Categories', countKey: 'categories_expiring' },
+  { key: 'calendar', label: 'My work Calendar' },
 ];
 
 function AlertIcon({ expired }) {
@@ -241,6 +243,20 @@ export default function HomePage() {
       : null;
 
   function renderTabContent() {
+    if (activeTab === 'calendar') {
+      return (
+        <>
+          <div className="d-flex justify-content-end mb-2">
+            <Link to="/dispatch/my-calendar" className="btn btn-sm btn-outline-secondary">
+              <i className="bi bi-list-ul me-1" />
+              View Full List
+            </Link>
+          </div>
+          <WorkCalendar selfOnly={true} />
+        </>
+      );
+    }
+
     const buildPath = TAB_PATHS[activeTab];
     const entities = alerts[activeTab] ?? [];
     const hasMaintenance = activeTab === 'trucks' || activeTab === 'trailers';
@@ -310,12 +326,6 @@ export default function HomePage() {
                       </button>
                     </li>
                   ))}
-                  <li className="nav-item ms-auto d-flex align-items-center pe-2">
-                    <Link to="/dispatch/my-calendar" className="nav-link">
-                      <i className="bi bi-calendar3 me-1" />
-                      My work Calendar
-                    </Link>
-                  </li>
                 </ul>
               </div>
               <div className="card-body">

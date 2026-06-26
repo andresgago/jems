@@ -1118,3 +1118,66 @@ test('bulk-paid marks selected loads as paid (real)', async ({ page }) => {
   await apiPut(page, token, `/brokers/business/${shipperB.id}/`, { status: 0 })
   await apiPut(page, token, `/brokers/business/${receiverB.id}/`, { status: 0 })
 })
+
+// ---------------------------------------------------------------------------
+// Calendar endpoint (real)
+// ---------------------------------------------------------------------------
+
+test('calendar endpoint returns an array of events (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const res = await page.request.get(`${API_BASE}/dispatch/work/calendar/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    params: { start: '2024-01-01', end: '2024-12-31', self_only: 'true' },
+  })
+  expect(res.ok()).toBeTruthy()
+  const body = await res.json()
+  expect(Array.isArray(body)).toBe(true)
+})
+
+test('can create a work session and see it in the calendar (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const work = await apiPost(page, token, '/dispatch/work/', {
+    title: 'E2E calendar session',
+    start: '2024-06-15T09:00:00Z',
+    end: '2024-06-15T17:00:00Z',
+  })
+
+  const events = await apiGet(page, token, '/dispatch/work/calendar/?start=2024-06-01&end=2024-06-30&self_only=false')
+  const found = events.find((e) => e.id === String(work.id))
+  expect(found).toBeDefined()
+  expect(found.title).toContain('E2E calendar session')
+  expect(found.backgroundColor).toBe('red')
+  expect(found.title).toContain('(In progress)')
+
+  // Cleanup
+  await apiDelete(page, token, `/dispatch/work/${work.id}/`)
+})
+
+test('move endpoint shifts start and end preserving duration (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const work = await apiPost(page, token, '/dispatch/work/', {
+    title: 'E2E move test',
+    start: '2024-06-15T09:00:00Z',
+    end: '2024-06-15T17:00:00Z',
+  })
+
+  const res = await page.request.post(`${API_BASE}/dispatch/work/${work.id}/move/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { start: '2024-06-16T09:00:00Z' },
+  })
+  expect(res.ok()).toBeTruthy()
+  const moved = await res.json()
+  expect(moved.start).toContain('2024-06-16')
+  expect(moved.end).toContain('2024-06-16')
+
+  const endHour = new Date(moved.end).getUTCHours()
+  expect(endHour).toBe(17)
+
+  // Cleanup
+  await apiDelete(page, token, `/dispatch/work/${work.id}/`)
+})

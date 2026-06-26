@@ -11,6 +11,10 @@ vi.mock('../../hooks/useDashboard', () => ({
   useDashboard: vi.fn(),
 }));
 
+vi.mock('../../components/WorkCalendar', () => ({
+  default: () => <div data-testid="work-calendar" />,
+}));
+
 import { useAuth } from '../../contexts/useAuth';
 import { useDashboard } from '../../hooks/useDashboard';
 
@@ -561,14 +565,32 @@ describe('HomePage — maintenance alert badges', () => {
 });
 
 // ---------------------------------------------------------------------------
-// My work Calendar link
+// My work Calendar tab
 // ---------------------------------------------------------------------------
 
-describe('HomePage — My work Calendar link', () => {
-  it('renders a link to /dispatch/my-calendar', () => {
+describe('HomePage — My work Calendar tab', () => {
+  it('renders a "My work Calendar" tab button', () => {
     renderPage();
-    const link = screen.getByText(/My work Calendar/i).closest('a');
+    expect(screen.getByRole('button', { name: /My work Calendar/i })).toBeInTheDocument();
+  });
+
+  it('clicking the tab renders the embedded WorkCalendar component', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /My work Calendar/i }));
+    expect(screen.getByTestId('work-calendar')).toBeInTheDocument();
+  });
+
+  it('calendar tab shows a "View Full List" link to /dispatch/my-calendar', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /My work Calendar/i }));
+    const link = screen.getByText(/View Full List/i).closest('a');
     expect(link).toHaveAttribute('href', '/dispatch/my-calendar');
+  });
+
+  it('calendar tab does not show the Expiration Dates Alerts heading', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /My work Calendar/i }));
+    expect(screen.queryByText(/Expiration Dates Alerts/i)).not.toBeInTheDocument();
   });
 });
 

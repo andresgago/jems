@@ -19,6 +19,8 @@ export const dispatchWorkService = {
   destroy:  (id)          => api.delete(`/dispatch/work/${id}/`),
   finish:   (id)          => api.post(`/dispatch/work/${id}/finish/`),
   markPaid: (id)          => api.post(`/dispatch/work/${id}/mark-paid/`),
+  calendar: (params)      => api.get('/dispatch/work/calendar/', { params }),
+  move:     (id, start)   => api.post(`/dispatch/work/${id}/move/`, { start }),
 };
 
 export const percentInvoicesService = {
