@@ -70,7 +70,15 @@ const DASHBOARD = {
         ],
       },
     ],
-    trailers: [],
+    trailers: [
+      {
+        id: 7,
+        name: 'Trailer #200',
+        alerts: [
+          { type: 'annual_inspection', label: 'Annual Inspection', expires_on: '2026-08-01', days_until: 36, expired: false },
+        ],
+      },
+    ],
     categories: [
       {
         id: 42,
@@ -85,11 +93,24 @@ const DASHBOARD = {
       },
     ],
   },
+  maintenance_alerts: {
+    trucks: [
+      {
+        truck_id: 3,
+        truck_number: '999',
+        maintenance_id: 10,
+        date: '2025-01-15',
+        detail: 'Oil change due',
+        alert_date: '2026-01-15',
+      },
+    ],
+    trailers: [],
+  },
   counts: {
     drivers_expiring: 1,
     trucks_expiring: 1,
-    trucks_maintenance_alerts: 2,
-    trailers_expiring: 0,
+    trucks_maintenance_alerts: 1,
+    trailers_expiring: 1,
     trailers_maintenance_alerts: 0,
     categories_expiring: 1,
   },
@@ -532,8 +553,8 @@ test('successful login redirects away from /login', async ({ page }) => {
 
 // ── Dashboard (Home) ──────────────────────────────────────────────────────────
 
-test('dashboard shows stat cards after login', async ({ page }) => {
-  await withAuth(page)
+test('dashboard shows stat cards after login (admin sees all)', async ({ page }) => {
+  await withAdminAuth(page)
   await page.goto('/')
   await expect(page.getByText('Loads in Dispatch', { exact: true })).toBeVisible()
   await expect(page.locator('.card.bg-primary .display-6')).toHaveText('25')
@@ -543,11 +564,19 @@ test('dashboard shows stat cards after login', async ({ page }) => {
   await expect(page.locator('.card.bg-info .display-6')).toHaveText('53')
 })
 
-test('dashboard shows invoiced % of executed loads', async ({ page }) => {
-  await withAuth(page)
+test('dashboard shows invoiced % of executed loads (admin)', async ({ page }) => {
+  await withAdminAuth(page)
   await page.goto('/')
   // 53 / 63 = 84%
   await expect(page.getByText(/84% of executed Loads/i)).toBeVisible()
+})
+
+test('dashboard dispatcher sees Loads in Dispatch but not Executed Loads', async ({ page }) => {
+  await withAuth(page)  // dispatcher role
+  await page.goto('/')
+  await expect(page.getByText('Loads in Dispatch', { exact: true })).toBeVisible()
+  await expect(page.getByText('Executed Loads', { exact: true })).not.toBeVisible()
+  await expect(page.getByText('Invoiced', { exact: true })).not.toBeVisible()
 })
 
 test('dashboard Drivers tab is active by default and shows alert', async ({ page }) => {
@@ -610,6 +639,33 @@ test('dashboard has My work Calendar link pointing to /dispatch/my-calendar', as
   // Target the nav-link inside the tab bar (not the navbar dropdown)
   const link = page.locator('.card .nav-link[href="/dispatch/my-calendar"]')
   await expect(link).toBeVisible()
+})
+
+test('dashboard Trucks tab shows Maintenance Alerts section with detail', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /Trucks/i }).click()
+  // Use heading role to avoid matching "No maintenance alerts." paragraph
+  await expect(page.getByRole('heading', { name: /Maintenance Alerts/i })).toBeVisible()
+  await expect(page.getByText('Truck #999')).toBeVisible()
+  await expect(page.getByText(/Last maintenance: 2025-01-15/)).toBeVisible()
+  await expect(page.getByText(/Alert for maintenance at 2026-01-15/)).toBeVisible()
+  await expect(page.getByText(/Oil change due/)).toBeVisible()
+})
+
+test('dashboard Trailers tab shows No maintenance alerts when list is empty', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /Trailers/i }).click()
+  await expect(page.getByRole('heading', { name: /Maintenance Alerts/i })).toBeVisible()
+  await expect(page.getByText('No maintenance alerts.')).toBeVisible()
+})
+
+test('dashboard Drivers tab has no Maintenance Alerts section', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  // Drivers tab is active by default — maintenance heading must not appear
+  await expect(page.getByRole('heading', { name: /Maintenance Alerts/i })).not.toBeVisible()
 })
 
 // ── Loads list ────────────────────────────────────────────────────────────────

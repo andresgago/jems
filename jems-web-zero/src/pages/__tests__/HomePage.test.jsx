@@ -14,6 +14,47 @@ vi.mock('../../hooks/useDashboard', () => ({
 import { useAuth } from '../../contexts/useAuth';
 import { useDashboard } from '../../hooks/useDashboard';
 
+// ---- Helpers to build auth mock ----
+
+function makeAuth(roles = []) {
+  return {
+    user: { full_name: 'Test User', username: 'testuser', roles },
+    can: (p) => roles.includes('root') || roles.includes(p),
+    haveAnyPermission: (ps) =>
+      roles.includes('root') || ps.some((p) => roles.includes(p)),
+  };
+}
+
+const ADMIN_AUTH = makeAuth(['admin']);
+const DISPATCHER_AUTH = makeAuth(['dispatcher']);
+const PLAIN_AUTH = makeAuth([]);
+
+// ---- Mock data ----
+
+// Maintenance mock uses DIFFERENT numbers from expiration alert trucks (101, 200)
+// to avoid "Found multiple elements" ambiguity in tab-switching tests.
+const MOCK_MAINTENANCE_TRUCKS = [
+  {
+    truck_id: 55,
+    truck_number: '999',
+    maintenance_id: 10,
+    date: '2025-01-01',
+    detail: 'Oil change',
+    alert_date: '2026-01-01',
+  },
+];
+
+const MOCK_MAINTENANCE_TRAILERS = [
+  {
+    trailer_id: 88,
+    trailer_number: '888',
+    maintenance_id: 20,
+    date: '2025-03-01',
+    detail: 'Brake check',
+    alert_date: '2026-03-01',
+  },
+];
+
 const MOCK_DATA = {
   stats: {
     loads_in_dispatch: 25,
@@ -113,17 +154,23 @@ const MOCK_DATA = {
       },
     ],
   },
+  maintenance_alerts: {
+    trucks: MOCK_MAINTENANCE_TRUCKS,
+    trailers: MOCK_MAINTENANCE_TRAILERS,
+  },
   counts: {
     drivers_expiring: 2,
     trucks_expiring: 1,
-    trucks_maintenance_alerts: 4,
+    trucks_maintenance_alerts: 1,
     trailers_expiring: 1,
-    trailers_maintenance_alerts: 2,
+    trailers_maintenance_alerts: 1,
     categories_expiring: 1,
   },
 };
 
-function renderPage() {
+function renderPage(auth = ADMIN_AUTH, data = MOCK_DATA) {
+  useAuth.mockReturnValue(auth);
+  useDashboard.mockReturnValue({ data, loading: false, error: null, reload: vi.fn() });
   return render(
     <MemoryRouter>
       <HomePage />
@@ -133,49 +180,62 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useAuth.mockReturnValue({ user: { full_name: 'Admin User', username: 'admin' } });
-  useDashboard.mockReturnValue({ data: MOCK_DATA, loading: false, error: null, reload: vi.fn() });
 });
 
 // ---------------------------------------------------------------------------
-// Stat cards
+// Stat cards — role-based visibility
 // ---------------------------------------------------------------------------
 
-describe('HomePage — stat cards', () => {
-  it('renders Loads in Dispatch label and value', () => {
-    renderPage();
+describe('HomePage — stat cards role visibility', () => {
+  it('admin sees all three stat cards', () => {
+    renderPage(ADMIN_AUTH);
     expect(screen.getByText('Loads in Dispatch')).toBeInTheDocument();
     expect(screen.getByText('25')).toBeInTheDocument();
-  });
-
-  it('renders Executed Loads label and value', () => {
-    renderPage();
     expect(screen.getByText('Executed Loads')).toBeInTheDocument();
     expect(screen.getByText('63')).toBeInTheDocument();
-  });
-
-  it('renders Invoiced label and value', () => {
-    renderPage();
     expect(screen.getByText('Invoiced')).toBeInTheDocument();
     expect(screen.getByText('53')).toBeInTheDocument();
   });
 
-  it('renders invoiced percentage of executed loads', () => {
+  it('dispatcher sees only Loads in Dispatch', () => {
+    renderPage(DISPATCHER_AUTH);
+    expect(screen.getByText('Loads in Dispatch')).toBeInTheDocument();
+    expect(screen.queryByText('Executed Loads')).not.toBeInTheDocument();
+    expect(screen.queryByText('Invoiced')).not.toBeInTheDocument();
+  });
+
+  it('regular user sees no stat cards', () => {
+    renderPage(PLAIN_AUTH);
+    expect(screen.queryByText('Loads in Dispatch')).not.toBeInTheDocument();
+    expect(screen.queryByText('Executed Loads')).not.toBeInTheDocument();
+    expect(screen.queryByText('Invoiced')).not.toBeInTheDocument();
+  });
+
+  it('stat cards column hidden entirely for regular user', () => {
+    renderPage(PLAIN_AUTH);
+    expect(document.querySelector('.col-lg-3')).not.toBeInTheDocument();
+  });
+
+  it('renders invoiced percentage of executed loads for admin', () => {
+    renderPage(ADMIN_AUTH);
     // 53 / 63 ≈ 84%
-    renderPage();
     expect(screen.getByText('84% of executed Loads')).toBeInTheDocument();
   });
 
   it('omits percentage when executed_loads is 0', () => {
-    useDashboard.mockReturnValue({
-      data: {
-        ...MOCK_DATA,
-        stats: { loads_in_dispatch: 0, executed_loads: 0, invoiced: 0 },
-      },
-      loading: false,
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      stats: { loads_in_dispatch: 0, executed_loads: 0, invoiced: 0 },
     });
-    renderPage();
     expect(screen.queryByText(/% of executed Loads/)).not.toBeInTheDocument();
+  });
+
+  it('stat card hidden when API returns null for loads_in_dispatch (plain user)', () => {
+    renderPage(PLAIN_AUTH, {
+      ...MOCK_DATA,
+      stats: { loads_in_dispatch: null, executed_loads: null, invoiced: null },
+    });
+    expect(screen.queryByText('Loads in Dispatch')).not.toBeInTheDocument();
   });
 });
 
@@ -245,6 +305,11 @@ describe('HomePage — driver tab (default)', () => {
     renderPage();
     expect(screen.getByText(/\(15d\)/)).toBeInTheDocument();
   });
+
+  it('does not show Maintenance Alerts section in Drivers tab', () => {
+    renderPage();
+    expect(screen.queryByText('Maintenance Alerts')).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -284,6 +349,114 @@ describe('HomePage — tab switching', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Maintenance alert details — Trucks tab
+// ---------------------------------------------------------------------------
+
+describe('HomePage — maintenance alert details (Trucks tab)', () => {
+  beforeEach(() => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+  });
+
+  it('shows Maintenance Alerts section heading', () => {
+    expect(screen.getByText('Maintenance Alerts')).toBeInTheDocument();
+  });
+
+  it('shows truck number in maintenance row', () => {
+    expect(screen.getByText('Truck #999')).toBeInTheDocument();
+  });
+
+  it('shows last maintenance date', () => {
+    expect(screen.getByText(/Last maintenance: 2025-01-01/)).toBeInTheDocument();
+  });
+
+  it('shows alert date with detail text', () => {
+    expect(
+      screen.getByText(/Alert for maintenance at 2026-01-01/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Oil change/)).toBeInTheDocument();
+  });
+
+  it('shows wrench icon in maintenance row', () => {
+    const wrenchIcons = document.querySelectorAll('.bi-wrench-adjustable.text-danger');
+    expect(wrenchIcons.length).toBeGreaterThan(0);
+  });
+
+});
+
+describe('HomePage — maintenance alert details (Trucks tab) — empty state', () => {
+  it('shows "No maintenance alerts." when trucks maintenance list is empty', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: { trucks: [], trailers: MOCK_MAINTENANCE_TRAILERS },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(screen.getByText('No maintenance alerts.')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Maintenance alert details — Trailers tab
+// ---------------------------------------------------------------------------
+
+describe('HomePage — maintenance alert details (Trailers tab)', () => {
+  beforeEach(() => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Trailers/i }));
+  });
+
+  it('shows Maintenance Alerts section heading in Trailers tab', () => {
+    expect(screen.getByText('Maintenance Alerts')).toBeInTheDocument();
+  });
+
+  it('shows trailer number in maintenance row', () => {
+    expect(screen.getByText('Trailer #888')).toBeInTheDocument();
+  });
+
+  it('shows last maintenance date for trailer', () => {
+    expect(screen.getByText(/Last maintenance: 2025-03-01/)).toBeInTheDocument();
+  });
+
+  it('shows alert date and detail for trailer', () => {
+    expect(
+      screen.getByText(/Alert for maintenance at 2026-03-01/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Brake check/)).toBeInTheDocument();
+  });
+
+});
+
+describe('HomePage — maintenance alert details (Trailers tab) — empty state', () => {
+  it('shows "No maintenance alerts." when trailers maintenance list is empty', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: { trucks: MOCK_MAINTENANCE_TRUCKS, trailers: [] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trailers/i }));
+    expect(screen.getByText('No maintenance alerts.')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Categories tab has NO maintenance section
+// ---------------------------------------------------------------------------
+
+describe('HomePage — categories tab has no maintenance section', () => {
+  it('does not show Maintenance Alerts heading on Categories tab', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
+    expect(screen.queryByText('Maintenance Alerts')).not.toBeInTheDocument();
+  });
+
+  it('does not show a link button for categories (no detail page yet)', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
+    const arrowLinks = document.querySelectorAll('a .bi-arrow-right-circle');
+    expect(arrowLinks.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Maintenance badges
 // ---------------------------------------------------------------------------
 
@@ -303,66 +476,26 @@ describe('HomePage — maintenance alert badges', () => {
   });
 
   it('does not render wrench badge when maintenance count is 0', () => {
-    useDashboard.mockReturnValue({
-      data: {
-        ...MOCK_DATA,
-        counts: {
-          ...MOCK_DATA.counts,
-          trucks_maintenance_alerts: 0,
-          trailers_maintenance_alerts: 0,
-        },
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      counts: {
+        ...MOCK_DATA.counts,
+        trucks_maintenance_alerts: 0,
+        trailers_maintenance_alerts: 0,
       },
-      loading: false,
     });
-    renderPage();
-    // Wrench icon badges should not appear when count is 0
-    const wrenchIcons = document.querySelectorAll('.bi-wrench-adjustable');
+    const wrenchIcons = document.querySelectorAll(
+      '.nav-item .badge .bi-wrench-adjustable'
+    );
     expect(wrenchIcons.length).toBe(0);
   });
 
-  it('does not render Drivers or Categories wrench badge (no maintenance)', () => {
+  it('does not render Drivers or Categories wrench badge', () => {
     renderPage();
     const driversBtn = screen.getByRole('button', { name: /Drivers/i });
     expect(driversBtn.querySelectorAll('.bi-wrench-adjustable').length).toBe(0);
     const categoriesBtn = screen.getByRole('button', { name: /Categories/i });
     expect(categoriesBtn.querySelectorAll('.bi-wrench-adjustable').length).toBe(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Categories tab
-// ---------------------------------------------------------------------------
-
-describe('HomePage — categories tab', () => {
-  it('renders Categories tab with expiration badge', () => {
-    renderPage();
-    const categoriesBtn = screen.getByRole('button', { name: /Categories/i });
-    expect(categoriesBtn.querySelector('.badge')).toBeInTheDocument();
-  });
-
-  it('shows "No expiration alerts" when categories list is empty', () => {
-    useDashboard.mockReturnValue({
-      data: {
-        ...MOCK_DATA,
-        expiration_alerts: {
-          ...MOCK_DATA.expiration_alerts,
-          categories: [],
-        },
-        counts: { ...MOCK_DATA.counts, categories_expiring: 0 },
-      },
-      loading: false,
-    });
-    renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
-    expect(screen.getByText('No expiration alerts.')).toBeInTheDocument();
-  });
-
-  it('does not show a link button for categories (no detail page yet)', () => {
-    renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
-    // The category row should NOT have an arrow-right link button
-    const arrowLinks = document.querySelectorAll('a .bi-arrow-right-circle');
-    expect(arrowLinks.length).toBe(0);
   });
 });
 
@@ -384,14 +517,16 @@ describe('HomePage — My work Calendar link', () => {
 
 describe('HomePage — loading state', () => {
   it('shows spinner while loading', () => {
+    useAuth.mockReturnValue(ADMIN_AUTH);
     useDashboard.mockReturnValue({ data: null, loading: true, error: null, reload: vi.fn() });
-    renderPage();
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
     expect(document.querySelector('.spinner-border')).toBeInTheDocument();
   });
 
   it('does not show stat cards while loading', () => {
+    useAuth.mockReturnValue(ADMIN_AUTH);
     useDashboard.mockReturnValue({ data: null, loading: true, error: null, reload: vi.fn() });
-    renderPage();
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
     expect(screen.queryByText('Loads in Dispatch')).not.toBeInTheDocument();
   });
 });
@@ -402,27 +537,49 @@ describe('HomePage — loading state', () => {
 
 describe('HomePage — empty alert states', () => {
   it('shows "No expiration alerts." when drivers list is empty', () => {
-    useDashboard.mockReturnValue({
-      data: {
-        ...MOCK_DATA,
-        expiration_alerts: { ...MOCK_DATA.expiration_alerts, drivers: [] },
-      },
-      loading: false,
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      expiration_alerts: { ...MOCK_DATA.expiration_alerts, drivers: [] },
     });
-    renderPage();
     expect(screen.getByText('No expiration alerts.')).toBeInTheDocument();
   });
 
   it('shows "No expiration alerts." on Trucks tab when empty', () => {
-    useDashboard.mockReturnValue({
-      data: {
-        ...MOCK_DATA,
-        expiration_alerts: { ...MOCK_DATA.expiration_alerts, trucks: [] },
-      },
-      loading: false,
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      expiration_alerts: { ...MOCK_DATA.expiration_alerts, trucks: [] },
     });
-    renderPage();
     fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
     expect(screen.getByText('No expiration alerts.')).toBeInTheDocument();
+  });
+
+  it('shows "No expiration alerts." on Categories tab when empty', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      expiration_alerts: { ...MOCK_DATA.expiration_alerts, categories: [] },
+      counts: { ...MOCK_DATA.counts, categories_expiring: 0 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
+    expect(screen.getByText('No expiration alerts.')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Maintenance row without detail text
+// ---------------------------------------------------------------------------
+
+describe('HomePage — maintenance row without detail', () => {
+  it('shows alert date text even when detail is empty', () => {
+    renderPage(ADMIN_AUTH, {
+      ...MOCK_DATA,
+      maintenance_alerts: {
+        trucks: [{ ...MOCK_MAINTENANCE_TRUCKS[0], detail: '' }],
+        trailers: [],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(
+      screen.getByText(/Alert for maintenance at 2026-01-01/)
+    ).toBeInTheDocument();
   });
 });

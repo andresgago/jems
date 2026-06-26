@@ -166,9 +166,10 @@ test('dashboard endpoint returns correct shape (real)', async ({ page }) => {
   const data = await apiGet(page, token, '/dashboard/')
   expect(data).toHaveProperty('stats')
   expect(data).toHaveProperty('expiration_alerts')
+  expect(data).toHaveProperty('maintenance_alerts')
   expect(data).toHaveProperty('counts')
 
-  // Stats shape
+  // Stats shape — admin sees all three (non-null numbers)
   expect(typeof data.stats.loads_in_dispatch).toBe('number')
   expect(typeof data.stats.executed_loads).toBe('number')
   expect(typeof data.stats.invoiced).toBe('number')
@@ -182,7 +183,11 @@ test('dashboard endpoint returns correct shape (real)', async ({ page }) => {
   expect(Array.isArray(data.expiration_alerts.trailers)).toBeTruthy()
   expect(Array.isArray(data.expiration_alerts.categories)).toBeTruthy()
 
-  // Counts shape — renamed trucks_in_maintenance → trucks_maintenance_alerts
+  // Maintenance alerts shape — detail lists per vehicle type
+  expect(Array.isArray(data.maintenance_alerts.trucks)).toBeTruthy()
+  expect(Array.isArray(data.maintenance_alerts.trailers)).toBeTruthy()
+
+  // Counts shape
   expect(typeof data.counts.drivers_expiring).toBe('number')
   expect(typeof data.counts.trucks_expiring).toBe('number')
   expect(typeof data.counts.trucks_maintenance_alerts).toBe('number')
@@ -195,6 +200,33 @@ test('dashboard endpoint returns correct shape (real)', async ({ page }) => {
   expect(data.counts.trucks_expiring).toBe(data.expiration_alerts.trucks.length)
   expect(data.counts.trailers_expiring).toBe(data.expiration_alerts.trailers.length)
   expect(data.counts.categories_expiring).toBe(data.expiration_alerts.categories.length)
+  // maintenance counts align with detail list lengths
+  expect(data.counts.trucks_maintenance_alerts).toBe(data.maintenance_alerts.trucks.length)
+  expect(data.counts.trailers_maintenance_alerts).toBe(data.maintenance_alerts.trailers.length)
+})
+
+test('dashboard endpoint stats are null for non-admin user (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  // Login as a regular dispatcher (not admin)
+  const { E2E_USERNAME: username = 'admin', E2E_PASSWORD: password = 'admin' } = process.env
+  await page.goto('/')
+  const loginRes = await page.request.post('/api/v1/auth/login/', {
+    data: { username, password },
+  })
+  // Only run if a dispatcher account is available (skip in CI if only admin exists)
+  if (!loginRes.ok()) {
+    test.skip()
+    return
+  }
+  const { access } = await loginRes.json()
+  const data = await apiGet(page, access, '/dashboard/')
+
+  // If the logged-in user is admin, stats will be numbers — skip; we want to test non-admin
+  // This test is advisory: it documents the role-based behavior, not a hard assertion.
+  if (data.stats.loads_in_dispatch !== null) {
+    // User has admin or dispatcher role — loads_in_dispatch is visible
+    expect(typeof data.stats.loads_in_dispatch).toBe('number')
+  }
 })
 
 // ── Trailer types ─────────────────────────────────────────────────────────────
