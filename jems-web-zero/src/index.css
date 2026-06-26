@@ -140,6 +140,15 @@ body {
   padding: 0.25rem 0 0.15rem;
 }
 
+.payroll-search-band {
+  grid-template-columns: minmax(260px, 1.2fr) repeat(3, minmax(180px, 1fr)) 112px;
+}
+
+.payroll-search-band .load-search-button {
+  width: 112px;
+  min-width: 112px;
+}
+
 .load-filter {
   display: grid;
   grid-template-rows: 22px 48px;
@@ -782,6 +791,10 @@ body {
   .load-search-band {
     grid-template-columns: 1fr;
     gap: 0.75rem;
+  }
+
+  .payroll-search-band .load-search-button {
+    width: 100%;
   }
 
   .date-range-picker {

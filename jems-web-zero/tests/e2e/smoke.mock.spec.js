@@ -779,6 +779,27 @@ test('loads page is reachable after auth', async ({ page }) => {
   await expect(page).toHaveURL(/\/loads/)
 })
 
+test('payroll page uses legacy filters and aligned select controls (mock)', async ({ page }) => {
+  await withAuth(page)
+  const loadsRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname.endsWith('/api/v1/loads/')
+      && url.searchParams.get('payroll') === 'true'
+      && url.searchParams.get('date_type') === '3'
+      && url.searchParams.get('all') === 'true'
+  })
+
+  await page.goto('/loads/executed')
+  await loadsRequest
+
+  await expect(page.getByRole('heading', { name: /Executed Loads/i })).toBeVisible()
+  await expect(page.getByLabel('Date type')).toHaveValue('3')
+  await expect(page.getByLabel('Broker')).toBeVisible()
+  await expect(page.getByLabel('Dispatcher')).toBeVisible()
+  await expect(page.getByLabel('Filter by order')).toBeVisible()
+  await expect(page.getByText('No executed loads found.')).toBeVisible()
+})
+
 // ── New load form ─────────────────────────────────────────────────────────────
 
 test('new load form: weight defaults to 42000', async ({ page }) => {

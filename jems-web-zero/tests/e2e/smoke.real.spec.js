@@ -1025,6 +1025,45 @@ test('index_view=true hides cancelled loads from list (real)', async ({ page }) 
   await apiPut(page, token, `/brokers/business/${receiver.id}/`, { status: 0 })
 })
 
+test('payroll page and endpoint use executed driver-unpaid legacy filter (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const visible = await createTestLoad(page, token, { status: 3 })
+  const paid = await createTestLoad(page, token, { status: 3 })
+
+  await apiPatch(page, token, `/loads/${visible.load.id}/`, {
+    execute: true,
+    history: false,
+    drivers_paid: false,
+  })
+  await apiPatch(page, token, `/loads/${paid.load.id}/`, {
+    execute: true,
+    history: false,
+    drivers_paid: true,
+  })
+
+  const payroll = await apiGet(page, token, '/loads/?payroll=true&all=true')
+  const numbers = payroll.results.map((load) => load.number)
+  expect(numbers).toContain(visible.load.number)
+  expect(numbers).not.toContain(paid.load.number)
+
+  await page.goto('/loads/executed')
+  await expect(page.getByRole('heading', { name: /Executed Loads/i })).toBeVisible()
+  await expect(page.getByLabel('Date type')).toHaveValue('3')
+  await expect(page.getByLabel('Broker')).toBeVisible()
+  await expect(page.getByLabel('Dispatcher')).toBeVisible()
+  await expect(page.getByLabel('Filter by order')).toBeVisible()
+
+  await apiDelete(page, token, `/loads/${visible.load.id}/`)
+  await apiDelete(page, token, `/loads/${paid.load.id}/`)
+  await apiPut(page, token, `/brokers/business/${visible.shipper.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${visible.receiver.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${paid.shipper.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${paid.receiver.id}/`, { status: 0 })
+})
+
 test('index_view=true hides executed non-detention loads (real)', async ({ page }) => {
   test.setTimeout(60_000)
   await loginAsAdmin(page)
