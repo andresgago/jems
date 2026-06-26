@@ -68,6 +68,10 @@ def _datetime_bound(value, *, end=False):
     return value
 
 
+def _query_bool(value):
+    return str(value).lower() in {"1", "true", "yes"}
+
+
 class LoadPagination(PageNumberPagination):
     page_size = 25
     page_size_query_param = "page_size"
@@ -132,9 +136,13 @@ class LoadViewSet(ViewSet):
     def list(self, request):
         qs = self._base_queryset()
         # Filters
+        payroll = _query_bool(request.query_params.get("payroll", "false"))
+        if payroll:
+            qs = qs.filter(execute=True, history=False, drivers_paid=False)
+
         history = request.query_params.get("history")
-        if history is not None:
-            qs = qs.filter(history=str(history).lower() == "true")
+        if history is not None and not payroll:
+            qs = qs.filter(history=_query_bool(history))
         s = request.query_params.get("status")
         if s:
             qs = qs.filter(status=s)
@@ -206,22 +214,30 @@ class LoadViewSet(ViewSet):
             )
         else:
             execute = request.query_params.get("execute")
-            if execute is not None:
-                qs = qs.filter(execute=str(execute).lower() in {"1", "true", "yes"})
+            if execute is not None and not payroll:
+                qs = qs.filter(execute=_query_bool(execute))
         invoiced = request.query_params.get("invoiced")
         if invoiced is not None:
-            qs = qs.filter(invoiced=invoiced.lower() == "true")
+            qs = qs.filter(invoiced=_query_bool(invoiced))
         paid = request.query_params.get("paid")
         if paid is not None:
-            qs = qs.filter(paid=paid.lower() == "true")
-        date_type = request.query_params.get("date_type", "pickup")
+            qs = qs.filter(paid=_query_bool(paid))
+        drivers_paid = request.query_params.get("drivers_paid")
+        if drivers_paid is not None and not payroll:
+            qs = qs.filter(drivers_paid=_query_bool(drivers_paid))
+        date_type = request.query_params.get(
+            "date_type", "all" if payroll else "pickup"
+        )
         date_field = {
+            "1": "pickup_date",
             "pickup": "pickup_date",
             "pickup_date": "pickup_date",
+            "2": "dropoff_date",
             "dropoff": "dropoff_date",
             "dropoff_date": "dropoff_date",
             "created": "created_at",
             "created_at": "created_at",
+            "3": None,
             "all": None,
             "ignore": None,
         }.get(date_type, "pickup_date")
@@ -231,7 +247,11 @@ class LoadViewSet(ViewSet):
             qs = qs.filter(**{f"{date_field}__gte": _datetime_bound(date_from)})
         if date_field and date_to:
             qs = qs.filter(**{f"{date_field}__lte": _datetime_bound(date_to, end=True)})
-        qs = qs.order_by("-pickup_date", "-id")
+        qs = (
+            qs.order_by("pickup_date", "id")
+            if payroll
+            else qs.order_by("-pickup_date", "-id")
+        )
         if request.query_params.get("all", "").lower() in {"1", "true", "yes"}:
             serializer = LoadListSerializer(qs, many=True, context={"request": request})
             return Response(

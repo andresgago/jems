@@ -1893,6 +1893,164 @@ class TestLoadBulkPaid:
 
 
 @pytest.mark.django_db
+class TestLoadListPayrollFilter:
+    def test_payroll_returns_only_executed_unhistoried_unpaid_driver_loads(
+        self, auth_client
+    ):
+        client, _ = auth_client
+        visible = LoadFactory(execute=True, history=False, drivers_paid=False)
+        not_executed = LoadFactory(execute=False, history=False, drivers_paid=False)
+        historied = LoadFactory(execute=True, history=True, drivers_paid=False)
+        driver_paid = LoadFactory(execute=True, history=False, drivers_paid=True)
+
+        response = client.get(reverse("load-list"), {"payroll": "true", "all": "true"})
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in response.data["results"]}
+        assert visible.number in numbers
+        assert not_executed.number not in numbers
+        assert historied.number not in numbers
+        assert driver_paid.number not in numbers
+
+    def test_payroll_ignores_dates_by_default_like_legacy_search_3(self, auth_client):
+        client, _ = auth_client
+        old_load = LoadFactory(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+            pickup_date=timezone.now() - datetime.timedelta(days=90),
+        )
+        new_load = LoadFactory(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+            pickup_date=timezone.now(),
+        )
+
+        response = client.get(
+            reverse("load-list"),
+            {
+                "payroll": "true",
+                "all": "true",
+                "date_from": (timezone.now() - datetime.timedelta(days=7))
+                .date()
+                .isoformat(),
+                "date_to": timezone.now().date().isoformat(),
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in response.data["results"]}
+        assert old_load.number in numbers
+        assert new_load.number in numbers
+
+    def test_payroll_filters_pickup_dates_when_date_type_is_1(self, auth_client):
+        client, _ = auth_client
+        old_load = LoadFactory(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+            pickup_date=timezone.now() - datetime.timedelta(days=90),
+        )
+        current_load = LoadFactory(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+            pickup_date=timezone.now() - datetime.timedelta(days=1),
+        )
+
+        response = client.get(
+            reverse("load-list"),
+            {
+                "payroll": "true",
+                "all": "true",
+                "date_type": "1",
+                "date_from": (timezone.now() - datetime.timedelta(days=7))
+                .date()
+                .isoformat(),
+                "date_to": (timezone.now() + datetime.timedelta(days=1))
+                .date()
+                .isoformat(),
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in response.data["results"]}
+        assert current_load.number in numbers
+        assert old_load.number not in numbers
+
+    def test_payroll_filters_dropoff_dates_when_date_type_is_2(self, auth_client):
+        client, _ = auth_client
+        old_load = LoadFactory(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+            dropoff_date=timezone.now() - datetime.timedelta(days=90),
+        )
+        current_load = LoadFactory(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+            dropoff_date=timezone.now() - datetime.timedelta(days=1),
+        )
+
+        response = client.get(
+            reverse("load-list"),
+            {
+                "payroll": "true",
+                "all": "true",
+                "date_type": "2",
+                "date_from": (timezone.now() - datetime.timedelta(days=7))
+                .date()
+                .isoformat(),
+                "date_to": (timezone.now() + datetime.timedelta(days=1))
+                .date()
+                .isoformat(),
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in response.data["results"]}
+        assert current_load.number in numbers
+        assert old_load.number not in numbers
+
+    def test_payroll_orders_by_pickup_date_ascending(self, auth_client):
+        client, _ = auth_client
+        later = LoadFactory(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+            pickup_date=timezone.now() + datetime.timedelta(days=2),
+        )
+        earlier = LoadFactory(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+            pickup_date=timezone.now() - datetime.timedelta(days=2),
+        )
+
+        response = client.get(reverse("load-list"), {"payroll": "true", "all": "true"})
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = [row["number"] for row in response.data["results"]]
+        assert numbers.index(earlier.number) < numbers.index(later.number)
+
+    def test_drivers_paid_filter_works_without_payroll_mode(self, auth_client):
+        client, _ = auth_client
+        driver_paid = LoadFactory(drivers_paid=True)
+        driver_unpaid = LoadFactory(drivers_paid=False)
+
+        response = client.get(
+            reverse("load-list"), {"drivers_paid": "false", "all": "true"}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in response.data["results"]}
+        assert driver_unpaid.number in numbers
+        assert driver_paid.number not in numbers
+
+
+@pytest.mark.django_db
 class TestLoadListExecuteFilter:
     def test_execute_true_returns_only_executed_loads(self, auth_client):
         client, _ = auth_client

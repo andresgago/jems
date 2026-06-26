@@ -346,6 +346,7 @@ class LoadListSerializer(serializers.ModelSerializer):
             "days_in_drop",
             "invoiced",
             "paid",
+            "drivers_paid",
             "created_at",
         ]
 
