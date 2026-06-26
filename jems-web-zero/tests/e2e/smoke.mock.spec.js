@@ -836,6 +836,82 @@ test('history page uses legacy search mode and payroll-style controls (mock)', a
   await searchRequest
 })
 
+test('invoicing page uses legacy date type and exact search controls (mock)', async ({ page }) => {
+  await withAuth(page)
+  const initialRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname.endsWith('/api/v1/loads/')
+      && url.searchParams.get('execute') === 'true'
+      && url.searchParams.get('history') === 'false'
+      && url.searchParams.get('date_type') === '3'
+      && url.searchParams.get('all') === 'true'
+  })
+
+  await page.goto('/loads/invoicing')
+  await initialRequest
+
+  await expect(page.getByRole('heading', { name: /Invoicing/i })).toBeVisible()
+  await expect(page.getByLabel('Date type')).toHaveValue('3')
+  await expect(page.getByLabel('Broker')).toBeVisible()
+  await expect(page.getByLabel('Dispatcher')).toBeVisible()
+  await expect(page.getByLabel('Order #')).toBeVisible()
+
+  const searchRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname.endsWith('/api/v1/loads/')
+      && url.searchParams.get('execute') === 'true'
+      && url.searchParams.get('history') === 'false'
+      && url.searchParams.get('date_type') === '3'
+      && url.searchParams.get('broker') === '1'
+      && url.searchParams.get('dispatcher') === '1'
+      && url.searchParams.get('number') === 'L-0001'
+  })
+
+  await page.getByLabel('Broker').selectOption('1')
+  await page.getByLabel('Dispatcher').selectOption('1')
+  await page.getByLabel('Order #').fill('L-0001')
+  await page.getByRole('button', { name: 'Search' }).click()
+  await searchRequest
+})
+
+test('payments page uses legacy date type and exact search controls (mock)', async ({ page }) => {
+  await withAuth(page)
+  const initialRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname.endsWith('/api/v1/loads/')
+      && url.searchParams.get('execute') === 'true'
+      && url.searchParams.get('history') === 'false'
+      && url.searchParams.get('date_type') === '3'
+      && url.searchParams.get('all') === 'true'
+  })
+
+  await page.goto('/loads/payments')
+  await initialRequest
+
+  await expect(page.getByRole('heading', { name: /Payments/i })).toBeVisible()
+  await expect(page.getByLabel('Date type')).toHaveValue('3')
+  await expect(page.getByLabel('Driver')).toBeVisible()
+  await expect(page.getByLabel('Dispatcher')).toBeVisible()
+  await expect(page.getByLabel('Order #')).toBeVisible()
+
+  const searchRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname.endsWith('/api/v1/loads/')
+      && url.searchParams.get('execute') === 'true'
+      && url.searchParams.get('history') === 'false'
+      && url.searchParams.get('date_type') === '3'
+      && url.searchParams.get('driver') === '1'
+      && url.searchParams.get('dispatcher') === '1'
+      && url.searchParams.get('number') === 'L-0001'
+  })
+
+  await page.getByLabel('Driver').selectOption('1')
+  await page.getByLabel('Dispatcher').selectOption('1')
+  await page.getByLabel('Order #').fill('L-0001')
+  await page.getByRole('button', { name: 'Search' }).click()
+  await searchRequest
+})
+
 // ── New load form ─────────────────────────────────────────────────────────────
 
 test('new load form: weight defaults to 42000', async ({ page }) => {

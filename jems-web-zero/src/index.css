@@ -144,7 +144,8 @@ body {
   grid-template-columns: minmax(260px, 1.2fr) repeat(3, minmax(180px, 1fr)) 112px;
 }
 
-.history-search-band {
+.history-search-band,
+.secondary-load-search-band {
   grid-template-columns: minmax(260px, 1.2fr) repeat(4, minmax(170px, 1fr)) 112px;
 }
 
@@ -153,7 +154,8 @@ body {
   min-width: 112px;
 }
 
-.history-search-band .load-search-button {
+.history-search-band .load-search-button,
+.secondary-load-search-band .load-search-button {
   width: 112px;
   min-width: 112px;
 }
@@ -803,7 +805,8 @@ body {
   }
 
   .payroll-search-band .load-search-button,
-  .history-search-band .load-search-button {
+  .history-search-band .load-search-button,
+  .secondary-load-search-band .load-search-button {
     width: 100%;
   }
 

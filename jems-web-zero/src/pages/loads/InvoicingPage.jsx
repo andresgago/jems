@@ -1,14 +1,15 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DateRangePicker from '../../components/DateRangePicker';
 import { useLoads } from '../../hooks/useLoads';
+import { brokersService } from '../../services/brokers';
 import { loadsService } from '../../services/loads';
+import { usersService } from '../../services/users';
 
 const DATE_TYPE_OPTIONS = [
-  { value: 'all',     label: 'Show all (Ignore dates)' },
-  { value: 'pickup',  label: 'Pickup date' },
-  { value: 'dropoff', label: 'Delivery date' },
-  { value: 'created', label: 'Created date' },
+  { value: '1', label: 'Pick up date' },
+  { value: '2', label: 'Drop off date' },
+  { value: '3', label: 'Show all (Ignore dates)' },
 ];
 
 function formatMoney(value) {
@@ -24,16 +25,20 @@ function formatDateTime(value) {
 
 function buildParams(draft) {
   const params = { execute: true, history: false, all: true };
-  if (draft.date_type && draft.date_type !== 'all') params.date_type = draft.date_type;
+  if (draft.date_type) params.date_type = draft.date_type;
   if (draft.date_from)  params.date_from  = draft.date_from;
   if (draft.date_to)    params.date_to    = draft.date_to;
   if (draft.dispatcher) params.dispatcher = draft.dispatcher;
+  if (draft.broker)     params.broker     = draft.broker;
+  if (draft.number)     params.number     = draft.number;
   return params;
 }
 
 export default function InvoicingPage() {
-  const [draft, setDraft]     = useState({ date_type: 'pickup' });
-  const [applied, setApplied] = useState({ date_type: 'pickup' });
+  const [draft, setDraft] = useState({ date_type: '3' });
+  const [applied, setApplied] = useState({ date_type: '3' });
+  const [brokers, setBrokers] = useState([]);
+  const [dispatchers, setDispatchers] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -47,7 +52,30 @@ export default function InvoicingPage() {
     setApplied(next);
     setSelected(new Set());
   };
-  const submitOnEnter = (e) => { if (e.key === 'Enter') applyFilters({}); };
+
+  const handleFilter = (event) => {
+    event.preventDefault();
+    applyFilters({});
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      brokersService.options(),
+      usersService.options({ dispatchers: 1 }),
+    ]).then(([brokerResponse, dispatcherResponse]) => {
+      if (cancelled) return;
+      setBrokers(Array.isArray(brokerResponse.data) ? brokerResponse.data : []);
+      const items = Array.isArray(dispatcherResponse.data) ? dispatcherResponse.data : [];
+      setDispatchers(items.filter((user) => user.is_dispatcher !== false));
+    }).catch(() => {
+      if (!cancelled) {
+        setBrokers([]);
+        setDispatchers([]);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const totals = useMemo(() => ({
     miles:   loads.reduce((s, l) => s + Number(l.miles || 0), 0),
@@ -87,28 +115,50 @@ export default function InvoicingPage() {
       {/* Search bar */}
       <div className="card mb-3">
         <div className="card-body py-2">
-          <div className="row g-2 align-items-end">
-            <div className="col-md-3">
-              <label className="form-label mb-1 small">Date range</label>
+          <form className="load-search-band secondary-load-search-band mb-0" onSubmit={handleFilter}>
+            <div className="load-filter">
+              <label>Date range</label>
               <DateRangePicker
-                value={{ from: draft.date_from || '', to: draft.date_to || '' }}
-                onChange={({ from, to }) => { setField('date_from', from); setField('date_to', to); }}
+                start={draft.date_from || ''}
+                end={draft.date_to || ''}
+                onApply={({ start, end }) => {
+                  setField('date_from', start);
+                  setField('date_to', end);
+                }}
               />
             </div>
-            <div className="col-md-2">
-              <label className="form-label mb-1 small">Date type</label>
-              <select className="form-select form-select-sm" value={draft.date_type || 'all'} onChange={(e) => setField('date_type', e.target.value)}>
+            <div className="load-filter">
+              <label htmlFor="invoicing-date-type">Date type</label>
+              <select id="invoicing-date-type" className="form-select form-select-sm h-100" value={draft.date_type || '3'} onChange={(e) => setField('date_type', e.target.value)}>
                 {DATE_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
-            <div className="col-md-2">
-              <label className="form-label mb-1 small">Dispatcher</label>
-              <input className="form-control form-control-sm" value={draft.dispatcher || ''} onChange={(e) => setField('dispatcher', e.target.value)} onKeyDown={submitOnEnter} placeholder="Dispatcher" />
+            <div className="load-filter">
+              <label htmlFor="invoicing-broker">Broker</label>
+              <select id="invoicing-broker" className="form-select form-select-sm h-100" value={draft.broker || ''} onChange={(e) => setField('broker', e.target.value)}>
+                <option value="">Show all broker</option>
+                {brokers.map((broker) => (
+                  <option key={broker.id} value={broker.id}>{broker.label || broker.name}</option>
+                ))}
+              </select>
             </div>
-            <div className="col-md-1">
-              <button className="btn btn-primary btn-sm w-100" onClick={() => applyFilters({})}>Search</button>
+            <div className="load-filter">
+              <label htmlFor="invoicing-dispatcher">Dispatcher</label>
+              <select id="invoicing-dispatcher" className="form-select form-select-sm h-100" value={draft.dispatcher || ''} onChange={(e) => setField('dispatcher', e.target.value)}>
+                <option value="">Show all dispatcher</option>
+                {dispatchers.map((dispatcher) => (
+                  <option key={dispatcher.id} value={dispatcher.id}>{dispatcher.label || dispatcher.full_name || dispatcher.username}</option>
+                ))}
+              </select>
             </div>
-          </div>
+            <div className="load-filter">
+              <label htmlFor="invoicing-order">Order #</label>
+              <input id="invoicing-order" className="form-control form-control-sm h-100" value={draft.number || ''} onChange={(e) => setField('number', e.target.value)} placeholder="Order #" />
+            </div>
+            <button type="submit" className="btn btn-primary btn-sm load-search-button">
+              <i className="bi bi-search me-1" />Search
+            </button>
+          </form>
         </div>
       </div>
 

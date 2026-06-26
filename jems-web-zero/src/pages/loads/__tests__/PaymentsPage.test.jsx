@@ -4,15 +4,27 @@ import { MemoryRouter } from 'react-router-dom';
 import PaymentsPage from '../PaymentsPage';
 
 vi.mock('../../../hooks/useLoads', () => ({ useLoads: vi.fn() }));
+vi.mock('../../../services/drivers', () => ({
+  driversService: {
+    list: vi.fn(),
+  },
+}));
 vi.mock('../../../services/loads', () => ({
   loadsService: {
     togglePaid: vi.fn(),
     bulkPaid: vi.fn(),
   },
 }));
+vi.mock('../../../services/users', () => ({
+  usersService: {
+    options: vi.fn(),
+  },
+}));
 
 import { useLoads } from '../../../hooks/useLoads';
+import { driversService } from '../../../services/drivers';
 import { loadsService } from '../../../services/loads';
+import { usersService } from '../../../services/users';
 
 const LOAD = {
   id: 3,
@@ -45,12 +57,68 @@ function setup(loads = [LOAD]) {
   return { refresh };
 }
 
+function mockResolvedOptions() {
+  driversService.list.mockResolvedValue({
+    data: [{ id: 9, first_name: 'Maria', last_name: 'Lopez', full_name: 'Maria Lopez' }],
+  });
+  usersService.options.mockResolvedValue({
+    data: [
+      { id: 7, label: 'Alice Dispatcher', full_name: 'Alice Dispatcher', is_dispatcher: true },
+      { id: 8, label: 'Regular User', full_name: 'Regular User', is_dispatcher: false },
+    ],
+  });
+}
+
 describe('PaymentsPage', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    driversService.list.mockReturnValue(new Promise(() => {}));
+    usersService.options.mockReturnValue(new Promise(() => {}));
+  });
 
   it('renders page heading', () => {
     setup();
     expect(screen.getByText(/Payments/i)).toBeDefined();
+  });
+
+  it('loads payments with legacy default date type', () => {
+    setup();
+    expect(useLoads).toHaveBeenCalledWith({
+      execute: true,
+      history: false,
+      all: true,
+      date_type: '3',
+    });
+  });
+
+  it('renders driver and dispatcher option selects', async () => {
+    mockResolvedOptions();
+    setup();
+    await waitFor(() => expect(driversService.list).toHaveBeenCalled());
+    expect(await screen.findByRole('option', { name: 'Maria Lopez' })).toBeDefined();
+    expect(screen.getByRole('option', { name: 'Alice Dispatcher' })).toBeDefined();
+    expect(screen.queryByRole('option', { name: 'Regular User' })).toBeNull();
+  });
+
+  it('applies exact driver, dispatcher, and order filters from the search band', async () => {
+    mockResolvedOptions();
+    setup();
+    await screen.findByRole('option', { name: 'Maria Lopez' });
+
+    fireEvent.change(screen.getByLabelText('Driver'), { target: { value: '9' } });
+    fireEvent.change(screen.getByLabelText('Dispatcher'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('Order #'), { target: { value: 'LD-003' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(useLoads).toHaveBeenLastCalledWith({
+      execute: true,
+      history: false,
+      all: true,
+      date_type: '3',
+      driver: '9',
+      dispatcher: '7',
+      number: 'LD-003',
+    });
   });
 
   it('renders driver name and order number', () => {

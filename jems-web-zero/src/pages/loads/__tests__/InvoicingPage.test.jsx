@@ -4,15 +4,27 @@ import { MemoryRouter } from 'react-router-dom';
 import InvoicingPage from '../InvoicingPage';
 
 vi.mock('../../../hooks/useLoads', () => ({ useLoads: vi.fn() }));
+vi.mock('../../../services/brokers', () => ({
+  brokersService: {
+    options: vi.fn(),
+  },
+}));
 vi.mock('../../../services/loads', () => ({
   loadsService: {
     toggleInvoiced: vi.fn(),
     bulkInvoiced: vi.fn(),
   },
 }));
+vi.mock('../../../services/users', () => ({
+  usersService: {
+    options: vi.fn(),
+  },
+}));
 
 import { useLoads } from '../../../hooks/useLoads';
+import { brokersService } from '../../../services/brokers';
 import { loadsService } from '../../../services/loads';
+import { usersService } from '../../../services/users';
 
 const LOAD = {
   id: 2,
@@ -44,12 +56,68 @@ function setup(loads = [LOAD]) {
   return { refresh };
 }
 
+function mockResolvedOptions() {
+  brokersService.options.mockResolvedValue({
+    data: [{ id: 5, label: 'ACME Freight (MC-123)' }],
+  });
+  usersService.options.mockResolvedValue({
+    data: [
+      { id: 7, label: 'Alice Dispatcher', full_name: 'Alice Dispatcher', is_dispatcher: true },
+      { id: 8, label: 'Regular User', full_name: 'Regular User', is_dispatcher: false },
+    ],
+  });
+}
+
 describe('InvoicingPage', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    brokersService.options.mockReturnValue(new Promise(() => {}));
+    usersService.options.mockReturnValue(new Promise(() => {}));
+  });
 
   it('renders page heading', () => {
     setup();
     expect(screen.getByText(/Invoicing/i)).toBeDefined();
+  });
+
+  it('loads invoicing with legacy default date type', () => {
+    setup();
+    expect(useLoads).toHaveBeenCalledWith({
+      execute: true,
+      history: false,
+      all: true,
+      date_type: '3',
+    });
+  });
+
+  it('renders broker and dispatcher option selects', async () => {
+    mockResolvedOptions();
+    setup();
+    await waitFor(() => expect(brokersService.options).toHaveBeenCalled());
+    expect(await screen.findByRole('option', { name: 'ACME Freight (MC-123)' })).toBeDefined();
+    expect(screen.getByRole('option', { name: 'Alice Dispatcher' })).toBeDefined();
+    expect(screen.queryByRole('option', { name: 'Regular User' })).toBeNull();
+  });
+
+  it('applies exact broker, dispatcher, and order filters from the search band', async () => {
+    mockResolvedOptions();
+    setup();
+    await screen.findByRole('option', { name: 'ACME Freight (MC-123)' });
+
+    fireEvent.change(screen.getByLabelText('Broker'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('Dispatcher'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('Order #'), { target: { value: 'LD-002' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(useLoads).toHaveBeenLastCalledWith({
+      execute: true,
+      history: false,
+      all: true,
+      date_type: '3',
+      broker: '5',
+      dispatcher: '7',
+      number: 'LD-002',
+    });
   });
 
   it('renders broker name and order number', () => {

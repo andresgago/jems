@@ -1105,6 +1105,51 @@ test('history page and endpoint use legacy executed search behavior (real)', asy
   await apiPut(page, token, `/brokers/business/${pending.receiver.id}/`, { status: 0 })
 })
 
+test('invoicing and payments pages use legacy executed-load search controls (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const prefix = `BILLPAY-${Date.now()}`
+  const invoicing = await createTestLoad(page, token, { number: `${prefix}-INV`, status: 3 })
+  const payments = await createTestLoad(page, token, { number: `${prefix}-PAY`, status: 3 })
+
+  await apiPatch(page, token, `/loads/${invoicing.load.id}/`, {
+    execute: true,
+    history: false,
+  })
+  await apiPatch(page, token, `/loads/${payments.load.id}/`, {
+    execute: true,
+    history: false,
+  })
+
+  const listed = await apiGet(page, token, `/loads/?execute=true&history=false&all=true&date_type=3&number=${prefix}`)
+  const numbers = listed.results.map((load) => load.number)
+  expect(numbers).toContain(invoicing.load.number)
+  expect(numbers).toContain(payments.load.number)
+
+  await page.goto('/loads/invoicing')
+  await expect(page.getByRole('heading', { name: /Invoicing/i })).toBeVisible()
+  await expect(page.getByLabel('Date type')).toHaveValue('3')
+  await expect(page.getByLabel('Broker')).toBeVisible()
+  await expect(page.getByLabel('Dispatcher')).toBeVisible()
+  await expect(page.getByLabel('Order #')).toBeVisible()
+
+  await page.goto('/loads/payments')
+  await expect(page.getByRole('heading', { name: /Payments/i })).toBeVisible()
+  await expect(page.getByLabel('Date type')).toHaveValue('3')
+  await expect(page.getByLabel('Driver')).toBeVisible()
+  await expect(page.getByLabel('Dispatcher')).toBeVisible()
+  await expect(page.getByLabel('Order #')).toBeVisible()
+
+  await apiDelete(page, token, `/loads/${invoicing.load.id}/`)
+  await apiDelete(page, token, `/loads/${payments.load.id}/`)
+  await apiPut(page, token, `/brokers/business/${invoicing.shipper.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${invoicing.receiver.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${payments.shipper.id}/`, { status: 0 })
+  await apiPut(page, token, `/brokers/business/${payments.receiver.id}/`, { status: 0 })
+})
+
 test('index_view=true hides executed non-detention loads (real)', async ({ page }) => {
   test.setTimeout(60_000)
   await loginAsAdmin(page)
