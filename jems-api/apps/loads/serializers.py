@@ -205,6 +205,9 @@ class LoadListSerializer(serializers.ModelSerializer):
     broker_debtor_buy_status = serializers.CharField(
         source="broker.debtor_buy_status", read_only=True
     )
+    broker_mc = serializers.CharField(source="broker.mc", read_only=True)
+    broker_email = serializers.CharField(source="broker.email", read_only=True)
+    broker_phone = serializers.CharField(source="broker.phone", read_only=True)
     broker_denied = serializers.SerializerMethodField()
     carrier_name = serializers.CharField(source="carrier.name", read_only=True)
     dispatcher_name = serializers.CharField(
@@ -220,11 +223,22 @@ class LoadListSerializer(serializers.ModelSerializer):
     trailer_type_short_name = serializers.CharField(
         source="trailer.trailer_type.short_name", read_only=True
     )
+    trailer_type_name = serializers.SerializerMethodField()
     load_trailer_type_short_name = serializers.CharField(
         source="trailer_type.short_name", read_only=True
     )
+    pickup_city_name = serializers.CharField(source="pickup_city.name", read_only=True)
+    pickup_city_state = serializers.CharField(
+        source="pickup_city.state.abbreviation", read_only=True
+    )
     pickup_city_display = serializers.SerializerMethodField()
     pickup_city_zip = serializers.CharField(source="pickup_city.zip", read_only=True)
+    dropoff_city_name = serializers.CharField(
+        source="dropoff_city.name", read_only=True
+    )
+    dropoff_city_state = serializers.CharField(
+        source="dropoff_city.state.abbreviation", read_only=True
+    )
     dropoff_city_display = serializers.SerializerMethodField()
     dropoff_city_zip = serializers.CharField(source="dropoff_city.zip", read_only=True)
     assignment_complete = serializers.SerializerMethodField()
@@ -285,6 +299,13 @@ class LoadListSerializer(serializers.ModelSerializer):
     def get_driver_rtl_has_violations(self, obj):
         return bool(getattr(obj, "_driver_rtl_has_violations", False))
 
+    def get_trailer_type_name(self, obj):
+        if obj.trailer_type:
+            return obj.trailer_type.name
+        if obj.trailer and obj.trailer.trailer_type:
+            return obj.trailer.trailer_type.name
+        return ""
+
     @staticmethod
     def _city_display(city):
         if not city:
@@ -313,6 +334,9 @@ class LoadListSerializer(serializers.ModelSerializer):
             "broker_contacts",
             "broker_buy_status",
             "broker_debtor_buy_status",
+            "broker_mc",
+            "broker_email",
+            "broker_phone",
             "broker_denied",
             "carrier_name",
             "dispatcher",
@@ -331,8 +355,13 @@ class LoadListSerializer(serializers.ModelSerializer):
             "trailer",
             "trailer_number",
             "trailer_type_short_name",
+            "trailer_type_name",
             "trailer_type",
             "load_trailer_type_short_name",
+            "pickup_city_name",
+            "pickup_city_state",
+            "dropoff_city_name",
+            "dropoff_city_state",
             "rate_file",
             "bill_file",
             "lumper_file",
@@ -346,6 +375,7 @@ class LoadListSerializer(serializers.ModelSerializer):
             "days_in_drop",
             "invoiced",
             "paid",
+            "history",
             "drivers_paid",
             "created_at",
         ]

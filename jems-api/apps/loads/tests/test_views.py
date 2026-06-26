@@ -133,6 +133,114 @@ class TestLoadList:
         assert history_load.number in numbers
         assert active_load.number not in numbers
 
+    def test_history_search_returns_empty_until_filter_is_submitted(self, auth_client):
+        client, _ = auth_client
+        LoadFactory(execute=True, history=True)
+
+        response = client.get(reverse("load-list"), {"history_search": "true"})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert load_results(response) == []
+
+    def test_history_search_matches_legacy_execute_filter_not_history_flag(
+        self, auth_client
+    ):
+        client, _ = auth_client
+        historied = LoadFactory(number="HIST-YES", execute=True, history=True)
+        unhistoried = LoadFactory(number="HIST-NO", execute=True, history=False)
+        not_executed = LoadFactory(number="HIST-PENDING", execute=False, history=True)
+
+        response = client.get(
+            reverse("load-list"),
+            {"history_search": "true", "date_type": "3", "all": "true"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert historied.number in numbers
+        assert unhistoried.number in numbers
+        assert not_executed.number not in numbers
+
+    def test_history_search_driver_matches_primary_or_team_driver_only(
+        self, auth_client
+    ):
+        client, _ = auth_client
+        primary = DriverFactory(first_name="Primary", last_name="Driver")
+        team = DriverFactory(first_name="Team", last_name="Driver")
+        truck = TruckFactory(number=str(team.id))
+        primary_load = LoadFactory(execute=True, driver=primary)
+        team_load = LoadFactory(execute=True, team_driver=team)
+        truck_number_only = LoadFactory(execute=True, truck=truck)
+
+        response = client.get(
+            reverse("load-list"),
+            {"history_search": "true", "driver": team.id, "all": "true"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert team_load.number in numbers
+        assert primary_load.number not in numbers
+        assert truck_number_only.number not in numbers
+
+    def test_history_search_applies_exact_broker_and_order_like_filters(
+        self, auth_client
+    ):
+        client, _ = auth_client
+        broker = BrokerFactory(name="History Broker")
+        matching = LoadFactory(number="HIST-ORDER-100", execute=True, broker=broker)
+        other_broker = LoadFactory(number="HIST-ORDER-200", execute=True)
+        other_number = LoadFactory(
+            number="OTHER-ORDER-100", execute=True, broker=broker
+        )
+
+        response = client.get(
+            reverse("load-list"),
+            {
+                "history_search": "true",
+                "broker": broker.id,
+                "number": "HIST-ORDER",
+                "all": "true",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert matching.number in numbers
+        assert other_broker.number not in numbers
+        assert other_number.number not in numbers
+
+    def test_history_search_filters_pickup_and_dropoff_dates(self, auth_client):
+        client, _ = auth_client
+        in_range = LoadFactory(
+            execute=True,
+            pickup_date=timezone.now() - datetime.timedelta(days=1),
+            dropoff_date=timezone.now() + datetime.timedelta(days=1),
+        )
+        out_of_range = LoadFactory(
+            execute=True,
+            pickup_date=timezone.now() - datetime.timedelta(days=10),
+            dropoff_date=timezone.now() - datetime.timedelta(days=9),
+        )
+
+        response = client.get(
+            reverse("load-list"),
+            {
+                "history_search": "true",
+                "date_type": "1",
+                "date_from": (timezone.now() - datetime.timedelta(days=2))
+                .date()
+                .isoformat(),
+                "date_to": timezone.now().date().isoformat(),
+                "all": "true",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        numbers = {row["number"] for row in load_results(response)}
+        assert in_range.number in numbers
+        assert out_of_range.number not in numbers
+
     def test_filter_by_broker_text_matches_name_dba_mc_and_carrier(self, auth_client):
         client, _ = auth_client
         carrier = CarrierFactory(name="Blue Carrier")

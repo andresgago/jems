@@ -137,11 +137,36 @@ class LoadViewSet(ViewSet):
         qs = self._base_queryset()
         # Filters
         payroll = _query_bool(request.query_params.get("payroll", "false"))
+        history_search = _query_bool(
+            request.query_params.get("history_search", "false")
+        )
         if payroll:
             qs = qs.filter(execute=True, history=False, drivers_paid=False)
+        elif history_search:
+            qs = qs.filter(execute=True)
+
+            submitted_filter_keys = {
+                "date_type",
+                "date_from",
+                "date_to",
+                "broker",
+                "dispatcher",
+                "driver",
+                "number",
+                "truck",
+                "trailer",
+                "trailer_type",
+                "pickup_city",
+                "dropoff_city",
+            }
+            if not any(
+                str(request.query_params.get(key, "")).strip()
+                for key in submitted_filter_keys
+            ):
+                qs = qs.none()
 
         history = request.query_params.get("history")
-        if history is not None and not payroll:
+        if history is not None and not payroll and not history_search:
             qs = qs.filter(history=_query_bool(history))
         s = request.query_params.get("status")
         if s:
@@ -151,14 +176,17 @@ class LoadViewSet(ViewSet):
             qs = qs.filter(number__icontains=number)
         broker = request.query_params.get("broker")
         if broker:
-            broker_filter = (
-                Q(broker__name__icontains=broker)
-                | Q(broker__dba_name__icontains=broker)
-                | Q(broker__mc__icontains=broker)
-                | Q(carrier__name__icontains=broker)
-            )
-            if broker.isdigit():
-                broker_filter |= Q(broker_id=broker)
+            if history_search and broker.isdigit():
+                broker_filter = Q(broker_id=broker)
+            else:
+                broker_filter = (
+                    Q(broker__name__icontains=broker)
+                    | Q(broker__dba_name__icontains=broker)
+                    | Q(broker__mc__icontains=broker)
+                    | Q(carrier__name__icontains=broker)
+                )
+                if broker.isdigit():
+                    broker_filter |= Q(broker_id=broker)
             qs = qs.filter(broker_filter)
         dispatcher = request.query_params.get("dispatcher")
         if dispatcher:
@@ -172,17 +200,56 @@ class LoadViewSet(ViewSet):
                 )
         driver = request.query_params.get("driver")
         if driver:
-            driver_filter = (
-                Q(driver__first_name__icontains=driver)
-                | Q(driver__last_name__icontains=driver)
-                | Q(team_driver__first_name__icontains=driver)
-                | Q(team_driver__last_name__icontains=driver)
-                | Q(truck__number__icontains=driver)
-                | Q(trailer__number__icontains=driver)
-            )
-            if driver.isdigit():
-                driver_filter |= Q(driver_id=driver)
+            if history_search:
+                driver_filter = (
+                    Q(driver_id=driver) | Q(team_driver_id=driver)
+                    if driver.isdigit()
+                    else (
+                        Q(driver__first_name__icontains=driver)
+                        | Q(driver__last_name__icontains=driver)
+                        | Q(team_driver__first_name__icontains=driver)
+                        | Q(team_driver__last_name__icontains=driver)
+                    )
+                )
+            else:
+                driver_filter = (
+                    Q(driver__first_name__icontains=driver)
+                    | Q(driver__last_name__icontains=driver)
+                    | Q(team_driver__first_name__icontains=driver)
+                    | Q(team_driver__last_name__icontains=driver)
+                    | Q(truck__number__icontains=driver)
+                    | Q(trailer__number__icontains=driver)
+                )
+                if driver.isdigit():
+                    driver_filter |= Q(driver_id=driver)
             qs = qs.filter(driver_filter)
+        truck = request.query_params.get("truck")
+        if truck:
+            qs = (
+                qs.filter(truck_id=truck)
+                if truck.isdigit()
+                else qs.filter(truck__number__icontains=truck)
+            )
+        trailer = request.query_params.get("trailer")
+        if trailer:
+            qs = (
+                qs.filter(trailer_id=trailer)
+                if trailer.isdigit()
+                else qs.filter(trailer__number__icontains=trailer)
+            )
+        trailer_type = request.query_params.get("trailer_type")
+        if trailer_type:
+            qs = (
+                qs.filter(
+                    Q(trailer_type_id=trailer_type)
+                    | Q(trailer__trailer_type_id=trailer_type)
+                )
+                if trailer_type.isdigit()
+                else qs.filter(
+                    Q(trailer_type__name__icontains=trailer_type)
+                    | Q(trailer__trailer_type__name__icontains=trailer_type)
+                )
+            )
         pickup_city = request.query_params.get("pickup_city")
         if pickup_city:
             pickup_city_filter = (
