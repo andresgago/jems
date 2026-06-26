@@ -10,5 +10,5 @@ class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        data = services.get_dashboard_data()
+        data = services.get_dashboard_data(request.user)
         return Response(data)

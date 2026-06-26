@@ -15,6 +15,7 @@ from apps.loads.tests.factories import (
     TrailerFactory,
     UserFactory,
 )
+from apps.users.tests.factories import AdminUserFactory, DispatcherFactory
 
 
 @pytest.fixture
@@ -55,6 +56,7 @@ def test_response_shape(auth_client):
     data = response.data
     assert "stats" in data
     assert "expiration_alerts" in data
+    assert "maintenance_alerts" in data
     assert "counts" in data
     assert set(data["stats"].keys()) == {
         "loads_in_dispatch",
@@ -67,6 +69,7 @@ def test_response_shape(auth_client):
         "trailers",
         "categories",
     }
+    assert set(data["maintenance_alerts"].keys()) == {"trucks", "trailers"}
     assert set(data["counts"].keys()) == {
         "drivers_expiring",
         "trucks_expiring",
@@ -79,11 +82,26 @@ def test_response_shape(auth_client):
 
 # ---------------------------------------------------------------------------
 # Stats — loads_in_dispatch (execute=False AND history=False)
+# Admin fixtures defined later in this file but available to all tests via pytest.
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def admin_client(api_client):
+    user = AdminUserFactory()
+    api_client.force_authenticate(user=user)
+    return api_client
+
+
+@pytest.fixture
+def dispatcher_client(api_client):
+    user = DispatcherFactory()
+    api_client.force_authenticate(user=user)
+    return api_client
+
+
 @pytest.mark.django_db
-def test_stats_loads_in_dispatch(auth_client):
+def test_stats_loads_in_dispatch(admin_client):
     # Counted: not yet executed, not in history
     LoadFactory(execute=False, history=False)
     LoadFactory(execute=False, history=False, status=Load.Status.STARTED)
@@ -92,17 +110,17 @@ def test_stats_loads_in_dispatch(auth_client):
     # Excluded: in history
     LoadFactory(execute=False, history=True)
 
-    response = auth_client.get(DASHBOARD_URL)
+    response = admin_client.get(DASHBOARD_URL)
     assert response.status_code == status.HTTP_200_OK
     assert response.data["stats"]["loads_in_dispatch"] == 2
 
 
 @pytest.mark.django_db
-def test_stats_loads_in_dispatch_excludes_archived(auth_client):
+def test_stats_loads_in_dispatch_excludes_archived(admin_client):
     LoadFactory(execute=True, history=True)  # archived executed load
     LoadFactory(execute=False, history=True)  # archived but never executed
 
-    response = auth_client.get(DASHBOARD_URL)
+    response = admin_client.get(DASHBOARD_URL)
     assert response.data["stats"]["loads_in_dispatch"] == 0
 
 
@@ -112,7 +130,7 @@ def test_stats_loads_in_dispatch_excludes_archived(auth_client):
 
 
 @pytest.mark.django_db
-def test_stats_executed_loads(auth_client):
+def test_stats_executed_loads(admin_client):
     LoadFactory(execute=True, history=False, drivers_paid=False)
     LoadFactory(execute=True, history=False, drivers_paid=False)
     # Excluded: not executed
@@ -122,7 +140,7 @@ def test_stats_executed_loads(auth_client):
     # Excluded: driver already paid
     LoadFactory(execute=True, history=False, drivers_paid=True)
 
-    response = auth_client.get(DASHBOARD_URL)
+    response = admin_client.get(DASHBOARD_URL)
     assert response.data["stats"]["executed_loads"] == 2
 
 
@@ -132,7 +150,7 @@ def test_stats_executed_loads(auth_client):
 
 
 @pytest.mark.django_db
-def test_stats_invoiced(auth_client):
+def test_stats_invoiced(admin_client):
     LoadFactory(execute=True, history=False, drivers_paid=False, invoiced=True)
     LoadFactory(execute=True, history=False, drivers_paid=False, invoiced=True)
     # Excluded: not invoiced
@@ -144,17 +162,17 @@ def test_stats_invoiced(auth_client):
     # Excluded: driver already paid
     LoadFactory(execute=True, history=False, drivers_paid=True, invoiced=True)
 
-    response = auth_client.get(DASHBOARD_URL)
+    response = admin_client.get(DASHBOARD_URL)
     assert response.data["stats"]["invoiced"] == 2
 
 
 @pytest.mark.django_db
-def test_stats_invoiced_percentage(auth_client):
+def test_stats_invoiced_percentage(admin_client):
     """invoiced is always ≤ executed_loads since filters are a subset."""
     LoadFactory(execute=True, history=False, drivers_paid=False, invoiced=True)
     LoadFactory(execute=True, history=False, drivers_paid=False, invoiced=False)
 
-    response = auth_client.get(DASHBOARD_URL)
+    response = admin_client.get(DASHBOARD_URL)
     assert response.data["stats"]["executed_loads"] == 2
     assert response.data["stats"]["invoiced"] == 1
 
@@ -573,3 +591,284 @@ def test_counts_truck_alerted_once_for_multiple_records(auth_client):
 
     response = auth_client.get(DASHBOARD_URL)
     assert response.data["counts"]["trucks_maintenance_alerts"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Response shape — maintenance_alerts key
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_response_shape_includes_maintenance_alerts(auth_client):
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.status_code == status.HTTP_200_OK
+    assert "maintenance_alerts" in response.data
+    assert set(response.data["maintenance_alerts"].keys()) == {"trucks", "trailers"}
+
+
+# ---------------------------------------------------------------------------
+# maintenance_alerts — truck detail records
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_triggered(auth_client):
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE, number="MAINT-001")
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today - datetime.timedelta(days=400),
+        time_alert=1,
+        time_year=1,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+        detail="Oil change",
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    trucks = response.data["maintenance_alerts"]["trucks"]
+    assert len(trucks) == 1
+    entry = trucks[0]
+    assert entry["truck_id"] == truck.id
+    assert entry["truck_number"] == "MAINT-001"
+    assert entry["detail"] == "Oil change"
+    assert "date" in entry
+    assert "alert_date" in entry
+    assert "maintenance_id" in entry
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_not_yet_triggered(auth_client):
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today,
+        time_alert=1,
+        time_year=0,
+        time_month=6,  # alert due in 6 months
+        odometer_start=0,
+        odometer_current=0,
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["maintenance_alerts"]["trucks"] == []
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_inactive_excluded(auth_client):
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.INACTIVE)
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today - datetime.timedelta(days=400),
+        time_alert=1,
+        time_year=1,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["maintenance_alerts"]["trucks"] == []
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_one_entry_per_truck(auth_client):
+    """Two past-due records for the same truck → one detail row, not two."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    for _ in range(2):
+        TruckMaintenance.objects.create(
+            truck=truck,
+            date=today - datetime.timedelta(days=400),
+            time_alert=1,
+            time_year=1,
+            time_month=0,
+            odometer_start=0,
+            odometer_current=0,
+        )
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert len(response.data["maintenance_alerts"]["trucks"]) == 1
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trucks_most_recent_record_used(auth_client):
+    """Only the most recent maintenance record is evaluated per truck."""
+    today = datetime.date.today()
+    truck = TruckFactory(status=Truck.Status.ACTIVE)
+    # Older record: alert triggered
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today - datetime.timedelta(days=400),
+        time_alert=1,
+        time_year=1,
+        time_month=0,
+        odometer_start=0,
+        odometer_current=0,
+        detail="Old record",
+    )
+    # Newer record: alert NOT yet triggered
+    TruckMaintenance.objects.create(
+        truck=truck,
+        date=today,
+        time_alert=1,
+        time_year=0,
+        time_month=6,
+        odometer_start=0,
+        odometer_current=0,
+        detail="New record",
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    # Most recent record is the future one — no alert
+    assert response.data["maintenance_alerts"]["trucks"] == []
+    assert response.data["counts"]["trucks_maintenance_alerts"] == 0
+
+
+# ---------------------------------------------------------------------------
+# maintenance_alerts — trailer detail records
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trailers_triggered(auth_client):
+    today = datetime.date.today()
+    trailer = TrailerFactory(status=Trailer.Status.ACTIVE, number="TRL-MAINT")
+    TrailerMaintenance.objects.create(
+        trailer=trailer,
+        date=today - datetime.timedelta(days=400),
+        time_alert=1,
+        time_year=1,
+        time_month=0,
+        detail="Brake check",
+    )
+
+    response = auth_client.get(DASHBOARD_URL)
+    trailers = response.data["maintenance_alerts"]["trailers"]
+    assert len(trailers) == 1
+    entry = trailers[0]
+    assert entry["trailer_id"] == trailer.id
+    assert entry["trailer_number"] == "TRL-MAINT"
+    assert entry["detail"] == "Brake check"
+    assert "date" in entry
+    assert "alert_date" in entry
+    assert "maintenance_id" in entry
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_trailers_one_entry_per_trailer(auth_client):
+    today = datetime.date.today()
+    trailer = TrailerFactory(status=Trailer.Status.ACTIVE)
+    for _ in range(2):
+        TrailerMaintenance.objects.create(
+            trailer=trailer,
+            date=today - datetime.timedelta(days=400),
+            time_alert=1,
+            time_year=1,
+            time_month=0,
+        )
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert len(response.data["maintenance_alerts"]["trailers"]) == 1
+
+
+@pytest.mark.django_db
+def test_maintenance_alerts_count_matches_detail_list(auth_client):
+    today = datetime.date.today()
+    for i in range(3):
+        truck = TruckFactory(status=Truck.Status.ACTIVE)
+        TruckMaintenance.objects.create(
+            truck=truck,
+            date=today - datetime.timedelta(days=400),
+            time_alert=1,
+            time_year=1,
+            time_month=0,
+            odometer_start=0,
+            odometer_current=0,
+        )
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.data["counts"]["trucks_maintenance_alerts"] == len(
+        response.data["maintenance_alerts"]["trucks"]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Role-based stats visibility
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_stats_admin_sees_all(admin_client):
+    """Admin can see all three stat cards."""
+    LoadFactory(execute=False, history=False)
+    LoadFactory(execute=True, history=False, drivers_paid=False)
+    LoadFactory(execute=True, history=False, drivers_paid=False, invoiced=True)
+
+    response = admin_client.get(DASHBOARD_URL)
+    assert response.status_code == status.HTTP_200_OK
+    stats = response.data["stats"]
+    assert stats["loads_in_dispatch"] is not None
+    assert stats["executed_loads"] is not None
+    assert stats["invoiced"] is not None
+
+
+@pytest.mark.django_db
+def test_stats_dispatcher_sees_only_loads_in_dispatch(dispatcher_client):
+    """Dispatcher sees loads_in_dispatch but not executed_loads or invoiced."""
+    LoadFactory(execute=False, history=False)
+    LoadFactory(execute=True, history=False, drivers_paid=False)
+
+    response = dispatcher_client.get(DASHBOARD_URL)
+    assert response.status_code == status.HTTP_200_OK
+    stats = response.data["stats"]
+    assert stats["loads_in_dispatch"] is not None
+    assert stats["loads_in_dispatch"] == 1
+    assert stats["executed_loads"] is None
+    assert stats["invoiced"] is None
+
+
+@pytest.mark.django_db
+def test_stats_regular_user_sees_none(auth_client):
+    """Regular user (not admin, not dispatcher) sees all stats as null."""
+    LoadFactory(execute=False, history=False)
+    LoadFactory(execute=True, history=False, drivers_paid=False, invoiced=True)
+
+    response = auth_client.get(DASHBOARD_URL)
+    assert response.status_code == status.HTTP_200_OK
+    stats = response.data["stats"]
+    assert stats["loads_in_dispatch"] is None
+    assert stats["executed_loads"] is None
+    assert stats["invoiced"] is None
+
+
+@pytest.mark.django_db
+def test_stats_admin_loads_in_dispatch_count_correct(admin_client):
+    LoadFactory(execute=False, history=False)
+    LoadFactory(execute=False, history=False)
+    LoadFactory(execute=True, history=False, drivers_paid=False)
+
+    response = admin_client.get(DASHBOARD_URL)
+    assert response.data["stats"]["loads_in_dispatch"] == 2
+
+
+@pytest.mark.django_db
+def test_stats_admin_executed_loads_count_correct(admin_client):
+    LoadFactory(execute=True, history=False, drivers_paid=False)
+    LoadFactory(execute=True, history=False, drivers_paid=False)
+    LoadFactory(execute=True, history=False, drivers_paid=True)  # excluded
+
+    response = admin_client.get(DASHBOARD_URL)
+    assert response.data["stats"]["executed_loads"] == 2
+
+
+@pytest.mark.django_db
+def test_stats_admin_invoiced_count_correct(admin_client):
+    LoadFactory(execute=True, history=False, drivers_paid=False, invoiced=True)
+    LoadFactory(execute=True, history=False, drivers_paid=False, invoiced=False)
+
+    response = admin_client.get(DASHBOARD_URL)
+    assert response.data["stats"]["invoiced"] == 1

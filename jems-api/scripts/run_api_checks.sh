@@ -2124,18 +2124,21 @@ assert_status "deleted conversation 404" "404" "$(code "$resp")"
 step "Dashboard: GET /api/v1/dashboard/"
 resp="$(get "/api/v1/dashboard/")"
 assert_status "dashboard ok" "200" "$(code "$resp")"
-assert_contains "dashboard has stats.loads_in_dispatch" "$(body "$resp")" '"loads_in_dispatch"'
+assert_contains "dashboard has stats" "$(body "$resp")" '"stats"'
 assert_contains "dashboard has expiration_alerts" "$(body "$resp")" '"expiration_alerts"'
-assert_contains "dashboard has counts.drivers_expiring" "$(body "$resp")" '"drivers_expiring"'
-assert_contains "dashboard has categories list" "$(body "$resp")" '"categories"'
+assert_contains "dashboard has maintenance_alerts" "$(body "$resp")" '"maintenance_alerts"'
+assert_contains "dashboard has counts" "$(body "$resp")" '"counts"'
 assert_contains "dashboard has trucks_maintenance_alerts" "$(body "$resp")" '"trucks_maintenance_alerts"'
 
-step "Dashboard: shape and invariants validation"
+step "Dashboard: shape and invariants validation (admin user sees all stats)"
 body "$resp" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 
-# Stats
+# Stats — admin user: all three fields are numbers (not null)
+assert d['stats']['loads_in_dispatch'] is not None, 'loads_in_dispatch is null for admin'
+assert d['stats']['executed_loads'] is not None, 'executed_loads is null for admin'
+assert d['stats']['invoiced'] is not None, 'invoiced is null for admin'
 assert isinstance(d['stats']['loads_in_dispatch'], int), 'loads_in_dispatch not int'
 assert isinstance(d['stats']['executed_loads'], int), 'executed_loads not int'
 assert isinstance(d['stats']['invoiced'], int), 'invoiced not int'
@@ -2147,7 +2150,27 @@ assert d['stats']['invoiced'] <= d['stats']['executed_loads'], \
 for key in ('drivers', 'trucks', 'trailers', 'categories'):
     assert isinstance(d['expiration_alerts'][key], list), f'{key} not list'
 
-# Counts — new field names
+# Maintenance alerts — 2 keys (trucks, trailers) with detail records
+assert isinstance(d['maintenance_alerts']['trucks'], list), 'maintenance_alerts.trucks not list'
+assert isinstance(d['maintenance_alerts']['trailers'], list), 'maintenance_alerts.trailers not list'
+
+# Validate maintenance alert record shape if any exist
+for record in d['maintenance_alerts']['trucks']:
+    assert 'truck_id' in record, 'truck maintenance record missing truck_id'
+    assert 'truck_number' in record, 'truck maintenance record missing truck_number'
+    assert 'maintenance_id' in record, 'truck maintenance record missing maintenance_id'
+    assert 'date' in record, 'truck maintenance record missing date'
+    assert 'detail' in record, 'truck maintenance record missing detail'
+    assert 'alert_date' in record, 'truck maintenance record missing alert_date'
+for record in d['maintenance_alerts']['trailers']:
+    assert 'trailer_id' in record, 'trailer maintenance record missing trailer_id'
+    assert 'trailer_number' in record, 'trailer maintenance record missing trailer_number'
+    assert 'maintenance_id' in record, 'trailer maintenance record missing maintenance_id'
+    assert 'date' in record, 'trailer maintenance record missing date'
+    assert 'detail' in record, 'trailer maintenance record missing detail'
+    assert 'alert_date' in record, 'trailer maintenance record missing alert_date'
+
+# Counts — all present
 for key in ('drivers_expiring', 'trucks_expiring', 'trucks_maintenance_alerts',
             'trailers_expiring', 'trailers_maintenance_alerts', 'categories_expiring'):
     assert isinstance(d['counts'][key], int), f'{key} not int'
@@ -2161,6 +2184,11 @@ assert d['counts']['trailers_expiring'] == len(d['expiration_alerts']['trailers'
     'trailers_expiring count mismatch'
 assert d['counts']['categories_expiring'] == len(d['expiration_alerts']['categories']), \
     'categories_expiring count mismatch'
+# Maintenance counts align with detail list lengths
+assert d['counts']['trucks_maintenance_alerts'] == len(d['maintenance_alerts']['trucks']), \
+    'trucks_maintenance_alerts count mismatch'
+assert d['counts']['trailers_maintenance_alerts'] == len(d['maintenance_alerts']['trailers']), \
+    'trailers_maintenance_alerts count mismatch'
 
 print('    OK: dashboard shape and invariants valid')
 "

@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from dateutil.relativedelta import relativedelta
 
@@ -7,6 +7,9 @@ from apps.accounting.models import Record
 from apps.drivers.models import Driver
 from apps.fleet.models import Trailer, TrailerMaintenance, Truck, TruckMaintenance
 from apps.loads.models import Load
+
+if TYPE_CHECKING:
+    from apps.users.models import User
 
 # Window for expiration alerts shown in detail lists (matches legacy 60-day rule)
 _ALERT_DAYS = 60
@@ -172,70 +175,135 @@ def _category_alerts(today: date) -> list[dict[str, Any]]:
     return result
 
 
-def _get_maintenance_alert_trucks(today: date) -> int:
-    """Count active trucks with at least one time-based maintenance alert due today."""
-    alerted_ids: set[int] = set()
-    records = TruckMaintenance.objects.filter(
-        truck__status=Truck.Status.ACTIVE,
-        time_alert=1,
-    ).select_related("truck")
+def _maintenance_detail_trucks(today: date) -> list[dict[str, Any]]:
+    """
+    Legacy parity (getAlertedWithMaintenance): for each active truck check only the
+    most-recent maintenance record (ordered date DESC). If its time-based alert has
+    triggered return one entry for that truck. One row per truck, never per record.
+    """
+    result: list[dict[str, Any]] = []
+
+    # Collect the most-recent record per truck using Python grouping so we avoid
+    # a subquery-per-truck. Records are already ordered -date by model Meta.
+    seen_trucks: set[int] = set()
+    records = (
+        TruckMaintenance.objects.filter(
+            truck__status=Truck.Status.ACTIVE,
+            time_alert=1,
+        )
+        .select_related("truck")
+        .order_by("-date", "-id")
+    )
 
     for record in records:
+        if record.truck_id in seen_trucks:
+            continue
+        seen_trucks.add(record.truck_id)
+
         if record.time_year == 0 and record.time_month == 0:
             continue
         alert_date = date.fromisoformat(str(record.date)) + relativedelta(
             years=record.time_year, months=record.time_month
         )
         if today >= alert_date:
-            alerted_ids.add(record.truck_id)
+            result.append(
+                {
+                    "truck_id": record.truck_id,
+                    "truck_number": record.truck.number,
+                    "maintenance_id": record.id,
+                    "date": record.date.isoformat(),
+                    "detail": record.detail,
+                    "alert_date": alert_date.isoformat(),
+                }
+            )
 
-    return len(alerted_ids)
+    result.sort(key=lambda r: r["alert_date"])
+    return result
+
+
+def _maintenance_detail_trailers(today: date) -> list[dict[str, Any]]:
+    """
+    Legacy parity (getAlertedWithMaintenance): for each active trailer check only the
+    most-recent maintenance record. One row per trailer, never per record.
+    """
+    result: list[dict[str, Any]] = []
+
+    seen_trailers: set[int] = set()
+    records = (
+        TrailerMaintenance.objects.filter(
+            trailer__status=Trailer.Status.ACTIVE,
+            time_alert=1,
+        )
+        .select_related("trailer")
+        .order_by("-date", "-id")
+    )
+
+    for record in records:
+        if record.trailer_id in seen_trailers:
+            continue
+        seen_trailers.add(record.trailer_id)
+
+        if record.time_year == 0 and record.time_month == 0:
+            continue
+        alert_date = date.fromisoformat(str(record.date)) + relativedelta(
+            years=record.time_year, months=record.time_month
+        )
+        if today >= alert_date:
+            result.append(
+                {
+                    "trailer_id": record.trailer_id,
+                    "trailer_number": record.trailer.number,
+                    "maintenance_id": record.id,
+                    "date": record.date.isoformat(),
+                    "detail": record.detail,
+                    "alert_date": alert_date.isoformat(),
+                }
+            )
+
+    result.sort(key=lambda r: r["alert_date"])
+    return result
+
+
+def _get_maintenance_alert_trucks(today: date) -> int:
+    return len(_maintenance_detail_trucks(today))
 
 
 def _get_maintenance_alert_trailers(today: date) -> int:
-    """Count active trailers with at least one time-based maintenance alert due today."""
-    alerted_ids: set[int] = set()
-    records = TrailerMaintenance.objects.filter(
-        trailer__status=Trailer.Status.ACTIVE,
-        time_alert=1,
-    ).select_related("trailer")
-
-    for record in records:
-        if record.time_year == 0 and record.time_month == 0:
-            continue
-        alert_date = date.fromisoformat(str(record.date)) + relativedelta(
-            years=record.time_year, months=record.time_month
-        )
-        if today >= alert_date:
-            alerted_ids.add(record.trailer_id)
-
-    return len(alerted_ids)
+    return len(_maintenance_detail_trailers(today))
 
 
-def get_dashboard_data() -> dict[str, Any]:
+def get_dashboard_data(user: "User") -> dict[str, Any]:
     today = date.today()
 
-    # --- Load stats (legacy parity: uses execute/history/drivers_paid flags) ---
-    # "In dispatch" = not yet executed and not archived
-    loads_in_dispatch = Load.objects.filter(
-        execute=False,
-        history=False,
-    ).count()
+    # --- Load stats (role-based, legacy parity) ---
+    # Legacy: loads_in_dispatch visible to admin OR dispatcher (_isAD)
+    #         executed_loads + invoiced visible to admin only
+    is_admin = user.is_staff or user.is_superuser
+    is_dispatcher = user.is_dispatcher
 
-    # "Executed" = marked executed, not archived, driver not yet paid
-    executed_loads = Load.objects.filter(
-        execute=True,
-        history=False,
-        drivers_paid=False,
-    ).count()
+    loads_in_dispatch: int | None = None
+    executed_loads: int | None = None
+    invoiced: int | None = None
 
-    # "Invoiced" = subset of executed that also have an invoice
-    invoiced = Load.objects.filter(
-        execute=True,
-        history=False,
-        drivers_paid=False,
-        invoiced=True,
-    ).count()
+    if is_admin or is_dispatcher:
+        loads_in_dispatch = Load.objects.filter(
+            execute=False,
+            history=False,
+        ).count()
+
+    if is_admin:
+        executed_loads = Load.objects.filter(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+        ).count()
+
+        invoiced = Load.objects.filter(
+            execute=True,
+            history=False,
+            drivers_paid=False,
+            invoiced=True,
+        ).count()
 
     # --- Expiration alerts ---
     driver_alerts = _driver_alerts(today)
@@ -243,9 +311,9 @@ def get_dashboard_data() -> dict[str, Any]:
     trailer_alerts = _trailer_alerts(today)
     category_alerts = _category_alerts(today)
 
-    # --- Maintenance alerts ---
-    trucks_maintenance_alerts = _get_maintenance_alert_trucks(today)
-    trailers_maintenance_alerts = _get_maintenance_alert_trailers(today)
+    # --- Maintenance alerts (detail list + count) ---
+    truck_maintenance = _maintenance_detail_trucks(today)
+    trailer_maintenance = _maintenance_detail_trailers(today)
 
     return {
         "stats": {
@@ -259,13 +327,17 @@ def get_dashboard_data() -> dict[str, Any]:
             "trailers": trailer_alerts,
             "categories": category_alerts,
         },
+        "maintenance_alerts": {
+            "trucks": truck_maintenance,
+            "trailers": trailer_maintenance,
+        },
         "counts": {
             # Badge count = length of 60-day alert list (matches legacy behavior)
             "drivers_expiring": len(driver_alerts),
             "trucks_expiring": len(truck_alerts),
-            "trucks_maintenance_alerts": trucks_maintenance_alerts,
+            "trucks_maintenance_alerts": len(truck_maintenance),
             "trailers_expiring": len(trailer_alerts),
-            "trailers_maintenance_alerts": trailers_maintenance_alerts,
+            "trailers_maintenance_alerts": len(trailer_maintenance),
             "categories_expiring": len(category_alerts),
         },
     }
