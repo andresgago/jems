@@ -53,6 +53,13 @@ const MOCK_DATA = {
             days_until: -25,
             expired: true,
           },
+          {
+            type: 'record',
+            label: 'Record',
+            expires_on: '2026-06-22',
+            days_until: -4,
+            expired: true,
+          },
         ],
       },
     ],
@@ -86,12 +93,33 @@ const MOCK_DATA = {
         ],
       },
     ],
+    categories: [
+      {
+        id: 42,
+        name: 'OIL001 - Oil Change / Truck #101',
+        category_code: 'OIL001',
+        category_name: 'Oil Change',
+        truck_number: '101',
+        trailer_number: null,
+        alerts: [
+          {
+            type: 'category',
+            label: 'Category',
+            expires_on: '2026-07-05',
+            days_until: 9,
+            expired: false,
+          },
+        ],
+      },
+    ],
   },
   counts: {
     drivers_expiring: 2,
     trucks_expiring: 1,
-    trucks_in_maintenance: 4,
+    trucks_maintenance_alerts: 4,
     trailers_expiring: 1,
+    trailers_maintenance_alerts: 2,
+    categories_expiring: 1,
   },
 };
 
@@ -109,31 +137,51 @@ beforeEach(() => {
   useDashboard.mockReturnValue({ data: MOCK_DATA, loading: false, error: null, reload: vi.fn() });
 });
 
+// ---------------------------------------------------------------------------
+// Stat cards
+// ---------------------------------------------------------------------------
+
 describe('HomePage — stat cards', () => {
-  it('renders the In Dispatch stat', () => {
+  it('renders Loads in Dispatch label and value', () => {
     renderPage();
+    expect(screen.getByText('Loads in Dispatch')).toBeInTheDocument();
     expect(screen.getByText('25')).toBeInTheDocument();
-    expect(screen.getByText('In Dispatch')).toBeInTheDocument();
   });
 
-  it('renders the Executed stat', () => {
+  it('renders Executed Loads label and value', () => {
     renderPage();
+    expect(screen.getByText('Executed Loads')).toBeInTheDocument();
     expect(screen.getByText('63')).toBeInTheDocument();
-    expect(screen.getByText('Executed')).toBeInTheDocument();
   });
 
-  it('renders the Invoiced stat', () => {
+  it('renders Invoiced label and value', () => {
     renderPage();
-    expect(screen.getByText('53')).toBeInTheDocument();
     expect(screen.getByText('Invoiced')).toBeInTheDocument();
+    expect(screen.getByText('53')).toBeInTheDocument();
   });
 
-  it('renders the invoiced percentage of executed loads', () => {
-    // 53 / 63 = 84%
+  it('renders invoiced percentage of executed loads', () => {
+    // 53 / 63 ≈ 84%
     renderPage();
     expect(screen.getByText('84% of executed Loads')).toBeInTheDocument();
   });
+
+  it('omits percentage when executed_loads is 0', () => {
+    useDashboard.mockReturnValue({
+      data: {
+        ...MOCK_DATA,
+        stats: { loads_in_dispatch: 0, executed_loads: 0, invoiced: 0 },
+      },
+      loading: false,
+    });
+    renderPage();
+    expect(screen.queryByText(/% of executed Loads/)).not.toBeInTheDocument();
+  });
 });
+
+// ---------------------------------------------------------------------------
+// Drivers tab (default)
+// ---------------------------------------------------------------------------
 
 describe('HomePage — driver tab (default)', () => {
   it('shows Drivers tab active by default', () => {
@@ -148,41 +196,60 @@ describe('HomePage — driver tab (default)', () => {
     expect(screen.getByText('John Doe')).toBeInTheDocument();
   });
 
-  it('shows badge count on Drivers tab', () => {
+  it('shows drivers badge count', () => {
     renderPage();
-    expect(screen.getByText('2')).toBeInTheDocument();
+    const driversBtn = screen.getByRole('button', { name: /Drivers/i });
+    expect(driversBtn.querySelector('.badge')).toHaveTextContent('2');
   });
 
-  it('shows warning icon for upcoming expiration (not expired)', () => {
+  it('shows warning icon for upcoming expiration', () => {
     renderPage();
-    // Runell Driver has expired=false alerts — warning triangle class
-    const warnings = document.querySelectorAll('.bi-exclamation-triangle-fill.text-warning');
+    const warnings = document.querySelectorAll(
+      '.bi-exclamation-triangle-fill.text-warning'
+    );
     expect(warnings.length).toBeGreaterThan(0);
   });
 
   it('shows danger icon for already expired alert', () => {
     renderPage();
-    // John Doe has expired=true — danger circle class
-    const dangers = document.querySelectorAll('.bi-exclamation-circle-fill.text-danger');
+    const dangers = document.querySelectorAll(
+      '.bi-exclamation-circle-fill.text-danger'
+    );
     expect(dangers.length).toBeGreaterThan(0);
   });
 
-  it('shows text-danger class on expired alert label', () => {
+  it('shows text-danger on expired alert label', () => {
     renderPage();
-    // John Doe License — expired: true → label should have text-danger class
     const expiredLabels = document.querySelectorAll('span.text-danger');
-    const hasExpiredLabel = Array.from(expiredLabels).some(
+    const hasExpiredLicense = Array.from(expiredLabels).some(
       (el) => el.textContent === 'License'
     );
-    expect(hasExpiredLabel).toBe(true);
+    expect(hasExpiredLicense).toBe(true);
   });
 
-  it('shows text-warning class on upcoming alert label', () => {
+  it('renders "Record" label for MVR/AR/D&A document (legacy parity)', () => {
     renderPage();
-    const warningLabels = document.querySelectorAll('span.text-warning');
-    expect(warningLabels.length).toBeGreaterThan(0);
+    const expiredLabels = document.querySelectorAll('span.text-danger');
+    const hasRecord = Array.from(expiredLabels).some(
+      (el) => el.textContent === 'Record'
+    );
+    expect(hasRecord).toBe(true);
+  });
+
+  it('shows days-ago text for expired alerts', () => {
+    renderPage();
+    expect(screen.getByText(/expired 25d ago/)).toBeInTheDocument();
+  });
+
+  it('shows days-remaining text for upcoming alerts', () => {
+    renderPage();
+    expect(screen.getByText(/\(15d\)/)).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tab switching
+// ---------------------------------------------------------------------------
 
 describe('HomePage — tab switching', () => {
   it('switches to Trucks tab and shows truck alerts', () => {
@@ -197,12 +264,111 @@ describe('HomePage — tab switching', () => {
     expect(screen.getByText('Trailer #200')).toBeInTheDocument();
   });
 
+  it('switches to Categories tab and shows category alerts', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
+    expect(screen.getByText('OIL001 - Oil Change / Truck #101')).toBeInTheDocument();
+  });
+
   it('hides driver list when Trucks tab is active', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
     expect(screen.queryByText('Runell Driver')).not.toBeInTheDocument();
   });
+
+  it('hides driver list when Categories tab is active', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
+    expect(screen.queryByText('Runell Driver')).not.toBeInTheDocument();
+  });
 });
+
+// ---------------------------------------------------------------------------
+// Maintenance badges
+// ---------------------------------------------------------------------------
+
+describe('HomePage — maintenance alert badges', () => {
+  it('renders wrench badge on Trucks tab for maintenance alerts', () => {
+    renderPage();
+    const truckBtn = screen.getByRole('button', { name: /Trucks/i });
+    const wrenchIcons = truckBtn.querySelectorAll('.bi-wrench-adjustable');
+    expect(wrenchIcons.length).toBeGreaterThan(0);
+  });
+
+  it('renders wrench badge on Trailers tab for maintenance alerts', () => {
+    renderPage();
+    const trailerBtn = screen.getByRole('button', { name: /Trailers/i });
+    const wrenchIcons = trailerBtn.querySelectorAll('.bi-wrench-adjustable');
+    expect(wrenchIcons.length).toBeGreaterThan(0);
+  });
+
+  it('does not render wrench badge when maintenance count is 0', () => {
+    useDashboard.mockReturnValue({
+      data: {
+        ...MOCK_DATA,
+        counts: {
+          ...MOCK_DATA.counts,
+          trucks_maintenance_alerts: 0,
+          trailers_maintenance_alerts: 0,
+        },
+      },
+      loading: false,
+    });
+    renderPage();
+    // Wrench icon badges should not appear when count is 0
+    const wrenchIcons = document.querySelectorAll('.bi-wrench-adjustable');
+    expect(wrenchIcons.length).toBe(0);
+  });
+
+  it('does not render Drivers or Categories wrench badge (no maintenance)', () => {
+    renderPage();
+    const driversBtn = screen.getByRole('button', { name: /Drivers/i });
+    expect(driversBtn.querySelectorAll('.bi-wrench-adjustable').length).toBe(0);
+    const categoriesBtn = screen.getByRole('button', { name: /Categories/i });
+    expect(categoriesBtn.querySelectorAll('.bi-wrench-adjustable').length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Categories tab
+// ---------------------------------------------------------------------------
+
+describe('HomePage — categories tab', () => {
+  it('renders Categories tab with expiration badge', () => {
+    renderPage();
+    const categoriesBtn = screen.getByRole('button', { name: /Categories/i });
+    expect(categoriesBtn.querySelector('.badge')).toBeInTheDocument();
+  });
+
+  it('shows "No expiration alerts" when categories list is empty', () => {
+    useDashboard.mockReturnValue({
+      data: {
+        ...MOCK_DATA,
+        expiration_alerts: {
+          ...MOCK_DATA.expiration_alerts,
+          categories: [],
+        },
+        counts: { ...MOCK_DATA.counts, categories_expiring: 0 },
+      },
+      loading: false,
+    });
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
+    expect(screen.getByText('No expiration alerts.')).toBeInTheDocument();
+  });
+
+  it('does not show a link button for categories (no detail page yet)', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Categories/i }));
+    // The category row should NOT have an arrow-right link button
+    const arrowLinks = document.querySelectorAll('a .bi-arrow-right-circle');
+    expect(arrowLinks.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// My work Calendar link
+// ---------------------------------------------------------------------------
 
 describe('HomePage — My work Calendar link', () => {
   it('renders a link to /dispatch/my-calendar', () => {
@@ -212,8 +378,12 @@ describe('HomePage — My work Calendar link', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Loading state
+// ---------------------------------------------------------------------------
+
 describe('HomePage — loading state', () => {
-  it('shows a spinner while loading', () => {
+  it('shows spinner while loading', () => {
     useDashboard.mockReturnValue({ data: null, loading: true, error: null, reload: vi.fn() });
     renderPage();
     expect(document.querySelector('.spinner-border')).toBeInTheDocument();
@@ -222,6 +392,37 @@ describe('HomePage — loading state', () => {
   it('does not show stat cards while loading', () => {
     useDashboard.mockReturnValue({ data: null, loading: true, error: null, reload: vi.fn() });
     renderPage();
-    expect(screen.queryByText('In Dispatch')).not.toBeInTheDocument();
+    expect(screen.queryByText('Loads in Dispatch')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Empty states
+// ---------------------------------------------------------------------------
+
+describe('HomePage — empty alert states', () => {
+  it('shows "No expiration alerts." when drivers list is empty', () => {
+    useDashboard.mockReturnValue({
+      data: {
+        ...MOCK_DATA,
+        expiration_alerts: { ...MOCK_DATA.expiration_alerts, drivers: [] },
+      },
+      loading: false,
+    });
+    renderPage();
+    expect(screen.getByText('No expiration alerts.')).toBeInTheDocument();
+  });
+
+  it('shows "No expiration alerts." on Trucks tab when empty', () => {
+    useDashboard.mockReturnValue({
+      data: {
+        ...MOCK_DATA,
+        expiration_alerts: { ...MOCK_DATA.expiration_alerts, trucks: [] },
+      },
+      loading: false,
+    });
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Trucks/i }));
+    expect(screen.getByText('No expiration alerts.')).toBeInTheDocument();
   });
 });

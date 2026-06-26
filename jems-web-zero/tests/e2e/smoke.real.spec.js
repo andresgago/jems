@@ -159,18 +159,33 @@ test('dashboard endpoint returns correct shape (real)', async ({ page }) => {
   expect(data).toHaveProperty('expiration_alerts')
   expect(data).toHaveProperty('counts')
 
+  // Stats shape
   expect(typeof data.stats.loads_in_dispatch).toBe('number')
   expect(typeof data.stats.executed_loads).toBe('number')
   expect(typeof data.stats.invoiced).toBe('number')
 
+  // invoiced is always ≤ executed_loads (subset filter)
+  expect(data.stats.invoiced).toBeLessThanOrEqual(data.stats.executed_loads)
+
+  // Expiration alerts shape — 4 keys including categories
   expect(Array.isArray(data.expiration_alerts.drivers)).toBeTruthy()
   expect(Array.isArray(data.expiration_alerts.trucks)).toBeTruthy()
   expect(Array.isArray(data.expiration_alerts.trailers)).toBeTruthy()
+  expect(Array.isArray(data.expiration_alerts.categories)).toBeTruthy()
 
+  // Counts shape — renamed trucks_in_maintenance → trucks_maintenance_alerts
   expect(typeof data.counts.drivers_expiring).toBe('number')
   expect(typeof data.counts.trucks_expiring).toBe('number')
-  expect(typeof data.counts.trucks_in_maintenance).toBe('number')
+  expect(typeof data.counts.trucks_maintenance_alerts).toBe('number')
   expect(typeof data.counts.trailers_expiring).toBe('number')
+  expect(typeof data.counts.trailers_maintenance_alerts).toBe('number')
+  expect(typeof data.counts.categories_expiring).toBe('number')
+
+  // counts align with list lengths
+  expect(data.counts.drivers_expiring).toBe(data.expiration_alerts.drivers.length)
+  expect(data.counts.trucks_expiring).toBe(data.expiration_alerts.trucks.length)
+  expect(data.counts.trailers_expiring).toBe(data.expiration_alerts.trailers.length)
+  expect(data.counts.categories_expiring).toBe(data.expiration_alerts.categories.length)
 })
 
 // ── Trailer types ─────────────────────────────────────────────────────────────

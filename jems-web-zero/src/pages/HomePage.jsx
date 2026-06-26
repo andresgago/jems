@@ -3,10 +3,22 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
 import { useDashboard } from '../hooks/useDashboard';
 
+// Tabs with their expiration-count key and optional maintenance-alert key
 const TABS = [
   { key: 'drivers', label: 'Drivers', countKey: 'drivers_expiring' },
-  { key: 'trucks', label: 'Trucks', countKey: 'trucks_expiring' },
-  { key: 'trailers', label: 'Trailers', countKey: 'trailers_expiring' },
+  {
+    key: 'trucks',
+    label: 'Trucks',
+    countKey: 'trucks_expiring',
+    maintenanceKey: 'trucks_maintenance_alerts',
+  },
+  {
+    key: 'trailers',
+    label: 'Trailers',
+    countKey: 'trailers_expiring',
+    maintenanceKey: 'trailers_maintenance_alerts',
+  },
+  { key: 'categories', label: 'Categories', countKey: 'categories_expiring' },
 ];
 
 function AlertIcon({ expired }) {
@@ -16,14 +28,32 @@ function AlertIcon({ expired }) {
   return <i className="bi bi-exclamation-triangle-fill text-warning me-1" />;
 }
 
-function AlertRow({ entity, entityPath }) {
+function EntityIcon({ tabKey }) {
+  if (tabKey === 'drivers') {
+    return <i className="bi bi-person-circle text-danger fs-3" />;
+  }
+  if (tabKey === 'trucks') {
+    return <i className="bi bi-truck text-secondary fs-3" />;
+  }
+  if (tabKey === 'trailers') {
+    return <i className="bi bi-box-seam text-secondary fs-3" />;
+  }
+  // categories
+  return <i className="bi bi-tag-fill text-secondary fs-3" />;
+}
+
+function AlertRow({ entity, entityPath, tabKey }) {
   return (
     <div className="d-flex align-items-center justify-content-between py-2 border-bottom">
       <div className="d-flex align-items-center gap-2">
-        <i className="bi bi-person-circle text-danger fs-3" />
+        <EntityIcon tabKey={tabKey} />
         <div>
           <div className="fw-semibold">
-            <Link to={entityPath}>{entity.name}</Link>
+            {entityPath ? (
+              <Link to={entityPath}>{entity.name}</Link>
+            ) : (
+              entity.name
+            )}
           </div>
           <div className="d-flex flex-wrap gap-2 mt-1">
             {entity.alerts.map((alert) => (
@@ -42,23 +72,40 @@ function AlertRow({ entity, entityPath }) {
           </div>
         </div>
       </div>
-      <Link to={entityPath} className="btn btn-sm btn-teal ms-2">
-        <i className="bi bi-arrow-right-circle" />
-      </Link>
+      {entityPath && (
+        <Link to={entityPath} className="btn btn-sm btn-teal ms-2">
+          <i className="bi bi-arrow-right-circle" />
+        </Link>
+      )}
     </div>
   );
 }
 
-function AlertList({ entities, buildPath }) {
+function AlertList({ entities, buildPath, tabKey }) {
   if (!entities || entities.length === 0) {
     return <p className="text-muted mt-3">No expiration alerts.</p>;
   }
   return (
     <div>
       {entities.map((entity) => (
-        <AlertRow key={entity.id} entity={entity} entityPath={buildPath(entity.id)} />
+        <AlertRow
+          key={entity.id}
+          entity={entity}
+          entityPath={buildPath ? buildPath(entity.id) : null}
+          tabKey={tabKey}
+        />
       ))}
     </div>
+  );
+}
+
+function TabBadge({ count, icon }) {
+  if (!count || count <= 0) return null;
+  return (
+    <span className="badge bg-danger ms-1">
+      {icon && <i className={`bi ${icon} me-1`} />}
+      {count}
+    </span>
   );
 }
 
@@ -70,7 +117,10 @@ function StatCard({ label, value, bg, pct }) {
         <div className="display-6 fw-bold">{value ?? '—'}</div>
         {pct != null && (
           <>
-            <div className="progress mt-2" style={{ height: '4px', backgroundColor: 'rgba(255,255,255,0.3)' }}>
+            <div
+              className="progress mt-2"
+              style={{ height: '4px', backgroundColor: 'rgba(255,255,255,0.3)' }}
+            >
               <div
                 className="progress-bar bg-white"
                 style={{ width: `${pct}%` }}
@@ -88,6 +138,13 @@ function StatCard({ label, value, bg, pct }) {
   );
 }
 
+const TAB_PATHS = {
+  drivers: (id) => `/drivers/${id}`,
+  trucks: (id) => `/fleet/trucks/${id}`,
+  trailers: (id) => `/fleet/trailers/${id}`,
+  categories: null, // no dedicated detail page yet
+};
+
 export default function HomePage() {
   const { user } = useAuth();
   const { data, loading } = useDashboard();
@@ -103,38 +160,20 @@ export default function HomePage() {
       : null;
 
   function renderTabContent() {
-    if (activeTab === 'drivers') {
-      return (
-        <AlertList
-          entities={alerts.drivers}
-          buildPath={(id) => `/drivers/${id}`}
-        />
-      );
-    }
-    if (activeTab === 'trucks') {
-      return (
-        <AlertList
-          entities={alerts.trucks}
-          buildPath={(id) => `/fleet/trucks/${id}`}
-        />
-      );
-    }
-    if (activeTab === 'trailers') {
-      return (
-        <AlertList
-          entities={alerts.trailers}
-          buildPath={(id) => `/fleet/trailers/${id}`}
-        />
-      );
-    }
-    return null;
+    const buildPath = TAB_PATHS[activeTab];
+    const entities = alerts[activeTab] ?? [];
+    return (
+      <AlertList
+        entities={entities}
+        buildPath={buildPath}
+        tabKey={activeTab}
+      />
+    );
   }
 
   return (
     <div>
-      <h5 className="mb-3">
-        Welcome, {user?.full_name || user?.username}
-      </h5>
+      <h5 className="mb-3">Welcome, {user?.full_name || user?.username}</h5>
 
       {loading && (
         <div className="text-center py-5">
@@ -157,10 +196,12 @@ export default function HomePage() {
                         onClick={() => setActiveTab(tab.key)}
                       >
                         {tab.label}
-                        {counts[tab.countKey] > 0 && (
-                          <span className="badge bg-danger ms-1">
-                            {counts[tab.countKey]}
-                          </span>
+                        <TabBadge count={counts[tab.countKey]} />
+                        {tab.maintenanceKey && (
+                          <TabBadge
+                            count={counts[tab.maintenanceKey]}
+                            icon="bi-wrench-adjustable"
+                          />
                         )}
                       </button>
                     </li>
@@ -174,6 +215,10 @@ export default function HomePage() {
                 </ul>
               </div>
               <div className="card-body">
+                <h6 className="text-muted mb-3">
+                  <i className="bi bi-calendar-event me-1" />
+                  Expiration Dates Alerts
+                </h6>
                 {renderTabContent()}
               </div>
             </div>
@@ -182,12 +227,12 @@ export default function HomePage() {
           {/* Right column: stat cards */}
           <div className="col-lg-3">
             <StatCard
-              label="In Dispatch"
+              label="Loads in Dispatch"
               value={stats.loads_in_dispatch}
               bg="bg-primary"
             />
             <StatCard
-              label="Executed"
+              label="Executed Loads"
               value={stats.executed_loads}
               bg="bg-success"
             />

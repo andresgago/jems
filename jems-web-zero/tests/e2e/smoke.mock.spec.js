@@ -57,13 +57,42 @@ const DASHBOARD = {
         name: 'Driver: Runell',
         alerts: [
           { type: 'license', label: 'License', expires_on: '2026-07-11', days_until: 15, expired: false },
+          { type: 'record', label: 'Record', expires_on: '2026-06-22', days_until: -4, expired: true },
         ],
       },
     ],
-    trucks: [],
+    trucks: [
+      {
+        id: 3,
+        name: 'Truck #101',
+        alerts: [
+          { type: 'avi', label: 'AVI', expires_on: '2026-07-01', days_until: 5, expired: false },
+        ],
+      },
+    ],
     trailers: [],
+    categories: [
+      {
+        id: 42,
+        name: 'OIL001 - Oil Change / Truck #101',
+        category_code: 'OIL001',
+        category_name: 'Oil Change',
+        truck_number: '101',
+        trailer_number: null,
+        alerts: [
+          { type: 'category', label: 'Category', expires_on: '2026-07-05', days_until: 9, expired: false },
+        ],
+      },
+    ],
   },
-  counts: { drivers_expiring: 1, trucks_expiring: 0, trucks_in_maintenance: 0, trailers_expiring: 0 },
+  counts: {
+    drivers_expiring: 1,
+    trucks_expiring: 1,
+    trucks_maintenance_alerts: 2,
+    trailers_expiring: 0,
+    trailers_maintenance_alerts: 0,
+    categories_expiring: 1,
+  },
 }
 
 const TRAILER_TYPES = [
@@ -504,9 +533,9 @@ test('successful login redirects away from /login', async ({ page }) => {
 test('dashboard shows stat cards after login', async ({ page }) => {
   await withAuth(page)
   await page.goto('/')
-  await expect(page.getByText('In Dispatch', { exact: true })).toBeVisible()
+  await expect(page.getByText('Loads in Dispatch', { exact: true })).toBeVisible()
   await expect(page.locator('.card.bg-primary .display-6')).toHaveText('25')
-  await expect(page.getByText('Executed', { exact: true })).toBeVisible()
+  await expect(page.getByText('Executed Loads', { exact: true })).toBeVisible()
   await expect(page.locator('.card.bg-success .display-6')).toHaveText('63')
   await expect(page.getByText('Invoiced', { exact: true })).toBeVisible()
   await expect(page.locator('.card.bg-info .display-6')).toHaveText('53')
@@ -525,13 +554,52 @@ test('dashboard Drivers tab is active by default and shows alert', async ({ page
   await expect(page.getByText('Driver: Runell')).toBeVisible()
 })
 
+test('dashboard drivers tab shows expired Record label (legacy parity)', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  // The AR/MVR/D&A document is labelled "Record" (matching legacy recordexpiration field)
+  // Scope to the alert list to avoid matching the navbar "My Records of Payments" item
+  await expect(page.locator('.card-body span.text-danger', { hasText: 'Record' }).first()).toBeVisible()
+})
+
 test('dashboard drivers tab has expiring badge count', async ({ page }) => {
   await withAuth(page)
   await page.goto('/')
   // badge inside the Drivers nav button
   const driversTab = page.getByRole('button', { name: /Drivers/i })
   await expect(driversTab).toBeVisible()
-  await expect(driversTab.locator('.badge')).toHaveText('1')
+  await expect(driversTab.locator('.badge').first()).toHaveText('1')
+})
+
+test('dashboard Trucks tab badge shows expiring count', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  const trucksTab = page.getByRole('button', { name: /Trucks/i })
+  await expect(trucksTab.locator('.badge').first()).toHaveText('1')
+})
+
+test('dashboard Trucks tab shows wrench badge for maintenance alerts', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  const trucksTab = page.getByRole('button', { name: /Trucks/i })
+  // Second badge has wrench icon
+  const badges = trucksTab.locator('.badge')
+  await expect(badges).toHaveCount(2)
+  await expect(badges.nth(1).locator('.bi-wrench-adjustable')).toBeVisible()
+})
+
+test('dashboard Categories tab shows category expiration alert', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /Categories/i }).click()
+  await expect(page.getByText('OIL001 - Oil Change / Truck #101')).toBeVisible()
+})
+
+test('dashboard Categories tab has expiring badge count', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/')
+  const categoriesTab = page.getByRole('button', { name: /Categories/i })
+  await expect(categoriesTab.locator('.badge').first()).toHaveText('1')
 })
 
 test('dashboard has My work Calendar link pointing to /dispatch/my-calendar', async ({ page }) => {
