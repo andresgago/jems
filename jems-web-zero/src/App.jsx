@@ -51,6 +51,13 @@ import IftaPage from './pages/integrations/IftaPage';
 import SendPacketPage from './pages/tools/SendPacketPage';
 import BrokersStatusPage from './pages/tools/BrokersStatusPage';
 import DriversLastLoadsPage from './pages/tools/DriversLastLoadsPage';
+import FinancialReportPage from './pages/reports/FinancialReportPage';
+import InvoiceReportPage from './pages/reports/InvoiceReportPage';
+import IftaReportPage from './pages/reports/IftaReportPage';
+import TaxReportPage from './pages/reports/TaxReportPage';
+import CategoryTrackingReportPage from './pages/reports/CategoryTrackingReportPage';
+import BrokerSummaryReportPage from './pages/reports/BrokerSummaryReportPage';
+import ShipperReceiverReportPage from './pages/reports/ShipperReceiverReportPage';
 
 export function RequireAnyPermission({ permissions, children }) {
   const { haveAnyPermission } = useAuth();
@@ -150,15 +157,15 @@ function AppRoutes() {
                 <Route path="rtl/trucks/:id" element={<RtlTruckDetailPage />} />
                 <Route path="rtl/ifta" element={<IftaPage />} />
                 {/* Reports */}
-                <Route path="reports/financial" element={<div><h5>Profit and Loss</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="reports/invoice" element={<div><h5>Profit and Loss By Invoices</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="reports/financial" element={<FinancialReportPage />} />
+                <Route path="reports/invoice" element={<InvoiceReportPage />} />
                 <Route path="reports/balance-sheet" element={<div><h5>Balance Sheet</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="reports/company-invoices" element={<div><h5>Invoice Analysis</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="reports/ifta" element={<div><h5>IFTA Report</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="reports/tax" element={<div><h5>Tax Report</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="reports/category-tracking" element={<div><h5>Category Tracking</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="reports/broker-summary" element={<div><h5>Broker Summary</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="reports/shipper-receiver" element={<div><h5>Deliveries from Shipper to Receiver</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="reports/ifta" element={<IftaReportPage />} />
+                <Route path="reports/tax" element={<TaxReportPage />} />
+                <Route path="reports/category-tracking" element={<CategoryTrackingReportPage />} />
+                <Route path="reports/broker-summary" element={<BrokerSummaryReportPage />} />
+                <Route path="reports/shipper-receiver" element={<ShipperReceiverReportPage />} />
                 {/* Settings */}
                 <Route path="settings/carriers" element={<div><h5>Carriers</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/eld" element={<div><h5>ELD</h5><p className="text-muted">Coming soon.</p></div>} />

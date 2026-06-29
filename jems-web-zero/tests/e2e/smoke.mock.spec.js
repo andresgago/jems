@@ -454,6 +454,69 @@ const RTL_TRUCKS = [
 
 const RTL_TRUCK_DETAIL = { ...RTL_TRUCKS[0] }
 
+// ── Report fixtures ─────────────────────────────────────────────────────────
+
+const REPORT_FINANCIAL = {
+  revenues: [{ code: '90010', name: 'Freight Income', amount: 50000 }],
+  expenses: [{ code: '80050', name: 'Driver Pay', amount: -15000 }],
+  total_revenues: 50000,
+  total_expenses: -15000,
+  net_profit: 35000,
+}
+
+const REPORT_INVOICE = {
+  date_begin: '2024-01-01',
+  date_end: '2024-12-31',
+  invoices: [{ id: 1, number: 'INV-001' }],
+  revenues: [{ account_code: '90010', account_name: 'Freight Income', amount: 50000, details: {} }],
+  expenses: [{ account_code: '80050', account_name: 'Driver Pay', amount: -15000, details: {} }],
+  total_revenues: 50000,
+  total_expenses: -15000,
+  net_profit: 35000,
+}
+
+const REPORT_IFTA = {
+  date_begin: '2024-01-01',
+  date_end: '2024-12-31',
+  rows: [
+    { state_name: 'North Carolina', state_abbreviation: 'NC', gallons: 300.5, cards: [{ card_number: 'CARD-01', gallons: 300.5 }] },
+  ],
+  total_gallons: 300.5,
+}
+
+const REPORT_TAX = {
+  date_begin: '2024-01-01',
+  date_end: '2024-12-31',
+  option: 0,
+  drivers: {
+    rows: [{ id: 1, name: 'John Doe', email: 'john@test.com', address: '1 Main', ssn: '***-1234', status: 1, tax: 1200 }],
+    total_tax: 1200,
+  },
+  owners: { rows: [], total_tax: 0 },
+  dispatchers: { rows: [], total_tax: 0 },
+}
+
+const REPORT_CATEGORY = {
+  rows: [{ id: 1, date: '2024-05-01', description: 'Oil change', account: 'Vehicle Maintenance', entity: 'TRUCK-01', amount: 250, quantity: 1 }],
+  total_amount: 250,
+  total_quantity: 1,
+}
+
+const REPORT_BROKER_SUMMARY = {
+  year: 2024,
+  option: 0,
+  brokers: [{ id: 1, name: 'ACME Broker', revenue: 50000, prior_revenue: 40000 }],
+  total_revenue: 50000,
+  total_prior_revenue: 40000,
+}
+
+const REPORT_SHIPPER_RECEIVER = {
+  year: 2024,
+  option: 0,
+  pairs: [{ shipper: 'Shipper A', receiver: 'Receiver B', total: 12 }],
+  total_deliveries: 12,
+}
+
 const RTL_IFTA = [
   {
     id: 1, rtl_id: 'ifta-001', company_id: 'comp-1',
@@ -587,6 +650,14 @@ async function mockApi(page) {
     if (/\/dispatch\/invoices\/hour\/\d+\/$/.test(pathname) && method === 'GET') return json(HOUR_INVOICE_DETAIL)
     if (/\/dispatch\/invoices\/hour\/\d+\/amount\/$/.test(pathname)) return json({ amount: '80.00' })
     if (pathname.endsWith('/dashboard/') && method === 'GET') return json(DASHBOARD)
+    // Reports
+    if (pathname.endsWith('/reports/financial/') && method === 'GET') return json(REPORT_FINANCIAL)
+    if (pathname.endsWith('/reports/invoice/') && method === 'GET') return json(REPORT_INVOICE)
+    if (pathname.endsWith('/reports/ifta/') && method === 'GET') return json(REPORT_IFTA)
+    if (pathname.endsWith('/reports/tax/') && method === 'GET') return json(REPORT_TAX)
+    if (pathname.endsWith('/reports/category-tracking/') && method === 'GET') return json(REPORT_CATEGORY)
+    if (pathname.endsWith('/reports/broker-summary/') && method === 'GET') return json(REPORT_BROKER_SUMMARY)
+    if (pathname.endsWith('/reports/shipper-receiver/') && method === 'GET') return json(REPORT_SHIPPER_RECEIVER)
 
     throw new Error(`Unmocked API call: ${method} ${pathname}${url.search}`)
   })
@@ -2265,4 +2336,75 @@ test('Drivers Last Loads page: Update location button calls fetch-and-sync', asy
   page.once('dialog', (dialog) => dialog.accept()) // success alert
   await expect(page.getByRole('button', { name: /update location/i })).toBeVisible()
   expect(syncCalled).toBe(true)
+})
+
+// ── Reports ────────────────────────────────────────────────────────────────
+
+test('Financial Report page: shows title and run button', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/financial')
+  await expect(page.getByRole('heading', { name: 'Profit and Loss' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /run report/i })).toBeVisible()
+})
+
+test('Financial Report page: shows revenue and expense tables after run', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/financial')
+  await page.getByRole('button', { name: /run report/i }).click()
+  await expect(page.getByText('Freight Income')).toBeVisible()
+  await expect(page.getByText('Driver Pay')).toBeVisible()
+  await expect(page.getByText('Net Profit')).toBeVisible()
+})
+
+test('Invoice Report page: shows title and account rows after run', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/invoice')
+  await expect(page.getByRole('heading', { name: 'Profit and Loss By Invoices' })).toBeVisible()
+  await page.getByRole('button', { name: /run report/i }).click()
+  await expect(page.getByText('Freight Income')).toBeVisible()
+  await expect(page.getByText('Net Profit')).toBeVisible()
+})
+
+test('IFTA Report page: shows state and card rows after run', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/ifta')
+  await expect(page.getByRole('heading', { name: 'IFTA Report' })).toBeVisible()
+  await page.getByRole('button', { name: /run report/i }).click()
+  await expect(page.getByText(/North Carolina/)).toBeVisible()
+  await expect(page.getByText('CARD-01')).toBeVisible()
+})
+
+test('Tax Report page: shows driver rows after run', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/tax')
+  await expect(page.getByRole('heading', { name: 'Tax Report' })).toBeVisible()
+  await page.getByRole('button', { name: /run report/i }).click()
+  await expect(page.getByText('John Doe')).toBeVisible()
+  await expect(page.getByText('Drivers (Solo & Team)')).toBeVisible()
+})
+
+test('Category Tracking page: shows record rows after run', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/category-tracking')
+  await expect(page.getByRole('heading', { name: 'Category Tracking' })).toBeVisible()
+  await page.getByRole('button', { name: /run report/i }).click()
+  await expect(page.getByText('Oil change')).toBeVisible()
+  await expect(page.getByText('Vehicle Maintenance')).toBeVisible()
+})
+
+test('Broker Summary page: shows broker rows after run', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/broker-summary')
+  await expect(page.getByRole('heading', { name: 'Broker Summary' })).toBeVisible()
+  await page.getByRole('button', { name: /run report/i }).click()
+  await expect(page.getByText('ACME Broker')).toBeVisible()
+})
+
+test('Shipper-Receiver page: shows pair rows after run', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/shipper-receiver')
+  await expect(page.getByRole('heading', { name: 'Deliveries from Shipper to Receiver' })).toBeVisible()
+  await page.getByRole('button', { name: /run report/i }).click()
+  await expect(page.getByText('Shipper A')).toBeVisible()
+  await expect(page.getByText('Receiver B')).toBeVisible()
 })
