@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 from unittest.mock import patch
 
+from apps.brokers.tests.factories import BrokerContactFactory, BrokerFactory
 from apps.carriers.tests.factories import CarrierFactory
 from apps.users.tests.factories import UserFactory
 
@@ -157,7 +158,7 @@ class TestCarrierAvailableFiles:
 
 @pytest.mark.django_db
 class TestCarrierSendPacket:
-    def test_missing_broker_email_returns_400(self, auth_client):
+    def test_missing_recipients_returns_400(self, auth_client):
         client, _ = auth_client
         carrier = CarrierFactory()
         response = client.post(
@@ -165,7 +166,7 @@ class TestCarrierSendPacket:
             {"file_slots": ["w9_file"]},
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "broker_email" in response.data["error"]
+        assert "recipients" in response.data["error"]
 
     def test_missing_file_slots_returns_400(self, auth_client):
         client, _ = auth_client
@@ -175,7 +176,95 @@ class TestCarrierSendPacket:
             {"broker_email": "broker@test.com"},
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "file slot" in response.data["error"].lower()
+        assert "file_slots" in response.data["error"]
+
+    def test_invalid_broker_email_returns_400(self, auth_client):
+        client, _ = auth_client
+        carrier = CarrierFactory()
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {"broker_email": "not-an-email", "file_slots": ["w9_file"]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "broker_email" in response.data["error"]
+
+    def test_broker_email_over_50_chars_returns_400(self, auth_client):
+        client, _ = auth_client
+        carrier = CarrierFactory()
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {
+                "broker_email": "broker.address.longer.than.legacy.limit@example.com",
+                "file_slots": ["w9_file"],
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "broker_email" in response.data["error"]
+
+    def test_duplicate_file_slot_returns_400(self, auth_client):
+        client, _ = auth_client
+        carrier = CarrierFactory()
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {
+                "broker_email": "broker@test.com",
+                "file_slots": ["w9_file", "w9_file"],
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "file_slots" in response.data["error"]
+
+    def test_duplicate_contact_id_returns_400(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory()
+        contact = BrokerContactFactory(broker=broker)
+        carrier = CarrierFactory()
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {
+                "broker_id": broker.id,
+                "contact_ids": [contact.id, contact.id],
+                "file_slots": ["w9_file"],
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "contact_ids" in response.data["error"]
+
+    def test_contact_without_broker_returns_400(self, auth_client):
+        client, _ = auth_client
+        contact = BrokerContactFactory()
+        carrier = CarrierFactory()
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {
+                "contact_ids": [contact.id],
+                "file_slots": ["w9_file"],
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "broker_id" in response.data["error"]
+
+    def test_contact_from_another_broker_returns_400(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory()
+        other_contact = BrokerContactFactory()
+        carrier = CarrierFactory(no_reply_email="noreply@carrier.com")
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {
+                "broker_id": broker.id,
+                "contact_ids": [other_contact.id],
+                "file_slots": ["w9_file"],
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "not found for selected broker" in response.data["error"]
 
     def test_no_no_reply_email_returns_400(self, auth_client):
         client, _ = auth_client
@@ -201,20 +290,20 @@ class TestCarrierSendPacket:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_successful_send_returns_200(self, auth_client):
-        client, _ = auth_client
+        client, user = auth_client
+        user.email = "current-user@test.com"
+        user.save(update_fields=["email"])
         fake = SimpleUploadedFile("w9.pdf", b"data", content_type="application/pdf")
         carrier = CarrierFactory(
             no_reply_email="noreply@carrier.com",
             no_reply_password="pass",
+            cc_email="carrier-cc@test.com",
             w9_file=fake,
         )
         with patch("apps.carriers.services.get_connection"), patch(
             "apps.carriers.services.EmailMessage"
         ) as MockMsg:
             mock_msg = MockMsg.return_value
-            mock_msg.content_subtype = "html"
-            mock_msg.attach_file = lambda path: None
-            mock_msg.send = lambda: None
             response = client.post(
                 reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
                 {
@@ -225,6 +314,39 @@ class TestCarrierSendPacket:
             )
         assert response.status_code == status.HTTP_200_OK
         assert "sent" in response.data["detail"].lower()
+        kwargs = MockMsg.call_args.kwargs
+        assert kwargs["bcc"] == ["current-user@test.com"]
+        assert "cc" not in kwargs
+        mock_msg.attach_file.assert_called_once_with(carrier.w9_file.path)
+
+    def test_successful_send_to_selected_contacts_returns_200(self, auth_client):
+        client, user = auth_client
+        user.email = "current-user@test.com"
+        user.save(update_fields=["email"])
+        broker = BrokerFactory()
+        contact_1 = BrokerContactFactory(broker=broker, email="one@test.com")
+        contact_2 = BrokerContactFactory(broker=broker, email="two@test.com")
+        fake = SimpleUploadedFile("w9.pdf", b"data", content_type="application/pdf")
+        carrier = CarrierFactory(
+            no_reply_email="noreply@carrier.com",
+            no_reply_password="pass",
+            w9_file=fake,
+        )
+        with patch("apps.carriers.services.get_connection"), patch(
+            "apps.carriers.services.EmailMessage"
+        ) as MockMsg:
+            response = client.post(
+                reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+                {
+                    "broker_id": broker.id,
+                    "contact_ids": [contact_1.id, contact_2.id],
+                    "file_slots": ["w9_file"],
+                },
+                format="json",
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert MockMsg.call_args.kwargs["to"] == ["one@test.com", "two@test.com"]
+        assert MockMsg.call_args.kwargs["bcc"] == ["current-user@test.com"]
 
     def test_returns_404_for_unknown_carrier(self, auth_client):
         client, _ = auth_client

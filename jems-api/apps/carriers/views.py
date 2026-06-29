@@ -6,11 +6,16 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
 from .models import Carrier, Factor
-from .serializers import CarrierSerializer, FactorSerializer
+from .serializers import (
+    CarrierSerializer,
+    FactorSerializer,
+    SendCarrierPacketSerializer,
+)
 from .services import (
     create_carrier,
     delete_carrier,
     get_carrier_available_files,
+    resolve_carrier_packet_recipients,
     send_carrier_packet,
     toggle_carrier_status,
     update_carrier,
@@ -102,27 +107,26 @@ class CarrierViewSet(ViewSet):
         except Carrier.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
-        broker_email = request.data.get("broker_email", "").strip()
-        file_slots = request.data.get("file_slots", [])
-
-        if not broker_email:
+        serializer = SendCarrierPacketSerializer(data=request.data)
+        if not serializer.is_valid():
             return Response(
-                {"error": "broker_email is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not file_slots:
-            return Response(
-                {"error": "At least one file slot must be selected."},
+                {"error": serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         from django.core.exceptions import ValidationError
 
         try:
+            recipient_emails = resolve_carrier_packet_recipients(
+                broker_id=serializer.validated_data.get("broker_id"),
+                contact_ids=serializer.validated_data.get("contact_ids"),
+                broker_email=serializer.validated_data.get("broker_email", ""),
+            )
             send_carrier_packet(
                 carrier=carrier,
-                broker_email=broker_email,
-                file_slots=file_slots,
+                recipient_emails=recipient_emails,
+                file_slots=serializer.validated_data["file_slots"],
+                bcc_email=request.user.email,
             )
         except ValidationError as exc:
             return Response(

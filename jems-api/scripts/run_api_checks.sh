@@ -1096,6 +1096,14 @@ step "Carriers: send-packet missing file_slots → 400"
 resp="$(post "/api/v1/carriers/${CARRIER_ID}/send-packet/" '{"broker_email":"broker@example.com"}')"
 assert_status "send-packet no slots" "400" "$(code "$resp")"
 
+step "Carriers: send-packet invalid broker_email → 400"
+resp="$(post "/api/v1/carriers/${CARRIER_ID}/send-packet/" '{"broker_email":"not-an-email","file_slots":["w9_file"]}')"
+assert_status "send-packet invalid email" "400" "$(code "$resp")"
+
+step "Carriers: send-packet long broker_email → 400"
+resp="$(post "/api/v1/carriers/${CARRIER_ID}/send-packet/" '{"broker_email":"broker.address.longer.than.legacy.limit@example.com","file_slots":["w9_file"]}')"
+assert_status "send-packet long email" "400" "$(code "$resp")"
+
 step "Carriers: send-packet unknown slot → 400"
 resp="$(post "/api/v1/carriers/${CARRIER_ID}/send-packet/" '{"broker_email":"broker@example.com","file_slots":["bad_slot"]}')"
 assert_status "send-packet bad slot" "400" "$(code "$resp")"
@@ -1183,6 +1191,10 @@ resp="$(patch "/api/v1/brokers/${BROKER_ID}/contacts/${BROKER_CONTACT_ID}/" '{"n
 assert_status "broker contact update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "contact updated" "$(body "$resp")" "Alice Smith"
 assert_contains "contact confirmed" "$(body "$resp")" "true"
+
+step "Carriers: send-packet selected broker contact + bad slot → 400"
+resp="$(post "/api/v1/carriers/${CARRIER_ID}/send-packet/" "{\"broker_id\":${BROKER_ID},\"contact_ids\":[${BROKER_CONTACT_ID}],\"file_slots\":[\"bad_slot\"]}")"
+assert_status "send-packet broker contact bad slot" "400" "$(code "$resp")"
 
 step "Brokers: contact delete"
 resp="$(delete "/api/v1/brokers/${BROKER_ID}/contacts/${BROKER_CONTACT_ID}/")"

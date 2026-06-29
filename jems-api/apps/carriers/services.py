@@ -52,16 +52,72 @@ def get_carrier_available_files(*, carrier: Carrier) -> list[dict[str, str]]:
     result = []
     for slot, (field, label) in PACKET_FILE_SLOTS.items():
         file_field = getattr(carrier, field)
-        if file_field:
+        if _has_existing_packet_file(file_field):
             result.append({"slot": slot, "label": label})
     return result
+
+
+def _has_existing_packet_file(file_field: Any) -> bool:
+    if not file_field:
+        return False
+    try:
+        return bool(file_field.name) and file_field.storage.exists(file_field.name)
+    except (OSError, ValueError):
+        return False
+
+
+def resolve_carrier_packet_recipients(
+    *,
+    broker_id: int | None = None,
+    contact_ids: list[int] | None = None,
+    broker_email: str = "",
+) -> list[str]:
+    """Resolve Send Packet recipients from selected broker contacts plus fallback email."""
+    recipients: list[str] = []
+
+    cleaned_email = broker_email.strip()
+    if cleaned_email:
+        recipients.append(cleaned_email)
+
+    selected_contact_ids = contact_ids or []
+    if selected_contact_ids:
+        from apps.brokers.models import BrokerContact
+
+        if broker_id is None:
+            raise ValidationError("Select a broker before choosing broker contacts.")
+
+        contacts = list(
+            BrokerContact.objects.filter(
+                broker_id=broker_id,
+                id__in=selected_contact_ids,
+            ).order_by("email")
+        )
+        found_ids = {contact.id for contact in contacts}
+        missing_ids = [
+            contact_id
+            for contact_id in selected_contact_ids
+            if contact_id not in found_ids
+        ]
+        if missing_ids:
+            raise ValidationError(
+                "Broker contact(s) not found for selected broker: "
+                f"{', '.join(str(contact_id) for contact_id in missing_ids)}."
+            )
+        recipients.extend(contact.email for contact in contacts)
+
+    unique_recipients = list(dict.fromkeys(recipients))
+    if not unique_recipients:
+        raise ValidationError("Select at least one broker contact or enter an email.")
+    return unique_recipients
 
 
 def send_carrier_packet(
     *,
     carrier: Carrier,
-    broker_email: str,
     file_slots: list[str],
+    recipient_emails: list[str] | None = None,
+    broker_email: str = "",
+    bcc_email: str | None = None,
 ) -> None:
     """Email selected carrier files to the broker email address.
 
@@ -72,6 +128,10 @@ def send_carrier_packet(
         raise ValidationError(
             f"Carrier '{carrier.name}' has no outgoing email address configured."
         )
+    recipients = recipient_emails or ([broker_email.strip()] if broker_email else [])
+    recipients = list(dict.fromkeys(email for email in recipients if email))
+    if not recipients:
+        raise ValidationError("Select at least one broker contact or enter an email.")
     if not file_slots:
         raise ValidationError("At least one file must be selected.")
 
@@ -86,6 +146,8 @@ def send_carrier_packet(
         file_field = getattr(carrier, field)
         if not file_field:
             raise ValidationError(f"No file uploaded for slot '{slot}'.")
+        if not _has_existing_packet_file(file_field):
+            raise ValidationError(f"File for slot '{slot}' is missing from storage.")
         attachments.append((label, file_field.path))
 
     hour = timezone.localtime(timezone.now()).hour
@@ -116,14 +178,12 @@ def send_carrier_packet(
         fail_silently=False,
     )
 
-    cc = [carrier.cc_email] if carrier.cc_email else []
-
     msg = EmailMessage(
         subject=f"{carrier.name} Files Packet",
         body=body,
         from_email=f"{carrier.name} <{carrier.no_reply_email}>",
-        to=[broker_email],
-        cc=cc,
+        to=recipients,
+        bcc=[bcc_email] if bcc_email else [],
         connection=connection,
     )
     msg.content_subtype = "html"
