@@ -498,6 +498,35 @@ const REPORT_INVOICE = {
   net_profit: 35000,
 }
 
+const REPORT_BALANCE_SHEET = {
+  carrier_name: 'BEST WHEELS TRANSPORT LLC',
+  date_begin: '2024-06-01',
+  date_end: '2024-06-30',
+  period: 'month',
+  columns: [{ key: '2024-06', label: 'Jun', priority: 1 }],
+  current_assets: {
+    title: 'Current Assets',
+    concept_code: '400',
+    rows: [{ code: '400', name: 'Cash', amounts: { '2024-06': 1000 }, total: 1000 }],
+    totals: { '2024-06': 1000 },
+    total: 1000,
+  },
+  fixed_assets: { title: 'Fixed Assets', concept_code: '401', rows: [], totals: { '2024-06': 0 }, total: 0 },
+  current_liabilities: {
+    title: 'Current Liabilities',
+    concept_code: '500',
+    rows: [{ code: '500', name: 'Accounts Payable', amounts: { '2024-06': -400 }, total: -400 }],
+    totals: { '2024-06': -400 },
+    total: -400,
+  },
+  long_term_liabilities: { title: 'Long-Term Liabilities', concept_code: '501', rows: [], totals: { '2024-06': 0 }, total: 0 },
+  equity: { title: 'Equity', concept_code: '600', rows: [], totals: { '2024-06': 0 }, total: 0 },
+  total_assets: { amounts: { '2024-06': 1000 }, total: 1000 },
+  total_liabilities: { amounts: { '2024-06': -400 }, total: -400 },
+  total_liabilities_and_equity: { amounts: { '2024-06': -400 }, total: -400 },
+  balance: { amounts: { '2024-06': 1400 }, total: 1400 },
+}
+
 const REPORT_IFTA = {
   date_begin: '2024-01-01',
   date_end: '2024-12-31',
@@ -681,6 +710,7 @@ async function mockApi(page) {
     // Reports
     if (pathname.endsWith('/reports/financial/') && method === 'GET') return json(REPORT_FINANCIAL)
     if (pathname.endsWith('/reports/invoice/') && method === 'GET') return json(REPORT_INVOICE)
+    if (pathname.endsWith('/reports/balance-sheet/') && method === 'GET') return json(REPORT_BALANCE_SHEET)
     if (pathname.endsWith('/reports/ifta/') && method === 'GET') return json(REPORT_IFTA)
     if (pathname.endsWith('/reports/tax/') && method === 'GET') return json(REPORT_TAX)
     if (pathname.endsWith('/reports/category-tracking/') && method === 'GET') return json(REPORT_CATEGORY)
@@ -2431,6 +2461,32 @@ test('Invoice Report page: shows title and account rows after run', async ({ pag
   await expect(page.getByRole('heading', { name: 'Profit and Loss By Invoices' })).toBeVisible()
   await expect(page.getByText('Freight Income')).toBeVisible()
   await expect(page.getByText('NET PROFIT')).toBeVisible()
+})
+
+test('Balance Sheet Report page: uses clean carrier dropdown and opens printable report', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/balance-sheet')
+  await expect(page.getByRole('heading', { name: 'Balance Sheet', exact: true })).toBeVisible()
+  await expect(page.locator('#filter-carrier option', { hasText: 'Jobee Express LLC' })).toHaveCount(1)
+  await expect(page.locator('#filter-carrier option', { hasText: 'BEST WHEELS TRANSPORT LLC' })).toHaveCount(1)
+  await expect(page.locator('#filter-period option', { hasText: 'Month' })).toHaveCount(1)
+  await page.evaluate(() => {
+    window.__lastReportUrl = null
+    window.open = (url) => {
+      window.__lastReportUrl = url
+      return null
+    }
+  })
+  await page.locator('#filter-carrier').selectOption('2')
+  await page.getByRole('button', { name: /show report/i }).click()
+  const reportUrl = await page.evaluate(() => window.__lastReportUrl)
+  expect(reportUrl).toContain('/print/balance-sheet?')
+  expect(reportUrl).toContain('carrier=2')
+  expect(reportUrl).toContain('period=1')
+  await page.goto(reportUrl)
+  await expect(page.getByRole('heading', { name: 'Balance Sheet' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Current Assets', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Total liabilities and equity', exact: true })).toBeVisible()
 })
 
 test('IFTA Report page: shows state and card rows after run', async ({ page }) => {

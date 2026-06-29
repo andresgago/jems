@@ -38,6 +38,7 @@ const CRITICAL_ROUTES = [
   { path: '/tools/send-packet', heading: /send carrier packet/i },
   { path: '/tools/brokers-status', heading: /brokers status/i },
   { path: '/tools/drivers-last-loads', heading: /drivers.*last loads/i },
+  { path: '/reports/balance-sheet', heading: /balance sheet/i },
   { path: '/reports/invoice', heading: /profit and loss by invoices/i },
 ]
 
@@ -287,6 +288,23 @@ test('profit and loss by invoices report endpoint returns legacy shape (real)', 
   expect(Array.isArray(data.invoices)).toBeTruthy()
   expect(Array.isArray(data.revenues)).toBeTruthy()
   expect(Array.isArray(data.expenses)).toBeTruthy()
+})
+
+test('balance sheet report endpoint returns legacy concept sections (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const data = await apiGet(page, token, '/reports/balance-sheet/?date_begin=2024-01-01&date_end=2024-12-31&period=1&carrier=id')
+  expect(data).toHaveProperty('columns')
+  expect(data).toHaveProperty('current_assets')
+  expect(data).toHaveProperty('fixed_assets')
+  expect(data).toHaveProperty('current_liabilities')
+  expect(data).toHaveProperty('long_term_liabilities')
+  expect(data).toHaveProperty('equity')
+  expect(data).toHaveProperty('total_assets')
+  expect(data).toHaveProperty('total_liabilities_and_equity')
+  expect(Array.isArray(data.columns)).toBeTruthy()
 })
 
 // ── Trailer types ─────────────────────────────────────────────────────────────

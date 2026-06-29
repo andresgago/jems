@@ -55,6 +55,8 @@ import FinancialReportPage from './pages/reports/FinancialReportPage';
 import FinancialReportPrintPage from './pages/reports/FinancialReportPrintPage';
 import InvoiceReportPrintPage from './pages/reports/InvoiceReportPrintPage';
 import InvoiceReportPage from './pages/reports/InvoiceReportPage';
+import BalanceSheetReportPage from './pages/reports/BalanceSheetReportPage';
+import BalanceSheetReportPrintPage from './pages/reports/BalanceSheetReportPrintPage';
 import IftaReportPage from './pages/reports/IftaReportPage';
 import TaxReportPage from './pages/reports/TaxReportPage';
 import CategoryTrackingReportPage from './pages/reports/CategoryTrackingReportPage';
@@ -73,6 +75,7 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/print/financial" element={<ProtectedRoute><FinancialReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/invoice" element={<ProtectedRoute><InvoiceReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/balance-sheet" element={<ProtectedRoute><BalanceSheetReportPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={
@@ -163,7 +166,7 @@ function AppRoutes() {
                 {/* Reports */}
                 <Route path="reports/financial" element={<FinancialReportPage />} />
                 <Route path="reports/invoice" element={<InvoiceReportPage />} />
-                <Route path="reports/balance-sheet" element={<div><h5>Balance Sheet</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="reports/balance-sheet" element={<BalanceSheetReportPage />} />
                 <Route path="reports/company-invoices" element={<div><h5>Invoice Analysis</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="reports/ifta" element={<IftaReportPage />} />
                 <Route path="reports/tax" element={<TaxReportPage />} />
