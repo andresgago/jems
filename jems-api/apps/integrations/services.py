@@ -114,6 +114,7 @@ def upsert_rtl_driver_status(*, data: dict[str, Any]) -> RtlDriverStatus:
             "location_lat": data.get("locationLat"),
             "location_lon": data.get("locationLon"),
             "location_state": data.get("locationState", ""),
+            "location_calculated": data.get("locationCalculatedLocation", ""),
             "location_timestamp": data.get("locationTimestamp", ""),
             "vehicle_id": data.get("vehicleId", ""),
             "vehicle_vin": data.get("vehicleVin", ""),

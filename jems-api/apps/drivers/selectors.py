@@ -38,19 +38,28 @@ def _serialize_load(load: Any) -> dict[str, Any]:
     }
 
 
-def get_drivers_last_loads() -> list[dict[str, Any]]:
+def get_drivers_last_loads(
+    dispatcher_id: int | None = None,
+) -> list[dict[str, Any]]:
     """
     Return active drivers that have at least one executed load, each paired with
     their last executed load and (optionally) their current active load.
 
+    Optionally filter to only loads dispatched by a specific dispatcher.
+
     Mirrors the legacy driver/current-info view (searchCurrentInfo query).
     """
     from apps.loads.models import Load
+    from apps.integrations.models import RtlDriver
 
     today = timezone.now().date()
 
+    dispatcher_filter: dict[str, Any] = {}
+    if dispatcher_id is not None:
+        dispatcher_filter["dispatcher_id"] = dispatcher_id
+
     last_executed_subquery = (
-        Load.objects.filter(driver=OuterRef("pk"), execute=True)
+        Load.objects.filter(driver=OuterRef("pk"), execute=True, **dispatcher_filter)
         .order_by("-dropoff_date")
         .values("id")[:1]
     )
@@ -65,6 +74,7 @@ def get_drivers_last_loads() -> list[dict[str, Any]]:
                 Load.Status.STARTED,
                 Load.Status.FINISHED,
             ],
+            **dispatcher_filter,
         )
         .order_by("-dropoff_date")
         .values("id")[:1]
@@ -80,8 +90,9 @@ def get_drivers_last_loads() -> list[dict[str, Any]]:
         .order_by("first_name", "last_name")
     )
 
-    all_load_ids = []
     driver_list = list(drivers)
+
+    all_load_ids = []
     for d in driver_list:
         if d.last_load_id:
             all_load_ids.append(d.last_load_id)
@@ -99,16 +110,45 @@ def get_drivers_last_loads() -> list[dict[str, Any]]:
         )
     }
 
+    # Batch-fetch RTL location data keyed by driver license_number
+    license_numbers = [d.license_number for d in driver_list if d.license_number]
+    rtl_by_license: dict[str, RtlDriver] = {}
+    if license_numbers:
+        for rtl_rec in RtlDriver.objects.filter(
+            license_number__in=license_numbers
+        ).select_related("latest_status"):
+            rtl_by_license[rtl_rec.license_number] = rtl_rec
+
     result = []
     for driver in driver_list:
         last_load = loads_by_id.get(driver.last_load_id)
         current_load = (
             loads_by_id.get(driver.current_load_id) if driver.current_load_id else None
         )
+
+        location: dict[str, Any] | None = None
+        rtl: RtlDriver | None = rtl_by_license.get(driver.license_number or "")
+        if rtl is not None:
+            try:
+                rtl_status = rtl.latest_status
+                if (
+                    rtl_status.location_state
+                    or rtl_status.location_calculated
+                    or rtl_status.location_timestamp
+                ):
+                    location = {
+                        "state": rtl_status.location_state or None,
+                        "calculated": rtl_status.location_calculated or None,
+                        "timestamp": rtl_status.location_timestamp or None,
+                    }
+            except Exception:
+                pass
+
         result.append(
             {
                 "id": driver.id,
                 "full_name": driver.full_name,
+                "location": location,
                 "last_load": _serialize_load(last_load) if last_load else None,
                 "current_load": _serialize_load(current_load) if current_load else None,
             }

@@ -974,9 +974,47 @@ if ! echo "$(body "$resp")" | python3 -c "import json,sys; d=json.load(sys.stdin
 fi
 pass "last-loads returns array (may be empty — test driver has no executed loads)"
 
+step "Drivers: last-loads has location field in each entry"
+resp="$(get "/api/v1/drivers/last-loads/")"
+assert_status "driver last-loads" "200" "$(code "$resp")" "$(body "$resp")"
+if echo "$(body "$resp")" | python3 -c "import json,sys; d=json.load(sys.stdin); [_ for e in d if 'location' not in e]" 2>/dev/null | grep -q .; then
+  fail "each last-loads entry should have a location field" "$(body "$resp")"
+fi
+pass "last-loads entries include location field"
+
+step "Drivers: last-loads dispatcher_id filter → 200"
+resp="$(get "/api/v1/drivers/last-loads/?dispatcher_id=99999")"
+assert_status "last-loads dispatcher filter" "200" "$(code "$resp")" "$(body "$resp")"
+if ! echo "$(body "$resp")" | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d, list)" 2>/dev/null; then
+  fail "last-loads with dispatcher_id should return a JSON array" "$(body "$resp")"
+fi
+pass "last-loads accepts dispatcher_id filter (non-existent dispatcher returns empty array)"
+
+step "Drivers: last-loads invalid dispatcher_id → 400"
+resp="$(get "/api/v1/drivers/last-loads/?dispatcher_id=not-a-number")"
+assert_status "last-loads invalid dispatcher_id" "400" "$(code "$resp")" "$(body "$resp")"
+pass "last-loads rejects non-integer dispatcher_id with 400"
+
 step "Drivers: last-loads unauthenticated → 401"
 resp="$(curl -s -o /tmp/resp_body.txt -w "%{http_code}" "${API_URL}/api/v1/drivers/last-loads/")"
 assert_status "last-loads unauth" "401" "$resp"
+
+step "Drivers: bulk-delete terminates driver"
+resp="$(post "/api/v1/drivers/bulk-delete/" "{\"ids\":[${DRIVER_ID}]}")"
+assert_status "driver bulk-delete" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "bulk-delete has terminated field" "$(body "$resp")" "terminated"
+pass "bulk-delete returns terminated list"
+
+step "Drivers: bulk-delete empty list → 400"
+resp="$(post "/api/v1/drivers/bulk-delete/" '{"ids":[]}')"
+assert_status "driver bulk-delete empty" "400" "$(code "$resp")" "$(body "$resp")"
+pass "bulk-delete rejects empty ids with 400"
+
+step "Drivers: bulk-delete unauthenticated → 401"
+resp="$(curl -s -o /tmp/resp_body.txt -w "%{http_code}" \
+  -X POST -H "Content-Type: application/json" \
+  -d '{"ids":[1]}' "${API_URL}/api/v1/drivers/bulk-delete/")"
+assert_status "bulk-delete unauth" "401" "$resp"
 
 # ── Carriers ──────────────────────────────────────────────────────────────────
 step "Carriers: create"

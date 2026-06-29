@@ -64,6 +64,7 @@ class RtlDriverStatus(models.Model):
     location_lat = models.FloatField(null=True, blank=True)
     location_lon = models.FloatField(null=True, blank=True)
     location_state = models.CharField(max_length=10, blank=True, default="")
+    location_calculated = models.CharField(max_length=200, blank=True, default="")
     location_timestamp = models.CharField(max_length=50, blank=True, default="")
     vehicle_id = models.CharField(max_length=100, blank=True, default="")
     vehicle_vin = models.CharField(max_length=50, blank=True, default="")

@@ -6,6 +6,7 @@ from django.utils import timezone
 from apps.drivers.models import Driver
 from apps.drivers.selectors import get_drivers_last_loads
 from apps.drivers.tests.factories import DriverFactory
+from apps.integrations.tests.factories import RtlDriverFactory, RtlDriverStatusFactory
 from apps.loads.models import Load
 from apps.loads.tests.factories import (
     CityFactory,
@@ -15,6 +16,7 @@ from apps.loads.tests.factories import (
     TruckFactory,
     TrailerFactory,
 )
+from apps.users.tests.factories import DispatcherFactory
 
 
 @pytest.mark.django_db
@@ -163,3 +165,104 @@ class TestGetDriversLastLoads:
         LoadFactory(driver=driver, execute=True)
         result = get_drivers_last_loads()
         assert result[0]["full_name"] == "John Smith"
+
+    # ── dispatcher_id filter ──────────────────────────────────────────────────
+
+    def test_dispatcher_filter_includes_driver_with_matching_loads(self):
+        dispatcher = DispatcherFactory()
+        driver = DriverFactory(status=Driver.Status.ACTIVE)
+        LoadFactory(driver=driver, execute=True, dispatcher=dispatcher)
+        result = get_drivers_last_loads(dispatcher_id=dispatcher.pk)
+        assert len(result) == 1
+        assert result[0]["id"] == driver.id
+
+    def test_dispatcher_filter_excludes_driver_without_matching_loads(self):
+        dispatcher_a = DispatcherFactory()
+        dispatcher_b = DispatcherFactory()
+        driver = DriverFactory(status=Driver.Status.ACTIVE)
+        LoadFactory(driver=driver, execute=True, dispatcher=dispatcher_a)
+        result = get_drivers_last_loads(dispatcher_id=dispatcher_b.pk)
+        assert result == []
+
+    def test_dispatcher_filter_no_dispatcher_id_returns_all(self):
+        d1 = DriverFactory(status=Driver.Status.ACTIVE)
+        d2 = DriverFactory(status=Driver.Status.ACTIVE)
+        LoadFactory(driver=d1, execute=True)
+        LoadFactory(driver=d2, execute=True)
+        result = get_drivers_last_loads()
+        ids = [r["id"] for r in result]
+        assert d1.id in ids
+        assert d2.id in ids
+
+    def test_dispatcher_filter_none_id_ignores_filter(self):
+        dispatcher = DispatcherFactory()
+        driver = DriverFactory(status=Driver.Status.ACTIVE)
+        LoadFactory(driver=driver, execute=True, dispatcher=dispatcher)
+        # None means no filter → should still return the driver
+        result = get_drivers_last_loads(dispatcher_id=None)
+        assert any(r["id"] == driver.id for r in result)
+
+    # ── location field ────────────────────────────────────────────────────────
+
+    def test_location_field_is_none_without_rtl_data(self):
+        driver = DriverFactory(status=Driver.Status.ACTIVE, license_number="NO-RTL")
+        LoadFactory(driver=driver, execute=True)
+        result = get_drivers_last_loads()
+        assert result[0]["location"] is None
+
+    def test_location_field_populated_when_rtl_status_exists(self):
+        license_no = "LIC-TEST-001"
+        driver = DriverFactory(status=Driver.Status.ACTIVE, license_number=license_no)
+        LoadFactory(driver=driver, execute=True)
+        rtl = RtlDriverFactory(license_number=license_no)
+        RtlDriverStatusFactory(
+            rtl_driver=rtl,
+            location_state="VA",
+            location_calculated="5.0mi NNE from Winchester, VA",
+            location_timestamp="2025-02-11T16:52:00Z",
+        )
+        result = get_drivers_last_loads()
+        loc = result[0]["location"]
+        assert loc is not None
+        assert loc["state"] == "VA"
+        assert loc["calculated"] == "5.0mi NNE from Winchester, VA"
+        assert loc["timestamp"] == "2025-02-11T16:52:00Z"
+
+    def test_location_field_none_when_rtl_driver_exists_but_no_status(self):
+        license_no = "LIC-NO-STATUS"
+        driver = DriverFactory(status=Driver.Status.ACTIVE, license_number=license_no)
+        LoadFactory(driver=driver, execute=True)
+        # RTL driver exists but has no status record
+        RtlDriverFactory(license_number=license_no)
+        result = get_drivers_last_loads()
+        assert result[0]["location"] is None
+
+    def test_location_field_none_when_all_location_fields_empty(self):
+        license_no = "LIC-EMPTY-LOC"
+        driver = DriverFactory(status=Driver.Status.ACTIVE, license_number=license_no)
+        LoadFactory(driver=driver, execute=True)
+        rtl = RtlDriverFactory(license_number=license_no)
+        RtlDriverStatusFactory(
+            rtl_driver=rtl,
+            location_state="",
+            location_calculated="",
+            location_timestamp="",
+        )
+        result = get_drivers_last_loads()
+        assert result[0]["location"] is None
+
+    def test_location_field_populated_from_calculated_alone(self):
+        license_no = "LIC-CALC-ONLY"
+        driver = DriverFactory(status=Driver.Status.ACTIVE, license_number=license_no)
+        LoadFactory(driver=driver, execute=True)
+        rtl = RtlDriverFactory(license_number=license_no)
+        RtlDriverStatusFactory(
+            rtl_driver=rtl,
+            location_state="",
+            location_calculated="3.1mi NE from Dallas, TX",
+            location_timestamp="",
+        )
+        result = get_drivers_last_loads()
+        loc = result[0]["location"]
+        assert loc is not None
+        assert loc["calculated"] == "3.1mi NE from Dallas, TX"

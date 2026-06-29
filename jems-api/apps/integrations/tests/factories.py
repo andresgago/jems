@@ -47,6 +47,7 @@ class RtlDriverStatusFactory(DjangoModelFactory):
     location_lat = 29.7604
     location_lon = -95.3698
     location_state = "TX"
+    location_calculated = "2.0mi NNE from Houston, TX"
     hos_event_code = "1"
 
 

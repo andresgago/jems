@@ -379,3 +379,103 @@ class TestDriverLastLoads:
         api_client = APIClient()
         response = api_client.get(reverse("driver-last-loads"))
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_response_has_location_field(self, auth_client):
+        from apps.loads.tests.factories import LoadFactory
+
+        client, _ = auth_client
+        driver = DriverFactory(status=Driver.Status.ACTIVE)
+        LoadFactory(driver=driver, execute=True)
+        response = client.get(reverse("driver-last-loads"))
+        assert response.status_code == status.HTTP_200_OK
+        entry = response.data[0]
+        assert "location" in entry
+
+    def test_dispatcher_filter_returns_only_matching_drivers(self, auth_client):
+        from apps.loads.tests.factories import LoadFactory
+        from apps.users.tests.factories import DispatcherFactory
+
+        client, _ = auth_client
+        dispatcher = DispatcherFactory()
+        other_dispatcher = DispatcherFactory()
+        driver_a = DriverFactory(status=Driver.Status.ACTIVE)
+        driver_b = DriverFactory(status=Driver.Status.ACTIVE)
+        LoadFactory(driver=driver_a, execute=True, dispatcher=dispatcher)
+        LoadFactory(driver=driver_b, execute=True, dispatcher=other_dispatcher)
+
+        response = client.get(
+            reverse("driver-last-loads"), {"dispatcher_id": dispatcher.pk}
+        )
+        assert response.status_code == status.HTTP_200_OK
+        ids = [r["id"] for r in response.data]
+        assert driver_a.pk in ids
+        assert driver_b.pk not in ids
+
+    def test_invalid_dispatcher_id_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.get(
+            reverse("driver-last-loads"), {"dispatcher_id": "not-a-number"}
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "dispatcher_id" in response.data
+
+
+@pytest.mark.django_db
+class TestDriverBulkDelete:
+    def test_terminates_listed_drivers(self, auth_client):
+        client, _ = auth_client
+        d1 = DriverFactory(status=Driver.Status.ACTIVE)
+        d2 = DriverFactory(status=Driver.Status.ACTIVE)
+        response = client.post(
+            reverse("driver-bulk-delete"), {"ids": [d1.pk, d2.pk]}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert set(response.data["terminated"]) == {d1.pk, d2.pk}
+        assert response.data["not_found"] == []
+        d1.refresh_from_db()
+        d2.refresh_from_db()
+        assert d1.status == Driver.Status.TERMINATED
+        assert d2.status == Driver.Status.TERMINATED
+
+    def test_not_found_ids_reported_separately(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("driver-bulk-delete"), {"ids": [99999]}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["not_found"] == [99999]
+        assert response.data["terminated"] == []
+
+    def test_empty_ids_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("driver-bulk-delete"), {"ids": []}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "ids" in response.data
+
+    def test_non_list_ids_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("driver-bulk-delete"), {"ids": "not-a-list"}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_non_integer_ids_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("driver-bulk-delete"), {"ids": ["abc", 1]}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unauthenticated_blocked(self):
+        api_client = APIClient()
+        response = api_client.post(
+            reverse("driver-bulk-delete"), {"ids": [1]}, format="json"
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_missing_ids_field_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(reverse("driver-bulk-delete"), {}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST

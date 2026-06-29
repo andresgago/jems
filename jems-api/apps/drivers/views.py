@@ -158,7 +158,51 @@ class DriverViewSet(ViewSet):
         """Active drivers with their last executed load and current active load."""
         from .selectors import get_drivers_last_loads
 
-        return Response(get_drivers_last_loads())
+        dispatcher_id: int | None = None
+        raw = request.query_params.get("dispatcher_id")
+        if raw:
+            try:
+                dispatcher_id = int(raw)
+            except ValueError:
+                return Response(
+                    {"dispatcher_id": "Must be an integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        return Response(get_drivers_last_loads(dispatcher_id=dispatcher_id))
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request: Request) -> Response:
+        """
+        Terminate (soft-delete) a list of drivers by ID.
+        Mirrors legacy actionBulkDelete.  JEMS uses TERMINATED status instead of
+        hard-delete because drivers with loads cannot be removed from history.
+        """
+        ids = request.data.get("ids")
+        if not isinstance(ids, list) or len(ids) == 0:
+            return Response(
+                {"ids": "A non-empty list of driver IDs is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        non_int = [x for x in ids if not isinstance(x, int)]
+        if non_int:
+            return Response(
+                {"ids": "All IDs must be integers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        terminated: list[int] = []
+        not_found: list[int] = []
+        for pk in ids:
+            try:
+                driver = Driver.objects.get(pk=pk)
+                driver.status = Driver.Status.TERMINATED
+                driver.save(update_fields=["status", "updated_at"])
+                terminated.append(pk)
+            except Driver.DoesNotExist:
+                not_found.append(pk)
+
+        return Response({"terminated": terminated, "not_found": not_found})
 
 
 class DriverVacationViewSet(ViewSet):
