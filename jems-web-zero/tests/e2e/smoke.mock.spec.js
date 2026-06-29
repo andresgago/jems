@@ -140,8 +140,8 @@ const TRAILER_TYPES = [
 ]
 
 const CARRIERS = [
-  { id: 1, name: 'Jobee Express LLC' },
-  { id: 2, name: 'Best Wheels Transport LLC' },
+  { id: 1, name: 'Jobee Express LLC', mc: '041672' },
+  { id: 2, name: 'Best Wheels Transport LLC', mc: '1447438' },
 ]
 
 const CARRIER_AVAILABLE_FILES = [
@@ -512,7 +512,7 @@ async function mockApi(page) {
     if (/\/fleet\/trailers\/\d+\/$/.test(pathname) && method === 'GET') return json(TRAILER_DETAIL)
     if (/\/carriers\/\d+\/available-files\/$/.test(pathname) && method === 'GET') return json(CARRIER_AVAILABLE_FILES)
     if (/\/carriers\/\d+\/send-packet\/$/.test(pathname) && method === 'POST') return json({ detail: 'Packet sent successfully.' })
-    if (pathname.endsWith('/carriers/options/')) return json(CARRIERS.map((c) => ({ id: c.id, label: c.name })))
+    if (pathname.endsWith('/carriers/options/')) return json(CARRIERS.map((c) => ({ id: c.id, label: `${c.name} (${c.mc})` })))
     if (pathname.endsWith('/carriers/')) return json(CARRIERS)
     if (pathname.endsWith('/locations/states/')) return json(STATES)
     if (pathname.endsWith('/locations/cities/') && method === 'GET') return json({ count: 2, results: CITIES, next: null, previous: null })
@@ -1976,7 +1976,7 @@ test('Send Packet page renders title and carrier select', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/tools/send-packet')
   await expect(page.getByText('Send Carrier Packet')).toBeVisible()
-  await expect(page.getByRole('combobox')).toBeVisible()
+  await expect(page.getByRole('combobox').first()).toBeVisible()
 })
 
 test('Send Packet page: carrier dropdown contains carriers', async ({ page }) => {
@@ -1989,7 +1989,7 @@ test('Send Packet page: carrier dropdown contains carriers', async ({ page }) =>
 test('Send Packet page: selecting carrier loads available files', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/tools/send-packet')
-  await page.getByRole('combobox').selectOption({ label: 'Jobee Express LLC' })
+  await page.getByRole('combobox').nth(0).selectOption({ label: 'Jobee Express LLC (041672)' })
   await expect(page.getByText('W9')).toBeVisible()
   await expect(page.getByText('COI')).toBeVisible()
   await expect(page.getByText('MCC')).toBeVisible()
@@ -2004,20 +2004,38 @@ test('Send Packet page: Send button disabled until carrier + email + slot select
 test('Send Packet page: Send button enabled after filling all fields', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/tools/send-packet')
-  await page.getByRole('combobox').selectOption({ label: 'Jobee Express LLC' })
+  await page.getByRole('combobox').nth(0).selectOption({ label: 'Jobee Express LLC (041672)' })
   await page.getByPlaceholder('broker@example.com').fill('broker@test.com')
   await page.getByLabel('W9').check()
+  await expect(page.getByRole('button', { name: /^Send$/ })).toBeEnabled()
+})
+
+test('Send Packet page: selecting broker loads contacts', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/send-packet')
+  await page.getByRole('combobox').nth(1).selectOption({ index: 1 })
+  await expect(page.getByText(/John Smith/)).toBeVisible()
+})
+
+test('Send Packet page: can send to selected broker contact', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/send-packet')
+  await page.getByRole('combobox').nth(0).selectOption({ label: 'Jobee Express LLC (041672)' })
+  await page.getByRole('combobox').nth(1).selectOption({ index: 1 })
+  await expect(page.getByText(/John Smith/)).toBeVisible()
+  await page.getByLabel('W9').check()
+  await page.getByLabel(/John Smith/).check()
   await expect(page.getByRole('button', { name: /^Send$/ })).toBeEnabled()
 })
 
 test('Send Packet page: shows success message after sending', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/tools/send-packet')
-  await page.getByRole('combobox').selectOption({ label: 'Jobee Express LLC' })
+  await page.getByRole('combobox').nth(0).selectOption({ label: 'Jobee Express LLC (041672)' })
   await page.getByPlaceholder('broker@example.com').fill('broker@test.com')
   await page.getByLabel('W9').check()
   await page.getByRole('button', { name: /^Send$/ }).click()
-  await expect(page.getByText(/packet sent successfully/i)).toBeVisible()
+  await expect(page.getByText(/packet was sent successfully/i)).toBeVisible()
 })
 
 // ── Tools: Brokers Status ─────────────────────────────────────────────────────

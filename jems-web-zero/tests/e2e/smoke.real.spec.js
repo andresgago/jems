@@ -1367,6 +1367,52 @@ test('carrier send-packet returns 400 for unknown file slot (real)', async ({ pa
   expect(res.status()).toBe(400)
 })
 
+test('carrier send-packet returns 400 for invalid broker email (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const carriers = await apiGet(page, token, '/carriers/')
+  if (!carriers.length) {
+    test.skip('No carriers in database')
+    return
+  }
+  const carrierId = carriers[0].id
+  const res = await page.request.post(`${API_BASE}/carriers/${carrierId}/send-packet/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { broker_email: 'not-an-email', file_slots: ['w9_file'] },
+  })
+  expect(res.status()).toBe(400)
+})
+
+test('carrier send-packet accepts selected broker contact payload (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const carriers = await apiGet(page, token, '/carriers/')
+  const brokers = await apiGet(page, token, '/brokers/')
+  if (!carriers.length || !brokers.length) {
+    test.skip('No carriers or brokers in database')
+    return
+  }
+
+  const brokerId = brokers[0].id
+  const contact = await apiPost(page, token, `/brokers/${brokerId}/contacts/`, {
+    name: 'E2E Packet Contact',
+    email: `e2e-packet-${Date.now()}@example.com`,
+    phone: '555-0199',
+  })
+
+  try {
+    const res = await page.request.post(`${API_BASE}/carriers/${carriers[0].id}/send-packet/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { broker_id: brokerId, contact_ids: [contact.id], file_slots: ['bad_slot'] },
+    })
+    expect(res.status()).toBe(400)
+  } finally {
+    await apiDelete(page, token, `/brokers/${brokerId}/contacts/${contact.id}/`)
+  }
+})
+
 test('drivers last-loads endpoint returns list (real)', async ({ page }) => {
   await loginAsAdmin(page)
   const token = await getAccessToken(page)
