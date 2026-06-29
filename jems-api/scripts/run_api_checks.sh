@@ -2452,6 +2452,68 @@ step "Cleanup: trailer still retrievable after soft-delete"
 resp="$(get "/api/v1/fleet/trailers/${TRAILER_ID}/")"
 assert_status "trailer still exists" "200" "$(code "$resp")"
 
+# ── Reports ───────────────────────────────────────────────────────────────────
+
+REPORT_DATE_BEGIN="2024-01-01"
+REPORT_DATE_END="2024-12-31"
+REPORT_YEAR="2024"
+
+step "Reports: financial (P&L) returns keys"
+resp="$(get "/api/v1/reports/financial/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}")"
+assert_status "financial report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "financial has revenues" "$(body "$resp")" '"revenues"'
+assert_contains "financial has expenses" "$(body "$resp")" '"expenses"'
+assert_contains "financial has net_profit" "$(body "$resp")" '"net_profit"'
+
+step "Reports: financial missing dates returns 400"
+resp="$(get "/api/v1/reports/financial/")"
+assert_status "financial 400 on missing dates" "400" "$(code "$resp")"
+
+step "Reports: invoice (P&L by invoices) returns keys"
+resp="$(get "/api/v1/reports/invoice/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}")"
+assert_status "invoice report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "invoice has invoices" "$(body "$resp")" '"invoices"'
+assert_contains "invoice has revenues" "$(body "$resp")" '"revenues"'
+assert_contains "invoice has net_profit" "$(body "$resp")" '"net_profit"'
+
+step "Reports: IFTA returns keys"
+resp="$(get "/api/v1/reports/ifta/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}")"
+assert_status "ifta report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "ifta has rows" "$(body "$resp")" '"rows"'
+assert_contains "ifta has total_gallons" "$(body "$resp")" '"total_gallons"'
+
+step "Reports: tax returns keys"
+resp="$(get "/api/v1/reports/tax/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}")"
+assert_status "tax report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "tax has drivers" "$(body "$resp")" '"drivers"'
+assert_contains "tax has owners" "$(body "$resp")" '"owners"'
+assert_contains "tax has dispatchers" "$(body "$resp")" '"dispatchers"'
+
+step "Reports: category-tracking returns keys"
+resp="$(get "/api/v1/reports/category-tracking/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}")"
+assert_status "category-tracking report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "category-tracking has rows" "$(body "$resp")" '"rows"'
+assert_contains "category-tracking has total_amount" "$(body "$resp")" '"total_amount"'
+
+step "Reports: broker-summary returns keys"
+resp="$(get "/api/v1/reports/broker-summary/?year=${REPORT_YEAR}")"
+assert_status "broker-summary report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "broker-summary has brokers" "$(body "$resp")" '"brokers"'
+
+step "Reports: broker-summary missing year returns 400"
+resp="$(get "/api/v1/reports/broker-summary/")"
+assert_status "broker-summary 400 on missing year" "400" "$(code "$resp")"
+
+step "Reports: shipper-receiver returns keys"
+resp="$(get "/api/v1/reports/shipper-receiver/?year=${REPORT_YEAR}")"
+assert_status "shipper-receiver report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "shipper-receiver has pairs" "$(body "$resp")" '"pairs"'
+assert_contains "shipper-receiver has total_deliveries" "$(body "$resp")" '"total_deliveries"'
+
+step "Reports: shipper-receiver missing year returns 400"
+resp="$(get "/api/v1/reports/shipper-receiver/")"
+assert_status "shipper-receiver 400 on missing year" "400" "$(code "$resp")"
+
 # ── Final summary ─────────────────────────────────────────────────────────────
 # Disable ERR trap — we're done, exit 0 is intentional.
 trap - ERR
