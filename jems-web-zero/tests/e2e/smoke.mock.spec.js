@@ -275,22 +275,33 @@ const LOAD_BROKER_CONTACTS = {
 
 const BROKER_STATUS_RESULTS = [
   {
-    id: 1, mc: 'MC001', name: 'Sunrise Freight LLC', dba_name: 'Sunrise',
+    id: 1, broker_id: 1, mc: 'MC001', mc_number: 'MC001',
+    name: 'Sunrise Freight LLC', legal_name: 'Sunrise Freight LLC',
+    debtor_name: 'Sunrise Freight LLC', dba_name: 'Sunrise', phone: '555-0001',
     status: 1, buy_status: '1',
+    exists: true, source: 'local',
     debtor_buy_status: 'Approved For Purchases',
-    safer_operating_status: 'AUTHORIZED',
-    factor_company: 'tafs', checked_at: '2025-01-15',
+    debtor_rating: 'A', debtor_credit_limit: '10000',
+    safer_operating_status: 'AUTHORIZED', operating_status: 'AUTHORIZED',
+    factor_company: 'tafs', factor_account_id: 'acct-1', checked_at: '2025-01-15',
     last_load: {
       id: 42, number: 'LD-00042',
       pickup_city: 'Charlotte, NC', dropoff_city: 'Atlanta, GA',
       payment: '1500.00', pickup_date: '2025-01-10T08:00:00Z',
+      dropoff_date: '2025-01-11T08:00:00Z', driver: 'Jane Driver',
+      truck: 'T-101', trailer: 'TR-201',
     },
   },
   {
-    id: 2, mc: 'MC002', name: 'Denied Carrier Inc', dba_name: '',
+    id: null, broker_id: null, mc: 'MC002', mc_number: 'MC002',
+    name: 'Denied Carrier Inc', legal_name: 'Denied Carrier Inc',
+    debtor_name: 'Denied Carrier Inc', dba_name: '', phone: '',
     status: 1, buy_status: '0',
+    exists: false, source: 'tafs',
     debtor_buy_status: 'No Buy - Denied For Purchases',
-    safer_operating_status: '', factor_company: 'tafs', checked_at: null,
+    debtor_rating: 'C', debtor_credit_limit: '0',
+    safer_operating_status: '', operating_status: '',
+    factor_company: 'tafs', factor_account_id: 'acct-2', checked_at: null,
     last_load: null,
   },
 ]
@@ -503,6 +514,9 @@ async function mockApi(page) {
     if (/\/fleet\/trucks\/\d+\/$/.test(pathname) && method === 'GET') return json(TRUCK_DETAIL)
     if (pathname.endsWith('/brokers/options/')) return json(BROKERS.map((b) => ({ id: b.id, label: b.name })))
     if (pathname.endsWith('/brokers/status-search/') && method === 'GET') return json(BROKER_STATUS_RESULTS)
+    if (pathname.endsWith('/brokers/status-search/create/') && method === 'POST') {
+      return json({ ...BROKER_DETAIL, id: 2, mc: 'MC002', name: 'Denied Carrier Inc', dba_name: '', phone: '', status: 0 })
+    }
     if (pathname.endsWith('/brokers/search/')) return json(BROKERS)
     if (/\/brokers\/\d+\/contacts\/$/.test(pathname)) return json(BROKER_DETAIL.contacts)
     if (/\/brokers\/\d+\/$/.test(pathname) && method === 'GET') return json(BROKER_DETAIL)
@@ -1591,6 +1605,30 @@ test('Brokers status modal: shows debtor buy status in results', async ({ page }
   await expect(modal.getByText('No Buy - Denied For Purchases')).toBeVisible()
 })
 
+test('Brokers status modal: shows TAFS rating, credit limit, and create action', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /brokers status/i }).click()
+  const modal = page.locator('.modal-content')
+  await modal.locator('input[placeholder*="Search"]').fill('freight')
+  await modal.getByRole('button', { name: /^search$/i }).click()
+  await expect(modal.getByText('TAFS debtor rating')).toBeVisible()
+  await expect(modal.getByText('TAFS debtor credit limit')).toBeVisible()
+  await expect(modal.getByText('Status updated!')).toBeVisible()
+  await expect(modal.getByRole('button', { name: /add new broker/i })).toBeVisible()
+})
+
+test('Brokers status modal: can create missing broker from result', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/loads')
+  await page.getByRole('button', { name: /brokers status/i }).click()
+  const modal = page.locator('.modal-content')
+  await modal.locator('input[placeholder*="Search"]').fill('Denied')
+  await modal.getByRole('button', { name: /^search$/i }).click()
+  await modal.getByRole('button', { name: /add new broker/i }).click()
+  await expect(modal.getByText('Status updated!')).toHaveCount(2)
+})
+
 test('Brokers status modal: shows last load number in results', async ({ page }) => {
   await withAuth(page)
   await page.goto('/loads')
@@ -2067,6 +2105,26 @@ test('Brokers Status page: shows debtor buy status in results', async ({ page })
   await page.getByPlaceholder(/search by name or mc/i).fill('Sunrise')
   await page.getByRole('button', { name: /^Search$/ }).click()
   await expect(page.getByText('Approved For Purchases')).toBeVisible()
+})
+
+test('Brokers Status page: shows TAFS rating, credit limit, and create action', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/brokers-status')
+  await page.getByPlaceholder(/search by name or mc/i).fill('Sunrise')
+  await page.getByRole('button', { name: /^Search$/ }).click()
+  await expect(page.getByText('TAFS debtor rating')).toBeVisible()
+  await expect(page.getByText('TAFS debtor credit limit')).toBeVisible()
+  await expect(page.getByText('Status updated!')).toBeVisible()
+  await expect(page.getByRole('button', { name: /add new broker/i })).toBeVisible()
+})
+
+test('Brokers Status page: can create missing broker from result', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/brokers-status')
+  await page.getByPlaceholder(/search by name or mc/i).fill('Denied')
+  await page.getByRole('button', { name: /^Search$/ }).click()
+  await page.getByRole('button', { name: /add new broker/i }).click()
+  await expect(page.getByText('Status updated!')).toHaveCount(2)
 })
 
 test('Brokers Status page: shows last load number in results', async ({ page }) => {

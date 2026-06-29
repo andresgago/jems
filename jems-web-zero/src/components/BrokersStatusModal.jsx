@@ -32,6 +32,12 @@ function LastLoadCell({ load }) {
       {load.pickup_city} → {load.dropoff_city}
       <br />
       {formatMoney(load.payment)} · {formatDate(load.pickup_date)}
+      {(load.driver || load.truck || load.trailer) && (
+        <>
+          <br />
+          {load.driver || '—'} {load.truck || load.trailer ? `· ${load.truck || '—'} - ${load.trailer || '—'}` : ''}
+        </>
+      )}
     </span>
   );
 }
@@ -41,6 +47,7 @@ export default function BrokersStatusModal({ onClose }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState('');
+  const [creatingMc, setCreatingMc] = useState('');
 
   async function handleSearch(e) {
     e.preventDefault();
@@ -56,6 +63,32 @@ export default function BrokersStatusModal({ onClose }) {
       setResults(null);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCreateBroker(broker) {
+    setError('');
+    setCreatingMc(broker.mc);
+    try {
+      const res = await api.post('/brokers/status-search/create/', broker);
+      setResults((current) => (current || []).map((item) => (
+        item.mc === broker.mc
+          ? {
+              ...item,
+              id: res.data.id,
+              broker_id: res.data.id,
+              exists: true,
+              status: res.data.status,
+              name: res.data.name,
+              dba_name: res.data.dba_name,
+              phone: res.data.phone,
+            }
+          : item
+      )));
+    } catch {
+      setError('Broker could not be created. Please review the result and try again.');
+    } finally {
+      setCreatingMc('');
     }
   }
 
@@ -102,14 +135,17 @@ export default function BrokersStatusModal({ onClose }) {
                       <th>MC</th>
                       <th>Name</th>
                       <th>TAFS debtor buy status</th>
+                      <th>TAFS debtor rating</th>
+                      <th>TAFS debtor credit limit</th>
                       <th>SAFER status</th>
                       <th>Checked</th>
                       <th>Last load</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {results.map((broker, idx) => (
-                      <tr key={broker.id} className={buyStatusClass(broker.debtor_buy_status)}>
+                      <tr key={`${broker.source || 'local'}-${broker.mc}-${broker.id || 'new'}`} className={buyStatusClass(broker.debtor_buy_status)}>
                         <td className="text-center">{idx + 1}</td>
                         <td>{broker.mc}</td>
                         <td>
@@ -117,9 +153,25 @@ export default function BrokersStatusModal({ onClose }) {
                           {broker.dba_name && <span className="text-muted ms-1 small">({broker.dba_name})</span>}
                         </td>
                         <td>{broker.debtor_buy_status || '—'}</td>
+                        <td>{broker.debtor_rating || '—'}</td>
+                        <td>{broker.debtor_credit_limit || '—'}</td>
                         <td>{broker.safer_operating_status || '—'}</td>
                         <td>{formatDate(broker.checked_at)}</td>
                         <td><LastLoadCell load={broker.last_load} /></td>
+                        <td className="text-nowrap">
+                          {broker.exists ? (
+                            <span className="text-success small">Status updated!</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={creatingMc === broker.mc}
+                              onClick={() => handleCreateBroker(broker)}
+                            >
+                              {creatingMc === broker.mc ? 'Creating…' : 'Add New Broker'}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

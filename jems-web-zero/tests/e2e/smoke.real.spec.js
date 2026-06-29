@@ -945,9 +945,38 @@ test('broker status-search returns results for a known MC (real)', async ({ page
   expect(Array.isArray(results)).toBe(true)
   expect(results.length).toBe(1)
   expect(results[0].mc).toBe(mc)
+  expect(results[0].exists).toBe(true)
+  expect(results[0].source).toBe('local')
   expect(results[0].debtor_buy_status).toBe('Approved For Purchases')
   expect(results[0].safer_operating_status).toBe('AUTHORIZED')
+  expect(Object.prototype.hasOwnProperty.call(results[0], 'debtor_rating')).toBe(true)
+  expect(Object.prototype.hasOwnProperty.call(results[0], 'debtor_credit_limit')).toBe(true)
   expect(results[0].last_load).toBeNull()
+
+  await apiDelete(page, token, `/brokers/${created.id}/`)
+})
+
+test('broker status-search create can create and delete broker (real)', async ({ page }) => {
+  await authenticateAsAdmin(page)
+  await page.goto('/')
+  const token = await getAccessToken(page)
+
+  const mc = `E2ECREATE${Date.now().toString().slice(-6)}`
+  const created = await apiPost(page, token, '/brokers/status-search/create/', {
+    mc_number: mc,
+    legal_name: `E2E Created Status Broker ${mc}`,
+    dba_name: 'E2E Created',
+    phone: '555-0199',
+    account_id: `acct-${mc}`,
+    debtor_buy_status: 'No Buy - Denied For Purchases',
+    operating_status: 'AUTHORIZED',
+  })
+
+  expect(created.id).toBeTruthy()
+  expect(created.mc).toBe(mc)
+  expect(created.name).toContain('E2E Created Status Broker')
+  expect(created.buy_status).toBe('0')
+  expect(created.debtor_buy_status).toBe('No Buy - Denied For Purchases')
 
   await apiDelete(page, token, `/brokers/${created.id}/`)
 })

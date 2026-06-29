@@ -6,6 +6,7 @@ import BrokersStatusPage from '../BrokersStatusPage';
 vi.mock('../../../services/api', () => ({
   default: {
     get: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
@@ -22,6 +23,11 @@ const RESULTS = [
     debtor_buy_status: 'Approved For Purchases',
     safer_operating_status: 'AUTHORIZED',
     factor_company: 'tafs',
+    factor_account_id: 'acct-1',
+    exists: true,
+    source: 'local',
+    debtor_rating: 'A',
+    debtor_credit_limit: '10000',
     checked_at: '2025-01-15',
     last_load: {
       id: 42,
@@ -30,6 +36,10 @@ const RESULTS = [
       dropoff_city: 'Atlanta, GA',
       payment: '1500.00',
       pickup_date: '2025-01-10T08:00:00Z',
+      dropoff_date: '2025-01-11T08:00:00Z',
+      driver: 'Jane Driver',
+      truck: 'T-101',
+      trailer: 'TR-201',
     },
   },
   {
@@ -42,6 +52,11 @@ const RESULTS = [
     debtor_buy_status: 'No Buy - Denied For Purchases',
     safer_operating_status: '',
     factor_company: 'tafs',
+    factor_account_id: 'acct-2',
+    exists: false,
+    source: 'tafs',
+    debtor_rating: 'C',
+    debtor_credit_limit: '0',
     checked_at: null,
     last_load: null,
   },
@@ -120,6 +135,19 @@ describe('BrokersStatusPage', () => {
     expect(screen.getByText('No Buy - Denied For Purchases')).toBeInTheDocument();
   });
 
+  it('shows TAFS rating and credit limit columns', async () => {
+    api.get.mockResolvedValue({ data: RESULTS });
+    setup();
+    fireEvent.change(screen.getByPlaceholderText(/search by name or mc/i), {
+      target: { value: 'Acme' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+    expect(await screen.findByText('TAFS debtor rating')).toBeInTheDocument();
+    expect(screen.getByText('TAFS debtor credit limit')).toBeInTheDocument();
+    expect(screen.getByText('A')).toBeInTheDocument();
+    expect(screen.getByText('10000')).toBeInTheDocument();
+  });
+
   it('shows last load info', async () => {
     api.get.mockResolvedValue({ data: RESULTS });
     setup();
@@ -128,6 +156,42 @@ describe('BrokersStatusPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
     expect(await screen.findByText('#LD-00042')).toBeInTheDocument();
+    expect(screen.getByText(/Jane Driver/)).toBeInTheDocument();
+  });
+
+  it('shows Status updated for existing brokers and add button for missing brokers', async () => {
+    api.get.mockResolvedValue({ data: RESULTS });
+    setup();
+    fireEvent.change(screen.getByPlaceholderText(/search by name or mc/i), {
+      target: { value: 'Acme' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+    expect(await screen.findByText('Status updated!')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add new broker/i })).toBeInTheDocument();
+  });
+
+  it('creates a broker from a missing TAFS result', async () => {
+    api.get.mockResolvedValue({ data: [RESULTS[1]] });
+    api.post.mockResolvedValue({
+      data: {
+        id: 22,
+        mc: 'MC002',
+        name: 'Denied Carrier Inc',
+        dba_name: '',
+        phone: '',
+        status: 0,
+      },
+    });
+    setup();
+    fireEvent.change(screen.getByPlaceholderText(/search by name or mc/i), {
+      target: { value: 'Denied' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /add new broker/i }));
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith('/brokers/status-search/create/', RESULTS[1]);
+    });
+    expect(await screen.findByText('Status updated!')).toBeInTheDocument();
   });
 
   it('shows em-dash when broker has no last load', async () => {
