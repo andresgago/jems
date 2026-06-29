@@ -201,6 +201,12 @@ class TruckViewSet(ViewSet):
         truck.save(update_fields=["status", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=False, methods=["get"], url_path="options")
+    def options(self, request: Request) -> Response:
+        trucks = Truck.objects.filter(status=Truck.Status.ACTIVE).order_by("number")
+        data = [{"id": t.pk, "number": t.number, "vin": t.vin} for t in trucks]
+        return Response(data)
+
     @action(detail=True, methods=["post"], url_path="toggle-status")
     def toggle_status(self, request: Request, pk: int) -> Response:
         truck = Truck.objects.get(pk=pk)

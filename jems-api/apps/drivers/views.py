@@ -78,6 +78,26 @@ class DriverViewSet(ViewSet):
         driver.save(update_fields=["status", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=False, methods=["get"], url_path="options")
+    def options(self, request: Request) -> Response:
+        drivers = (
+            Driver.objects.exclude(status=Driver.Status.TERMINATED)
+            .select_related("carrier")
+            .order_by("first_name", "last_name")
+        )
+        data = []
+        for d in drivers:
+            carrier = d.carrier
+            data.append(
+                {
+                    "id": d.pk,
+                    "full_name": d.full_name,
+                    "status": d.status,
+                    "carrier_name": carrier.name if carrier is not None else "",
+                }
+            )
+        return Response(data)
+
     @action(detail=True, methods=["post"], url_path="toggle-status")
     def toggle_status(self, request: Request, pk: int) -> Response:
         driver = Driver.objects.get(pk=pk)

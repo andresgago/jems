@@ -37,6 +37,7 @@ def _sum_records(
     trailer_ids: list[int] | None = None,
     dispatcher_ids: list[int] | None = None,
     load_ids: list[int] | None = None,
+    carrier_id: int | None = None,
 ) -> float:
     if account is not None:
         qs = qs.filter(account=account)
@@ -51,6 +52,8 @@ def _sum_records(
         qs = qs.filter(dispatcher_id__in=dispatcher_ids)
     if load_ids is not None:
         qs = qs.filter(load_id__in=load_ids)
+    if carrier_id is not None:
+        qs = qs.filter(carrier_id=carrier_id)
     return float(qs.aggregate(total=Sum("amount"))["total"] or 0.0)
 
 
@@ -62,6 +65,7 @@ def _account_amount(
     truck_ids: list[int] | None = None,
     trailer_ids: list[int] | None = None,
     dispatcher_ids: list[int] | None = None,
+    carrier_id: int | None = None,
 ) -> float:
     base_qs = Record.objects.all()
     return _sum_records(
@@ -73,6 +77,7 @@ def _account_amount(
         truck_ids=truck_ids,
         trailer_ids=trailer_ids,
         dispatcher_ids=dispatcher_ids,
+        carrier_id=carrier_id,
     )
 
 
@@ -85,6 +90,7 @@ def _build_account_entry(
     truck_ids: list[int] | None,
     trailer_ids: list[int] | None,
     dispatcher_ids: list[int] | None,
+    carrier_id: int | None = None,
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "account_code": account.code,
@@ -101,33 +107,58 @@ def _build_account_entry(
                 "id": d,
                 "name": drivers_map.get(d, ""),
                 "amount": _account_amount(
-                    date_begin, date_end, account, driver_ids=[d]
+                    date_begin,
+                    date_end,
+                    account,
+                    driver_ids=[d],
+                    truck_ids=truck_ids,
+                    trailer_ids=trailer_ids,
+                    dispatcher_ids=dispatcher_ids,
+                    carrier_id=carrier_id,
                 ),
             }
             for d in driver_ids
         ]
     if truck_ids:
+        truck_numbers = {
+            t.pk: t.number
+            for t in Truck.objects.filter(pk__in=truck_ids).only("pk", "number")
+        }
         entry["details"]["trucks"] = [
             {
                 "id": t,
-                "number": Truck.objects.filter(pk=t)
-                .values_list("number", flat=True)
-                .first()
-                or "",
-                "amount": _account_amount(date_begin, date_end, account, truck_ids=[t]),
+                "number": truck_numbers.get(t, ""),
+                "amount": _account_amount(
+                    date_begin,
+                    date_end,
+                    account,
+                    driver_ids=driver_ids,
+                    truck_ids=[t],
+                    trailer_ids=trailer_ids,
+                    dispatcher_ids=dispatcher_ids,
+                    carrier_id=carrier_id,
+                ),
             }
             for t in truck_ids
         ]
     if trailer_ids:
+        trailer_numbers = {
+            t.pk: t.number
+            for t in Trailer.objects.filter(pk__in=trailer_ids).only("pk", "number")
+        }
         entry["details"]["trailers"] = [
             {
                 "id": t,
-                "number": Trailer.objects.filter(pk=t)
-                .values_list("number", flat=True)
-                .first()
-                or "",
+                "number": trailer_numbers.get(t, ""),
                 "amount": _account_amount(
-                    date_begin, date_end, account, trailer_ids=[t]
+                    date_begin,
+                    date_end,
+                    account,
+                    driver_ids=driver_ids,
+                    truck_ids=truck_ids,
+                    trailer_ids=[t],
+                    dispatcher_ids=dispatcher_ids,
+                    carrier_id=carrier_id,
                 ),
             }
             for t in trailer_ids
@@ -142,7 +173,14 @@ def _build_account_entry(
                 "id": d,
                 "name": users_map.get(d, ""),
                 "amount": _account_amount(
-                    date_begin, date_end, account, dispatcher_ids=[d]
+                    date_begin,
+                    date_end,
+                    account,
+                    driver_ids=driver_ids,
+                    truck_ids=truck_ids,
+                    trailer_ids=trailer_ids,
+                    dispatcher_ids=[d],
+                    carrier_id=carrier_id,
                 ),
             }
             for d in dispatcher_ids
@@ -162,7 +200,19 @@ def get_financial_report(
     truck_ids: list[int] | None = None,
     trailer_ids: list[int] | None = None,
     dispatcher_ids: list[int] | None = None,
+    carrier_id: int | None = None,
 ) -> dict[str, Any]:
+    from apps.carriers.models import Carrier
+
+    carrier_name = ""
+    if carrier_id is not None:
+        try:
+            carrier_name = Carrier.objects.get(pk=carrier_id).name
+        except Carrier.DoesNotExist:
+            pass
+
+    ytd_begin = f"{date_end[:4]}-01-01"
+
     revenue_accounts = Account.objects.filter(
         is_main=False, code__startswith="900"
     ).order_by("code")
@@ -171,6 +221,7 @@ def get_financial_report(
     ).order_by("code")
 
     total_revenues = 0.0
+    ytd_total_revenues = 0.0
     revenues: list[dict] = []
     for account in revenue_accounts:
         amount = _account_amount(
@@ -181,23 +232,36 @@ def get_financial_report(
             truck_ids,
             trailer_ids,
             dispatcher_ids,
+            carrier_id,
         )
-        if amount != 0:
-            total_revenues += amount
-            revenues.append(
-                _build_account_entry(
-                    account,
-                    amount,
-                    date_begin,
-                    date_end,
-                    driver_ids,
-                    truck_ids,
-                    trailer_ids,
-                    dispatcher_ids,
-                )
-            )
+        ytd_amount = _account_amount(
+            ytd_begin,
+            date_end,
+            account,
+            driver_ids,
+            truck_ids,
+            trailer_ids,
+            dispatcher_ids,
+            carrier_id,
+        )
+        total_revenues += amount
+        ytd_total_revenues += ytd_amount
+        entry = _build_account_entry(
+            account,
+            amount,
+            date_begin,
+            date_end,
+            driver_ids,
+            truck_ids,
+            trailer_ids,
+            dispatcher_ids,
+            carrier_id,
+        )
+        entry["ytd_amount"] = ytd_amount
+        revenues.append(entry)
 
     total_expenses = 0.0
+    ytd_total_expenses = 0.0
     expenses: list[dict] = []
     for account in expense_accounts:
         amount = _account_amount(
@@ -208,30 +272,47 @@ def get_financial_report(
             truck_ids,
             trailer_ids,
             dispatcher_ids,
+            carrier_id,
         )
-        if amount != 0:
-            total_expenses += amount
-            expenses.append(
-                _build_account_entry(
-                    account,
-                    amount,
-                    date_begin,
-                    date_end,
-                    driver_ids,
-                    truck_ids,
-                    trailer_ids,
-                    dispatcher_ids,
-                )
-            )
+        ytd_amount = _account_amount(
+            ytd_begin,
+            date_end,
+            account,
+            driver_ids,
+            truck_ids,
+            trailer_ids,
+            dispatcher_ids,
+            carrier_id,
+        )
+        total_expenses += amount
+        ytd_total_expenses += ytd_amount
+        entry = _build_account_entry(
+            account,
+            amount,
+            date_begin,
+            date_end,
+            driver_ids,
+            truck_ids,
+            trailer_ids,
+            dispatcher_ids,
+            carrier_id,
+        )
+        entry["ytd_amount"] = ytd_amount
+        expenses.append(entry)
 
     return {
+        "carrier_name": carrier_name,
         "date_begin": date_begin,
         "date_end": date_end,
+        "ytd_begin": ytd_begin,
         "revenues": revenues,
         "total_revenues": total_revenues,
+        "ytd_total_revenues": ytd_total_revenues,
         "expenses": expenses,
         "total_expenses": total_expenses,
+        "ytd_total_expenses": ytd_total_expenses,
         "net_profit": total_revenues + total_expenses,
+        "ytd_net_profit": ytd_total_revenues + ytd_total_expenses,
     }
 
 

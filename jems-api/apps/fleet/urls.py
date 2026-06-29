@@ -19,6 +19,7 @@ from .views import (
 
 # Trucks
 truck_list = TruckViewSet.as_view({"get": "list", "post": "create"})
+truck_options = TruckViewSet.as_view({"get": "options"})
 truck_detail = TruckViewSet.as_view(
     {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
 )
@@ -79,6 +80,7 @@ miles_reset_detail = TruckMilesResetViewSet.as_view({"delete": "destroy"})
 
 urlpatterns = [
     path("trucks/", truck_list, name="truck-list"),
+    path("trucks/options/", truck_options, name="truck-options"),
     path("trucks/<int:pk>/", truck_detail, name="truck-detail"),
     path(
         "trucks/<int:pk>/toggle-status/",

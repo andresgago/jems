@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
@@ -273,6 +274,21 @@ class DriverInvoiceViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         invoice = open_driver_invoice(invoice=invoice, updated_by=request.user)
         return Response(DriverInvoiceSerializer(invoice).data)
+
+    @action(detail=False, methods=["get"], url_path="options")
+    def options(self, request: "Request") -> Response:
+        date_begin = request.query_params.get("date_begin", "")
+        date_end = request.query_params.get("date_end", "")
+        qs = DriverInvoice.objects.all()
+        if date_begin and date_end:
+            qs = qs.filter(date__range=[date_begin, date_end])
+        raw_drivers = request.query_params.getlist("driver")
+        if raw_drivers:
+            driver_ids = [int(x) for x in raw_drivers if x.isdigit()]
+            if driver_ids:
+                qs = qs.filter(driver_id__in=driver_ids)
+        data = [{"id": inv.pk, "number": inv.number} for inv in qs.order_by("number")]
+        return Response(data)
 
 
 class OwnerInvoiceViewSet(ViewSet):

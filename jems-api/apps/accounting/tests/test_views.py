@@ -185,6 +185,61 @@ class TestDriverInvoiceClose:
         assert response.data["status"] == DriverInvoice.Status.OPEN
 
 
+# ── Driver Invoice Options ────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestDriverInvoiceOptions:
+    url = "/api/v1/accounting/driver-invoices/options/"
+
+    def test_unauthenticated_rejected(self, client):
+        resp = client.get(self.url)
+        assert resp.status_code == 401
+
+    def test_returns_all_invoices_without_filters(self, auth_client):
+        client, _ = auth_client
+        DriverInvoiceFactory.create_batch(3)
+        resp = client.get(self.url)
+        assert resp.status_code == 200
+        assert len(resp.json()) >= 3
+
+    def test_filters_by_date_range(self, auth_client):
+        client, _ = auth_client
+        DriverInvoiceFactory(date=datetime.date(2024, 3, 1))
+        DriverInvoiceFactory(date=datetime.date(2023, 1, 1))
+        resp = client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+
+    def test_filters_by_driver(self, auth_client):
+        client, _ = auth_client
+        driver = DriverFactory()
+        other = DriverFactory()
+        DriverInvoiceFactory(driver=driver, date=datetime.date(2024, 1, 1))
+        DriverInvoiceFactory(driver=other, date=datetime.date(2024, 1, 1))
+        resp = client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "driver": driver.pk},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+
+    def test_returns_id_and_number_fields(self, auth_client):
+        client, _ = auth_client
+        inv = DriverInvoiceFactory(date=datetime.date(2024, 6, 1))
+        resp = client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        assert resp.status_code == 200
+        entry = next(e for e in resp.json() if e["id"] == inv.pk)
+        assert "id" in entry
+        assert "number" in entry
+
+
 # ── Owner Invoices ────────────────────────────────────────────────────────────
 
 

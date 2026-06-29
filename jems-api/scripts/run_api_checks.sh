@@ -2464,10 +2464,26 @@ assert_status "financial report" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "financial has revenues" "$(body "$resp")" '"revenues"'
 assert_contains "financial has expenses" "$(body "$resp")" '"expenses"'
 assert_contains "financial has net_profit" "$(body "$resp")" '"net_profit"'
+assert_contains "financial has date_begin" "$(body "$resp")" '"date_begin"'
+assert_contains "financial has date_end" "$(body "$resp")" '"date_end"'
+assert_contains "financial has total_revenues" "$(body "$resp")" '"total_revenues"'
+assert_contains "financial has total_expenses" "$(body "$resp")" '"total_expenses"'
+
+step "Reports: financial with driver filter returns account_code/account_name in revenues"
+resp="$(get "/api/v1/reports/financial/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}")"
+assert_status "financial account fields check" "200" "$(code "$resp")" "$(body "$resp")"
 
 step "Reports: financial missing dates returns 400"
 resp="$(get "/api/v1/reports/financial/")"
 assert_status "financial 400 on missing dates" "400" "$(code "$resp")"
+
+step "Fleet: truck options endpoint returns list"
+resp="$(get "/api/v1/fleet/trucks/options/")"
+assert_status "truck options 200" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Drivers: driver options endpoint returns list"
+resp="$(get "/api/v1/drivers/options/")"
+assert_status "driver options 200" "200" "$(code "$resp")" "$(body "$resp")"
 
 step "Reports: invoice (P&L by invoices) returns keys"
 resp="$(get "/api/v1/reports/invoice/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}")"

@@ -168,6 +168,77 @@ CARRIERS = [
     },
 ]
 
+# (id, code, name, is_active, is_main, no_tax, is_assistant)
+ACCOUNTS = [
+    (1, "900", "Income", True, True, False, False),
+    (2, "90010", "Rate", True, False, False, False),
+    (3, "800", "Expenses", True, True, False, False),
+    (4, "80030", "Fuel", True, False, False, False),
+    (5, "80050", "Driver Payroll", True, False, False, False),
+    (6, "80081", "Insurance", True, False, False, False),
+    (7, "80080", "Toll Charge", True, False, False, False),
+    (8, "90030", "Driver deductions", True, False, False, False),
+    (9, "80082", "Expenses by Driver", True, False, False, False),
+    (10, "90011", "Detention", True, False, False, False),
+    (11, "80011", "Expenses By Detention", True, False, False, False),
+    (12, "90012", "Lumper", True, False, False, False),
+    (13, "80012", "Expenses By Lumper", True, False, False, False),
+    (14, "80013", "Expenses Scale & Wash", True, False, False, False),
+    (15, "10040", "% Factor dispatch by load", True, False, False, False),
+    (16, "80084", "Factor Fee", True, False, False, False),
+    (17, "80051", "Vacation", True, False, False, False),
+    (18, "80085", "Owner Operator Payment", True, False, False, False),
+    (19, "80052", "Dispatcher Payroll", True, False, False, False),
+    (20, "80070", "Expenses by Factor", True, False, False, False),
+    (21, "80090", "Maintenance", True, False, True, False),
+    (22, "80071", "Expenses by Minimum", True, False, False, False),
+    (23, "90014", "Drop Trailer", True, False, False, False),
+    (24, "80091", "Office", True, False, False, False),
+    (25, "80092", "Inventory", True, False, True, False),
+    (26, "80060", "Investment", True, False, False, False),
+    (27, "80075", "Taxes and Licenses", True, False, False, False),
+    (28, "80076", "Depreciation", True, False, False, False),
+    (29, "80083", "Worker Compensation", True, False, False, False),
+    (30, "80093", "Transam Lease", True, False, False, False),
+    (31, "80094", "Yard Lease Payment", True, False, False, False),
+    (32, "80095", "Spectrum Internet", True, False, False, False),
+    (33, "80096", "Verizon Connect ELD", True, False, False, False),
+    (34, "80097", "DAT Load Board", True, False, False, False),
+    (35, "80098", "Prepass", True, False, False, False),
+    (36, "80099", "TAF Fee", True, False, False, False),
+    (37, "80014", "License Plate", True, False, True, False),
+    (38, "80015", "2290 Fee", True, False, False, False),
+    (39, "80020", "Safety Director", True, False, False, False),
+    (40, "10041", "% Factor dispatch by Drop Trailer", True, False, False, False),
+    (41, "80089", "Foley", True, False, False, False),
+    (42, "80061", "Salvage Reseller", True, False, False, False),
+    (43, "80062", "AT&T", True, False, False, False),
+    (44, "80063", "Unifirst", True, False, False, False),
+    (45, "80064", "Lawyer", True, False, True, False),
+    (46, "80065", "Waste Connection", True, False, False, False),
+    (47, "80053", "Taxes Accounting", True, False, False, False),
+    (48, "80054", "Viewpost Subscription", True, False, False, False),
+    (49, "80055", "Accidents", True, False, False, False),
+    (50, "80056", "Driver Payment BoA Fee x Transaction", True, False, False, False),
+    (51, "80057", "Hiring", True, False, False, False),
+    (52, "80058", "Drug and Alcohol Program", True, False, False, False),
+    (53, "80059", "Business Travel", True, False, False, False),
+    (54, "80066", "KY Tax", True, False, False, False),
+    (55, "80016", "IFTA", True, False, False, False),
+    (56, "80018", "FMSCA CVL Penalty", True, False, False, False),
+    (57, "90031", "UCR", True, False, False, False),
+    (58, "80035", "Expenses by Scale", True, False, False, False),
+    (59, "80036", "Misc", True, False, False, False),
+    (60, "10042", "% Factor dispatch by Detention", True, False, False, False),
+    (61, "10043", "% Factor dispatch by Owner", True, False, False, False),
+    (62, "80086", "Loan", True, False, False, False),
+    (63, "80040", "General", True, False, False, False),
+    (64, "80001", "Accessorials", True, True, False, False),
+    (65, "80002", "Payroll", True, True, False, False),
+    (66, "80003", "Rent", True, True, False, False),
+    (67, "80004", "Services", True, True, False, False),
+]
+
 CARDS = [
     (1, "304116000031"),
     (2, "005"),
@@ -265,6 +336,7 @@ class Command(BaseCommand):
             self._seed_driver_types()
             self._seed_cards()
             self._seed_carriers()
+            self._seed_accounts()
         self.stdout.write(self.style.SUCCESS("Seed complete."))
 
     def _seed_states(self):
@@ -415,6 +487,26 @@ class Command(BaseCommand):
             if is_new:
                 created += 1
         self.stdout.write(f"  Carriers: {len(CARRIERS)} total, {created} new")
+
+    def _seed_accounts(self):
+        from apps.accounting.models import Account
+
+        created = sum(
+            1
+            for pk, code, name, is_active, is_main, no_tax, is_assistant in ACCOUNTS
+            if Account.objects.update_or_create(
+                id=pk,
+                defaults={
+                    "code": code,
+                    "name": name,
+                    "is_active": is_active,
+                    "is_main": is_main,
+                    "no_tax": no_tax,
+                    "is_assistant": is_assistant,
+                },
+            )[1]
+        )
+        self.stdout.write(f"  Accounts: {len(ACCOUNTS)} total, {created} new")
 
     def _seed_cards(self):
         from apps.fleet.models import Card

@@ -43,6 +43,8 @@ class FinancialReportView(APIView):
             return Response(
                 {"detail": "date_begin and date_end are required."}, status=400
             )
+        carrier_raw = request.query_params.get("carrier", "")
+        carrier_id = int(carrier_raw) if carrier_raw.isdigit() else None
         data = get_financial_report(
             date_begin,
             date_end,
@@ -50,6 +52,7 @@ class FinancialReportView(APIView):
             truck_ids=_list_param(request, "truck"),
             trailer_ids=_list_param(request, "trailer"),
             dispatcher_ids=_list_param(request, "dispatcher"),
+            carrier_id=carrier_id,
         )
         return Response(data)
 

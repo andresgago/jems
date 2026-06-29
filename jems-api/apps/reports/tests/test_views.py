@@ -10,9 +10,10 @@ from apps.accounting.tests.factories import (
     RecordFactory,
 )
 from apps.brokers.tests.factories import BrokerFactory
-from apps.drivers.models import DriverType
+from apps.drivers.models import Driver, DriverType
 from apps.drivers.tests.factories import DriverFactory, DriverTypeFactory
 from apps.fleet.models import Card, Truck
+from apps.fleet.tests.factories import TruckFactory
 from apps.loads.tests.factories import (
     BusinessFactory,
     CityFactory,
@@ -709,3 +710,219 @@ class TestShipperReceiverReport:
         resp = api_client.get(self.url, {"year": "2024"})
         data = resp.json()
         assert data["pairs"] == []
+
+
+# ---------------------------------------------------------------------------
+# Financial report — cross-filter detail breakdown (bug fix)
+# ---------------------------------------------------------------------------
+
+
+class TestFinancialReportCrossFilter:
+    """Verify that detail breakdown preserves all active filters (legacy parity)."""
+
+    url = "/api/v1/reports/financial/"
+
+    def test_driver_detail_preserves_truck_filter(self, api_client, db):
+        """When filtering by both driver AND truck, the per-driver detail amount
+        must reflect BOTH filters, not just the driver filter."""
+        account = _make_account("90010", "Freight Income")
+        dt = DriverTypeFactory()
+        driver = DriverFactory(driver_type=dt)
+        truck_a = TruckFactory(status=Truck.Status.ACTIVE)
+        truck_b = TruckFactory(status=Truck.Status.ACTIVE)
+
+        # driver + truck_a → $1000
+        RecordFactory(
+            account=account,
+            amount=1000.0,
+            date=datetime.date(2024, 1, 1),
+            progress=0,
+            driver=driver,
+            truck=truck_a,
+        )
+        # driver + truck_b → $500 (different truck — must be excluded by truck filter)
+        RecordFactory(
+            account=account,
+            amount=500.0,
+            date=datetime.date(2024, 1, 1),
+            progress=0,
+            driver=driver,
+            truck=truck_b,
+        )
+
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "driver": str(driver.pk),
+                "truck": str(truck_a.pk),
+            },
+        )
+        data = resp.json()
+        # Total should be $1000 (only truck_a records)
+        assert data["total_revenues"] == pytest.approx(1000.0)
+        # Per-driver detail must also be $1000 (cross-filter applies)
+        drivers_detail = data["revenues"][0]["details"]["drivers"]
+        assert len(drivers_detail) == 1
+        assert drivers_detail[0]["amount"] == pytest.approx(1000.0)
+
+    def test_truck_detail_preserves_driver_filter(self, api_client, db):
+        account = _make_account("90010", "Freight Income")
+        dt = DriverTypeFactory()
+        driver_a = DriverFactory(driver_type=dt)
+        driver_b = DriverFactory(driver_type=dt)
+        truck = TruckFactory(status=Truck.Status.ACTIVE)
+
+        RecordFactory(
+            account=account,
+            amount=2000.0,
+            date=datetime.date(2024, 2, 1),
+            progress=0,
+            driver=driver_a,
+            truck=truck,
+        )
+        RecordFactory(
+            account=account,
+            amount=300.0,
+            date=datetime.date(2024, 2, 1),
+            progress=0,
+            driver=driver_b,
+            truck=truck,
+        )
+
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "driver": str(driver_a.pk),
+                "truck": str(truck.pk),
+            },
+        )
+        data = resp.json()
+        assert data["total_revenues"] == pytest.approx(2000.0)
+        trucks_detail = data["revenues"][0]["details"]["trucks"]
+        assert trucks_detail[0]["amount"] == pytest.approx(2000.0)
+
+    def test_dispatcher_detail_preserves_driver_filter(self, api_client, db):
+        account = _make_account("90010", "Freight Income")
+        dt = DriverTypeFactory()
+        driver = DriverFactory(driver_type=dt)
+        dispatcher = DispatcherFactory()
+        other_dispatcher = DispatcherFactory()
+
+        RecordFactory(
+            account=account,
+            amount=800.0,
+            date=datetime.date(2024, 3, 1),
+            progress=0,
+            driver=driver,
+            dispatcher=dispatcher,
+        )
+        RecordFactory(
+            account=account,
+            amount=200.0,
+            date=datetime.date(2024, 3, 1),
+            progress=0,
+            driver=driver,
+            dispatcher=other_dispatcher,
+        )
+
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "driver": str(driver.pk),
+                "dispatcher": str(dispatcher.pk),
+            },
+        )
+        data = resp.json()
+        assert data["total_revenues"] == pytest.approx(800.0)
+        disp_detail = data["revenues"][0]["details"]["dispatchers"]
+        assert disp_detail[0]["amount"] == pytest.approx(800.0)
+
+
+# ---------------------------------------------------------------------------
+# Truck options endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestTruckOptions:
+    url = "/api/v1/fleet/trucks/options/"
+
+    def test_unauthenticated_rejected(self, db, client):
+        resp = client.get(self.url)
+        assert resp.status_code == 401
+
+    def test_returns_active_trucks_only(self, api_client, db):
+        active = TruckFactory(status=Truck.Status.ACTIVE)
+        inactive = TruckFactory(status=Truck.Status.INACTIVE)
+        resp = api_client.get(self.url)
+        assert resp.status_code == 200
+        ids = [r["id"] for r in resp.json()]
+        assert active.pk in ids
+        assert inactive.pk not in ids
+
+    def test_response_has_expected_fields(self, api_client, db):
+        TruckFactory(status=Truck.Status.ACTIVE)
+        resp = api_client.get(self.url)
+        assert resp.status_code == 200
+        row = resp.json()[0]
+        assert "id" in row
+        assert "number" in row
+        assert "vin" in row
+
+    def test_ordered_by_number(self, api_client, db):
+        TruckFactory(number="Z999", status=Truck.Status.ACTIVE)
+        TruckFactory(number="A001", status=Truck.Status.ACTIVE)
+        resp = api_client.get(self.url)
+        numbers = [r["number"] for r in resp.json()]
+        assert numbers == sorted(numbers)
+
+    def test_empty_when_no_active_trucks(self, api_client, db):
+        TruckFactory(status=Truck.Status.INACTIVE)
+        resp = api_client.get(self.url)
+        assert resp.json() == []
+
+
+# ---------------------------------------------------------------------------
+# Driver options endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestDriverOptions:
+    url = "/api/v1/drivers/options/"
+
+    def test_unauthenticated_rejected(self, db, client):
+        resp = client.get(self.url)
+        assert resp.status_code == 401
+
+    def test_returns_non_terminated_drivers(self, api_client, db):
+        dt = DriverTypeFactory()
+        active = DriverFactory(driver_type=dt, status=Driver.Status.ACTIVE)
+        inactive = DriverFactory(driver_type=dt, status=Driver.Status.INACTIVE)
+        terminated = DriverFactory(driver_type=dt, status=Driver.Status.TERMINATED)
+        resp = api_client.get(self.url)
+        assert resp.status_code == 200
+        ids = [r["id"] for r in resp.json()]
+        assert active.pk in ids
+        assert inactive.pk in ids
+        assert terminated.pk not in ids
+
+    def test_response_has_expected_fields(self, api_client, db):
+        dt = DriverTypeFactory()
+        DriverFactory(driver_type=dt)
+        resp = api_client.get(self.url)
+        assert resp.status_code == 200
+        row = resp.json()[0]
+        assert "id" in row
+        assert "full_name" in row
+        assert "status" in row
+
+    def test_empty_when_all_terminated(self, api_client, db):
+        dt = DriverTypeFactory()
+        DriverFactory(driver_type=dt, status=Driver.Status.TERMINATED)
+        resp = api_client.get(self.url)
+        assert resp.json() == []

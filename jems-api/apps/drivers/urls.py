@@ -21,11 +21,13 @@ type_list = DriverTypeViewSet.as_view({"get": "list", "post": "create"})
 vacation_list = DriverVacationViewSet.as_view({"get": "list", "post": "create"})
 vacation_detail = DriverVacationViewSet.as_view({"delete": "destroy"})
 
+driver_options = DriverViewSet.as_view({"get": "options"})
 driver_last_loads = DriverViewSet.as_view({"get": "last_loads"})
 driver_bulk_delete = DriverViewSet.as_view({"post": "bulk_delete"})
 
 urlpatterns = [
     path("", driver_list, name="driver-list"),
+    path("options/", driver_options, name="driver-options"),
     path("last-loads/", driver_last_loads, name="driver-last-loads"),
     path("bulk-delete/", driver_bulk_delete, name="driver-bulk-delete"),
     path("<int:pk>/", driver_detail, name="driver-detail"),
