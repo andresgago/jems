@@ -1,31 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import IftaReportPage from '../IftaReportPage';
 
-vi.mock('../../../services/reports', () => ({
-  reportsService: {
-    ifta: vi.fn(),
-  },
-}));
-
 vi.mock('flatpickr', () => ({ default: () => ({ destroy: vi.fn(), setDate: vi.fn() }) }));
 
-import { reportsService } from '../../../services/reports';
-
-const REPORT_DATA = {
-  date_begin: '2024-01-01',
-  date_end: '2024-12-31',
-  rows: [
-    {
-      state_name: 'North Carolina',
-      state_abbreviation: 'NC',
-      gallons: 300.5,
-      cards: [{ card_number: 'CARD-001', gallons: 300.5 }],
-    },
-  ],
-  total_gallons: 300.5,
-};
+const openSpy = vi.fn();
+Object.defineProperty(window, 'open', { value: openSpy, writable: true });
 
 function renderPage() {
   return render(
@@ -36,48 +17,43 @@ function renderPage() {
 }
 
 describe('IftaReportPage', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => { openSpy.mockReset(); });
 
-  it('renders title and run button', () => {
+  it('renders IFTA title and Show Report button', () => {
     renderPage();
-    expect(screen.getByText('IFTA Report')).toBeDefined();
-    expect(screen.getByRole('button', { name: /run report/i })).toBeDefined();
+    expect(screen.getByRole('heading', { name: /IFTA/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /show report/i })).toBeDefined();
   });
 
-  it('renders state and card rows after run', async () => {
-    reportsService.ifta.mockResolvedValue({ data: REPORT_DATA });
+  it('renders Filter by Dates label', () => {
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/North Carolina/)).toBeDefined();
-      expect(screen.getByText('CARD-001')).toBeDefined();
-    });
+    expect(screen.getByText('Filter by Dates')).toBeDefined();
   });
 
-  it('shows grand total after run', async () => {
-    reportsService.ifta.mockResolvedValue({ data: REPORT_DATA });
+  it('opens print page in new window on Show Report click', () => {
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/Grand Total/i)).toBeDefined();
-    });
+    fireEvent.click(screen.getByRole('button', { name: /show report/i }));
+    expect(openSpy).toHaveBeenCalledOnce();
+    const [url, target] = openSpy.mock.calls[0];
+    expect(url).toMatch(/^\/print\/ifta\?/);
+    expect(url).toContain('date_begin=');
+    expect(url).toContain('date_end=');
+    expect(target).toBe('_blank');
   });
 
-  it('shows empty message when no rows', async () => {
-    reportsService.ifta.mockResolvedValue({ data: { ...REPORT_DATA, rows: [], total_gallons: 0 } });
+  it('default date range is last 7 days', () => {
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/no IFTA records/i)).toBeDefined();
-    });
+    fireEvent.click(screen.getByRole('button', { name: /show report/i }));
+    const [url] = openSpy.mock.calls[0];
+    const params = new URLSearchParams(url.split('?')[1]);
+    const begin = new Date(params.get('date_begin'));
+    const end = new Date(params.get('date_end'));
+    const diffDays = Math.round((end - begin) / (1000 * 60 * 60 * 24));
+    expect(diffDays).toBe(7);
   });
 
-  it('shows error on failure', async () => {
-    reportsService.ifta.mockRejectedValue(new Error('err'));
+  it('does not render inline result table', () => {
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/failed to load/i)).toBeDefined();
-    });
+    expect(screen.queryByRole('table')).toBeNull();
   });
 });

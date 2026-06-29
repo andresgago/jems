@@ -2489,13 +2489,37 @@ test('Balance Sheet Report page: uses clean carrier dropdown and opens printable
   await expect(page.getByRole('cell', { name: 'Total liabilities and equity', exact: true })).toBeVisible()
 })
 
-test('IFTA Report page: shows state and card rows after run', async ({ page }) => {
+test('IFTA Report page: Show Report opens print page in new window', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/reports/ifta')
-  await expect(page.getByRole('heading', { name: 'IFTA Report' })).toBeVisible()
-  await page.getByRole('button', { name: /run report/i }).click()
-  await expect(page.getByText(/North Carolina/)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'IFTA' })).toBeVisible()
+  await expect(page.getByText('Filter by Dates')).toBeVisible()
+  await page.evaluate(() => {
+    window.__lastReportUrl = null
+    window.open = (url) => {
+      window.__lastReportUrl = url
+      return null
+    }
+  })
+  await page.getByRole('button', { name: /show report/i }).click()
+  const reportUrl = await page.evaluate(() => window.__lastReportUrl)
+  expect(reportUrl).toContain('/print/ifta?')
+  expect(reportUrl).toContain('date_begin=')
+  expect(reportUrl).toContain('date_end=')
+})
+
+test('IFTA Report print page: renders State/Fuel Card table with data', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/ifta?date_begin=2024-06-22&date_end=2024-06-29')
+  await expect(page.getByRole('heading', { name: 'IFTA' })).toBeVisible()
+  await expect(page.getByText('State / Fuel Card')).toBeVisible()
+  await expect(page.getByText(/Date Range:/)).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'No.' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'State', exact: true })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Gallons' })).toBeVisible()
+  await expect(page.getByText('North Carolina (NC)')).toBeVisible()
   await expect(page.getByText('CARD-01')).toBeVisible()
+  await expect(page.getByText('TOTAL OF GALLONS')).toBeVisible()
 })
 
 test('Tax Report page: shows driver rows after run', async ({ page }) => {

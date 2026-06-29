@@ -58,6 +58,7 @@ import InvoiceReportPage from './pages/reports/InvoiceReportPage';
 import BalanceSheetReportPage from './pages/reports/BalanceSheetReportPage';
 import BalanceSheetReportPrintPage from './pages/reports/BalanceSheetReportPrintPage';
 import IftaReportPage from './pages/reports/IftaReportPage';
+import IftaReportPrintPage from './pages/reports/IftaReportPrintPage';
 import TaxReportPage from './pages/reports/TaxReportPage';
 import CategoryTrackingReportPage from './pages/reports/CategoryTrackingReportPage';
 import BrokerSummaryReportPage from './pages/reports/BrokerSummaryReportPage';
@@ -76,6 +77,7 @@ function AppRoutes() {
       <Route path="/print/financial" element={<ProtectedRoute><FinancialReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/invoice" element={<ProtectedRoute><InvoiceReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/balance-sheet" element={<ProtectedRoute><BalanceSheetReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/ifta" element={<ProtectedRoute><IftaReportPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={

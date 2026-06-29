@@ -1584,3 +1584,52 @@ test('drivers bulk-delete requires authentication (real)', async ({ page }) => {
   })
   expect(res.status()).toBe(401)
 })
+
+test('IFTA report endpoint returns legacy response shape (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const data = await apiGet(page, token, '/reports/ifta/?date_begin=2024-01-01&date_end=2024-12-31')
+  expect(data).toHaveProperty('date_begin')
+  expect(data).toHaveProperty('date_end')
+  expect(data).toHaveProperty('rows')
+  expect(data).toHaveProperty('total_gallons')
+  expect(Array.isArray(data.rows)).toBeTruthy()
+  expect(typeof data.total_gallons).toBe('number')
+  for (const row of data.rows) {
+    expect(row).toHaveProperty('state_name')
+    expect(row).toHaveProperty('state_abbreviation')
+    expect(row).toHaveProperty('gallons')
+    expect(row).toHaveProperty('cards')
+    expect(typeof row.gallons).toBe('number')
+    expect(row.gallons).toBeGreaterThan(0)
+    expect(Array.isArray(row.cards)).toBeTruthy()
+    for (const card of row.cards) {
+      expect(card).toHaveProperty('card_number')
+      expect(card).toHaveProperty('gallons')
+    }
+  }
+})
+
+test('IFTA report endpoint requires authentication (real)', async ({ page }) => {
+  const res = await page.request.get(`${API_BASE}/reports/ifta/?date_begin=2024-01-01&date_end=2024-12-31`)
+  expect(res.status()).toBe(401)
+})
+
+test('IFTA report endpoint returns 400 when dates missing (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const res = await page.request.get(`${API_BASE}/reports/ifta/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(res.status()).toBe(400)
+})
+
+test('IFTA filter page renders and has Show Report button (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  await page.goto('/reports/ifta')
+  await expect(page.getByRole('heading', { name: 'IFTA' })).toBeVisible()
+  await expect(page.getByText('Filter by Dates')).toBeVisible()
+  await expect(page.getByRole('button', { name: /show report/i })).toBeVisible()
+})
