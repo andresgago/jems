@@ -203,6 +203,16 @@ class TestDriverInvoiceOptions:
         assert resp.status_code == 200
         assert len(resp.json()) >= 3
 
+    def test_returns_only_open_invoices(self, auth_client):
+        client, _ = auth_client
+        open_invoice = DriverInvoiceFactory(status=DriverInvoice.Status.OPEN)
+        DriverInvoiceFactory(status=DriverInvoice.Status.CLOSED)
+        resp = client.get(self.url)
+        assert resp.status_code == 200
+        ids = {item["id"] for item in resp.json()}
+        assert open_invoice.pk in ids
+        assert len(ids) == 1
+
     def test_filters_by_date_range(self, auth_client):
         client, _ = auth_client
         DriverInvoiceFactory(date=datetime.date(2024, 3, 1))
@@ -228,6 +238,48 @@ class TestDriverInvoiceOptions:
         data = resp.json()
         assert len(data) == 1
 
+    def test_filters_by_comma_separated_drivers(self, auth_client):
+        client, _ = auth_client
+        driver = DriverFactory()
+        other = DriverFactory()
+        outside = DriverFactory()
+        DriverInvoiceFactory(driver=driver, date=datetime.date(2024, 1, 1))
+        DriverInvoiceFactory(driver=other, date=datetime.date(2024, 1, 1))
+        DriverInvoiceFactory(driver=outside, date=datetime.date(2024, 1, 1))
+        resp = client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "driver": f"{driver.pk},{other.pk}",
+            },
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 2
+
+    def test_filters_by_carrier(self, auth_client):
+        from apps.carriers.tests.factories import CarrierFactory
+
+        client, _ = auth_client
+        carrier = CarrierFactory()
+        other_carrier = CarrierFactory()
+        driver = DriverFactory(carrier=carrier)
+        other_driver = DriverFactory(carrier=other_carrier)
+        DriverInvoiceFactory(driver=driver, date=datetime.date(2024, 1, 1))
+        DriverInvoiceFactory(driver=other_driver, date=datetime.date(2024, 1, 1))
+        resp = client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "carrier": carrier.pk,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["driver_name"] == driver.full_name
+
     def test_returns_id_and_number_fields(self, auth_client):
         client, _ = auth_client
         inv = DriverInvoiceFactory(date=datetime.date(2024, 6, 1))
@@ -238,6 +290,7 @@ class TestDriverInvoiceOptions:
         entry = next(e for e in resp.json() if e["id"] == inv.pk)
         assert "id" in entry
         assert "number" in entry
+        assert "driver_name" in entry
 
 
 # ── Owner Invoices ────────────────────────────────────────────────────────────

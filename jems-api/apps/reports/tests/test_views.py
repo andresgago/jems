@@ -242,6 +242,102 @@ class TestInvoiceReport:
         data = resp.json()
         assert data["total_revenues"] == pytest.approx(2000.0)
 
+    def test_invoice_filtering_accepts_legacy_pipe_load_list(self, api_client, db):
+        account = _make_account("90010", "Freight Income")
+        solo_type, _ = DriverType.objects.get_or_create(
+            pk=4, defaults={"name": "Solo Driver", "is_active": True}
+        )
+        driver = DriverFactory(driver_type=solo_type)
+        included = LoadFactory(payment=2000.0)
+        excluded = LoadFactory(payment=1000.0)
+        invoice = DriverInvoiceFactory(
+            driver=driver,
+            date=datetime.date(2024, 1, 10),
+            load_list=f"|{included.pk}|",
+        )
+        RecordFactory(
+            account=account,
+            amount=2000.0,
+            date=datetime.date(2024, 1, 5),
+            progress=0,
+            driver=driver,
+            load=included,
+            is_automatic=False,
+        )
+        RecordFactory(
+            account=account,
+            amount=1000.0,
+            date=datetime.date(2024, 1, 5),
+            progress=0,
+            driver=driver,
+            load=excluded,
+            is_automatic=False,
+        )
+
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-01-31",
+                "invoice": str(invoice.pk),
+            },
+        )
+        data = resp.json()
+        assert data["total_revenues"] == pytest.approx(2000.0)
+
+    def test_invoice_report_filters_by_carrier_when_provided(self, api_client, db):
+        from apps.carriers.tests.factories import CarrierFactory
+
+        account = _make_account("90010", "Freight Income")
+        solo_type, _ = DriverType.objects.get_or_create(
+            pk=4, defaults={"name": "Solo Driver", "is_active": True}
+        )
+        carrier = CarrierFactory()
+        other_carrier = CarrierFactory()
+        driver = DriverFactory(driver_type=solo_type, carrier=carrier)
+        other_driver = DriverFactory(driver_type=solo_type, carrier=other_carrier)
+        included = LoadFactory(payment=2000.0)
+        excluded = LoadFactory(payment=1000.0)
+        DriverInvoiceFactory(
+            driver=driver,
+            date=datetime.date(2024, 1, 10),
+            load_list=f"|{included.pk}|",
+        )
+        DriverInvoiceFactory(
+            driver=other_driver,
+            date=datetime.date(2024, 1, 10),
+            load_list=f"|{excluded.pk}|",
+        )
+        RecordFactory(
+            account=account,
+            amount=2000.0,
+            date=datetime.date(2024, 1, 5),
+            progress=0,
+            driver=driver,
+            load=included,
+            is_automatic=False,
+        )
+        RecordFactory(
+            account=account,
+            amount=1000.0,
+            date=datetime.date(2024, 1, 5),
+            progress=0,
+            driver=other_driver,
+            load=excluded,
+            is_automatic=False,
+        )
+
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-01-31",
+                "carrier": str(carrier.pk),
+            },
+        )
+        data = resp.json()
+        assert data["total_revenues"] == pytest.approx(2000.0)
+
 
 # ---------------------------------------------------------------------------
 # IFTA report

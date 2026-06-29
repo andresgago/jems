@@ -67,11 +67,14 @@ class InvoiceReportView(APIView):
             return Response(
                 {"detail": "date_begin and date_end are required."}, status=400
             )
+        carrier_raw = request.query_params.get("carrier", "")
+        carrier_id = int(carrier_raw) if carrier_raw.isdigit() else None
         data = get_invoice_report(
             date_begin,
             date_end,
             driver_ids=_list_param(request, "driver"),
             invoice_ids=_list_param(request, "invoice"),
+            carrier_id=carrier_id,
         )
         return Response(data)
 

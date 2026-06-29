@@ -1693,6 +1693,18 @@ step "Accounting: driver invoice open"
 resp="$(post "/api/v1/accounting/driver-invoices/${DI_ID}/open/" '{}')"
 assert_status "driver invoice open" "200" "$(code "$resp")" "$(body "$resp")"
 
+step "Accounting: driver invoice options list open invoices"
+resp="$(get "/api/v1/accounting/driver-invoices/options/?date_begin=2024-01-01&date_end=2024-12-31&driver=${DRIVER_ID}")"
+assert_status "driver invoice options" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "driver invoice options has number" "$(body "$resp")" '"number"'
+assert_contains "driver invoice options has driver_name" "$(body "$resp")" '"driver_name"'
+
+step "Reports: invoice report accepts explicit invoice id"
+resp="$(get "/api/v1/reports/invoice/?date_begin=2024-01-01&date_end=2024-12-31&invoice=${DI_ID}")"
+assert_status "invoice report explicit invoice" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "invoice report explicit has invoices" "$(body "$resp")" '"invoices"'
+assert_contains "invoice report explicit has net_profit" "$(body "$resp")" '"net_profit"'
+
 step "Accounting: driver invoice delete"
 resp="$(delete "/api/v1/accounting/driver-invoices/${DI_ID}/")"
 assert_status "driver invoice delete" "204" "$(code "$resp")"

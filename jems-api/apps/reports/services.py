@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from django.db.models import Sum
@@ -325,10 +326,7 @@ def _invoice_load_ids(invoice: DriverInvoice) -> list[int]:
     raw = invoice.load_list.strip()
     if not raw:
         return []
-    try:
-        return [int(x) for x in raw.split(",") if x.strip()]
-    except ValueError:
-        return []
+    return [int(match) for match in re.findall(r"\d+", raw)]
 
 
 def _amount_by_driver_invoice(
@@ -355,6 +353,7 @@ def get_invoice_report(
     date_end: str,
     driver_ids: list[int] | None = None,
     invoice_ids: list[int] | None = None,
+    carrier_id: int | None = None,
 ) -> dict[str, Any]:
     if invoice_ids:
         invoices = DriverInvoice.objects.filter(pk__in=invoice_ids)
@@ -362,6 +361,8 @@ def get_invoice_report(
         invoices = DriverInvoice.objects.filter(date__range=[date_begin, date_end])
         if driver_ids:
             invoices = invoices.filter(driver_id__in=driver_ids)
+    if carrier_id is not None:
+        invoices = invoices.filter(driver__carrier_id=carrier_id)
 
     resolved_invoice_ids = list(invoices.values_list("pk", flat=True))
 

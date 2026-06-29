@@ -279,15 +279,31 @@ class DriverInvoiceViewSet(ViewSet):
     def options(self, request: "Request") -> Response:
         date_begin = request.query_params.get("date_begin", "")
         date_end = request.query_params.get("date_end", "")
-        qs = DriverInvoice.objects.all()
+        qs = DriverInvoice.objects.select_related("driver").filter(
+            status=DriverInvoice.Status.OPEN
+        )
         if date_begin and date_end:
             qs = qs.filter(date__range=[date_begin, date_end])
+        carrier = request.query_params.get("carrier")
+        if carrier and carrier.isdigit():
+            qs = qs.filter(driver__carrier_id=int(carrier))
         raw_drivers = request.query_params.getlist("driver")
         if raw_drivers:
-            driver_ids = [int(x) for x in raw_drivers if x.isdigit()]
+            driver_ids: list[int] = []
+            for item in raw_drivers:
+                driver_ids.extend(
+                    int(part) for part in item.split(",") if part.strip().isdigit()
+                )
             if driver_ids:
                 qs = qs.filter(driver_id__in=driver_ids)
-        data = [{"id": inv.pk, "number": inv.number} for inv in qs.order_by("number")]
+        data = [
+            {
+                "id": inv.pk,
+                "number": inv.number,
+                "driver_name": inv.driver.full_name if inv.driver else "",
+            }
+            for inv in qs.order_by("number")
+        ]
         return Response(data)
 
 
