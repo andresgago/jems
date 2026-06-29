@@ -38,6 +38,7 @@ const CRITICAL_ROUTES = [
   { path: '/tools/send-packet', heading: /send carrier packet/i },
   { path: '/tools/brokers-status', heading: /brokers status/i },
   { path: '/tools/drivers-last-loads', heading: /drivers.*last loads/i },
+  { path: '/reports/invoice', heading: /profit and loss by invoices/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -269,6 +270,23 @@ test('dashboard maintenance alert entries include time/miles alert shape fields 
       expect(typeof entry.alert_date).toBe('string')
     }
   }
+})
+
+test('profit and loss by invoices report endpoint returns legacy shape (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const data = await apiGet(page, token, '/reports/invoice/?date_begin=2024-01-01&date_end=2024-12-31')
+  expect(data).toHaveProperty('invoices')
+  expect(data).toHaveProperty('revenues')
+  expect(data).toHaveProperty('expenses')
+  expect(data).toHaveProperty('total_revenues')
+  expect(data).toHaveProperty('total_expenses')
+  expect(data).toHaveProperty('net_profit')
+  expect(Array.isArray(data.invoices)).toBeTruthy()
+  expect(Array.isArray(data.revenues)).toBeTruthy()
+  expect(Array.isArray(data.expenses)).toBeTruthy()
 })
 
 // ── Trailer types ─────────────────────────────────────────────────────────────

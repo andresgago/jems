@@ -490,7 +490,7 @@ const REPORT_FINANCIAL = {
 const REPORT_INVOICE = {
   date_begin: '2024-01-01',
   date_end: '2024-12-31',
-  invoices: [{ id: 1, number: 'INV-001' }],
+  invoices: [{ id: 1, number: 5001 }],
   revenues: [{ account_code: '90010', account_name: 'Freight Income', amount: 50000, details: {} }],
   expenses: [{ account_code: '80050', account_name: 'Driver Pay', amount: -15000, details: {} }],
   total_revenues: 50000,
@@ -589,7 +589,11 @@ async function mockApi(page) {
     if (pathname.endsWith('/category-types/') && method === 'GET') return json([])
     if (pathname.endsWith('/records/') && method === 'GET') return json(RECORDS)
     if (/\/records\/\d+\/$/.test(pathname) && method === 'GET') return json(RECORD_DETAIL)
-    if (pathname.endsWith('/driver-invoices/options/')) return json([])
+    if (pathname.endsWith('/driver-invoices/options/')) return json(DRIVER_INVOICES.map((invoice) => ({
+      id: invoice.id,
+      number: invoice.number,
+      driver_name: invoice.driver_name,
+    })))
     if (pathname.endsWith('/driver-invoices/') && method === 'GET') return json(DRIVER_INVOICES)
     if (/\/driver-invoices\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_INVOICE_DETAIL)
     if (pathname.endsWith('/fleet/trailer-types/')) return json(TRAILER_TYPES)
@@ -2410,8 +2414,21 @@ test('Financial Report page: truck listbox populated with options', async ({ pag
 test('Invoice Report page: shows title and account rows after run', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/reports/invoice')
-  await expect(page.getByRole('heading', { name: 'Profit and Loss', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: /run report/i }).click()
+  await expect(page.getByRole('heading', { name: 'Profit and Loss By Invoices', exact: true })).toBeVisible()
+  await expect(page.locator('label[for="filter-carrier"]')).toBeVisible()
+  await expect(page.locator('label').filter({ hasText: 'Filter by Dates' })).toBeVisible()
+  await page.evaluate(() => {
+    window.__lastReportUrl = null
+    window.open = (url) => {
+      window.__lastReportUrl = url
+      return null
+    }
+  })
+  await page.getByRole('button', { name: /show report/i }).click()
+  const reportUrl = await page.evaluate(() => window.__lastReportUrl)
+  expect(reportUrl).toContain('/print/invoice?')
+  await page.goto(reportUrl)
+  await expect(page.getByRole('heading', { name: 'Profit and Loss By Invoices' })).toBeVisible()
   await expect(page.getByText('Freight Income')).toBeVisible()
   await expect(page.getByText('NET PROFIT')).toBeVisible()
 })
