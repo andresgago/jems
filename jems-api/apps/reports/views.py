@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .services import (
+    get_balance_sheet_report,
     get_broker_summary_report,
     get_category_tracking_report,
     get_financial_report,
@@ -74,6 +75,27 @@ class InvoiceReportView(APIView):
             date_end,
             driver_ids=_list_param(request, "driver"),
             invoice_ids=_list_param(request, "invoice"),
+            carrier_id=carrier_id,
+        )
+        return Response(data)
+
+
+class BalanceSheetReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        date_begin = request.query_params.get("date_begin", "")
+        date_end = request.query_params.get("date_end", "")
+        if not date_begin or not date_end:
+            return Response(
+                {"detail": "date_begin and date_end are required."}, status=400
+            )
+        carrier_raw = request.query_params.get("carrier", "")
+        carrier_id = int(carrier_raw) if carrier_raw.isdigit() else None
+        data = get_balance_sheet_report(
+            date_begin,
+            date_end,
+            period=request.query_params.get("period", "1"),
             carrier_id=carrier_id,
         )
         return Response(data)

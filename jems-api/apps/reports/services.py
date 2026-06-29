@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime
+from calendar import monthrange
 import re
 from typing import Any
 
@@ -442,6 +444,243 @@ def get_invoice_report(
         "expenses": expenses,
         "total_expenses": total_expenses,
         "net_profit": total_revenues + total_expenses,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Report 2a: Balance Sheet
+# ---------------------------------------------------------------------------
+
+
+_BALANCE_SECTIONS = [
+    ("current_assets", "Current Assets", "400"),
+    ("fixed_assets", "Fixed Assets", "401"),
+    ("current_liabilities", "Current Liabilities", "500"),
+    ("long_term_liabilities", "Long-Term Liabilities", "501"),
+    ("equity", "Equity", "600"),
+]
+
+
+def _parse_date(value: str) -> datetime.date:
+    return datetime.date.fromisoformat(value)
+
+
+def _month_add(value: datetime.date, months: int = 1) -> datetime.date:
+    month = value.month - 1 + months
+    year = value.year + month // 12
+    month = month % 12 + 1
+    return datetime.date(year, month, min(value.day, monthrange(year, month)[1]))
+
+
+def _balance_period_kind(period: str | int | None) -> str:
+    value = str(period or "1").lower()
+    if value in {"2", "week", "weekly"}:
+        return "week"
+    return "month"
+
+
+def _balance_period_key(value: datetime.date, kind: str) -> str:
+    if kind == "week":
+        start = value - datetime.timedelta(days=value.weekday())
+        return start.isoformat()
+    return f"{value.year:04d}-{value.month:02d}"
+
+
+def _balance_period_label(key: str, kind: str, multi_year: bool) -> str:
+    if kind == "week":
+        start = _parse_date(key)
+        end = start + datetime.timedelta(days=6)
+        return f"{start.strftime('%b')} {start.day}-{end.strftime('%b')} {end.day}"
+    value = _parse_date(f"{key}-01")
+    return value.strftime("%b %Y" if multi_year else "%b")
+
+
+def _balance_columns(date_begin: str, date_end: str, kind: str) -> list[dict[str, Any]]:
+    start = _parse_date(date_begin)
+    end = _parse_date(date_end)
+    columns: list[dict[str, Any]] = []
+
+    if kind == "week":
+        current = start - datetime.timedelta(days=start.weekday())
+        while current <= end:
+            key = current.isoformat()
+            columns.append({"key": key, "label": "", "priority": len(columns) + 1})
+            current += datetime.timedelta(days=7)
+    else:
+        current = start.replace(day=1)
+        while current <= end:
+            key = f"{current.year:04d}-{current.month:02d}"
+            columns.append({"key": key, "label": "", "priority": len(columns) + 1})
+            current = _month_add(current)
+
+    multi_year = len({col["key"][:4] for col in columns}) > 1
+    for col in columns:
+        col["label"] = _balance_period_label(col["key"], kind, multi_year)
+    return columns
+
+
+def _blank_amounts(columns: list[dict[str, Any]]) -> dict[str, float]:
+    return {col["key"]: 0.0 for col in columns}
+
+
+def _balance_section_rows(
+    date_begin: str,
+    date_end: str,
+    concept_code: str,
+    carrier_id: int | None,
+    period_kind: str,
+    columns: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    qs = Record.objects.select_related("account", "account__balance_concept").filter(
+        progress=0,
+        date__range=[date_begin, date_end],
+        account__isnull=False,
+    )
+    if carrier_id is not None:
+        qs = qs.filter(carrier_id=carrier_id)
+
+    explicit_records = qs.filter(account__balance_concept__code__contains=concept_code)
+    direct_records = qs.filter(
+        account__balance_concept__isnull=True,
+        account__code__contains=concept_code,
+    )
+
+    rows_by_code: dict[str, dict[str, Any]] = {}
+    for record in list(explicit_records) + list(direct_records):
+        record_account = record.account
+        if record_account is None:
+            continue
+        account = record_account.balance_concept or record_account
+        row = rows_by_code.setdefault(
+            account.code,
+            {
+                "code": account.code,
+                "name": account.name,
+                "amounts": _blank_amounts(columns),
+                "total": 0.0,
+            },
+        )
+        key = _balance_period_key(record.date, period_kind)
+        if key not in row["amounts"]:
+            continue
+        amount = float(record.amount or 0.0)
+        row["amounts"][key] += amount
+        row["total"] += amount
+
+    return sorted(rows_by_code.values(), key=lambda row: row["code"])
+
+
+def _balance_section(
+    key: str,
+    title: str,
+    concept_code: str,
+    date_begin: str,
+    date_end: str,
+    carrier_id: int | None,
+    period_kind: str,
+    columns: list[dict[str, Any]],
+) -> dict[str, Any]:
+    rows = _balance_section_rows(
+        date_begin,
+        date_end,
+        concept_code,
+        carrier_id,
+        period_kind,
+        columns,
+    )
+    totals = _blank_amounts(columns)
+    total = 0.0
+    for row in rows:
+        total += row["total"]
+        for col in columns:
+            totals[col["key"]] += row["amounts"].get(col["key"], 0.0)
+    return {
+        "key": key,
+        "title": title,
+        "concept_code": concept_code,
+        "rows": rows,
+        "totals": totals,
+        "total": total,
+    }
+
+
+def _combine_balance_totals(
+    columns: list[dict[str, Any]], *sections: dict[str, Any]
+) -> dict[str, Any]:
+    amounts = _blank_amounts(columns)
+    total = 0.0
+    for section in sections:
+        total += section["total"]
+        for col in columns:
+            amounts[col["key"]] += section["totals"].get(col["key"], 0.0)
+    return {"amounts": amounts, "total": total}
+
+
+def get_balance_sheet_report(
+    date_begin: str,
+    date_end: str,
+    period: str | int | None = "1",
+    carrier_id: int | None = None,
+) -> dict[str, Any]:
+    from apps.carriers.models import Carrier
+
+    carrier_name = ""
+    if carrier_id is not None:
+        try:
+            carrier_name = Carrier.objects.get(pk=carrier_id).name
+        except Carrier.DoesNotExist:
+            pass
+
+    period_kind = _balance_period_kind(period)
+    columns = _balance_columns(date_begin, date_end, period_kind)
+    sections = {
+        key: _balance_section(
+            key,
+            title,
+            concept_code,
+            date_begin,
+            date_end,
+            carrier_id,
+            period_kind,
+            columns,
+        )
+        for key, title, concept_code in _BALANCE_SECTIONS
+    }
+
+    total_assets = _combine_balance_totals(
+        columns, sections["current_assets"], sections["fixed_assets"]
+    )
+    total_liabilities = _combine_balance_totals(
+        columns,
+        sections["current_liabilities"],
+        sections["long_term_liabilities"],
+    )
+    total_liabilities_and_equity = _combine_balance_totals(
+        columns,
+        sections["current_liabilities"],
+        sections["long_term_liabilities"],
+        sections["equity"],
+    )
+    balance = {
+        "amounts": {
+            col["key"]: total_assets["amounts"][col["key"]]
+            - total_liabilities_and_equity["amounts"][col["key"]]
+            for col in columns
+        },
+        "total": total_assets["total"] - total_liabilities_and_equity["total"],
+    }
+
+    return {
+        "carrier_name": carrier_name,
+        "date_begin": date_begin,
+        "date_end": date_end,
+        "period": period_kind,
+        "columns": columns,
+        **sections,
+        "total_assets": total_assets,
+        "total_liabilities": total_liabilities,
+        "total_liabilities_and_equity": total_liabilities_and_equity,
+        "balance": balance,
     }
 
 

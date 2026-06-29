@@ -248,8 +248,8 @@ class TestInvoiceReport:
             pk=4, defaults={"name": "Solo Driver", "is_active": True}
         )
         driver = DriverFactory(driver_type=solo_type)
-        included = LoadFactory(payment=2000.0)
-        excluded = LoadFactory(payment=1000.0)
+        included = LoadFactory(payment=2000.0, carrier=None)
+        excluded = LoadFactory(payment=1000.0, carrier=None)
         invoice = DriverInvoiceFactory(
             driver=driver,
             date=datetime.date(2024, 1, 10),
@@ -296,8 +296,8 @@ class TestInvoiceReport:
         other_carrier = CarrierFactory()
         driver = DriverFactory(driver_type=solo_type, carrier=carrier)
         other_driver = DriverFactory(driver_type=solo_type, carrier=other_carrier)
-        included = LoadFactory(payment=2000.0)
-        excluded = LoadFactory(payment=1000.0)
+        included = LoadFactory(payment=2000.0, carrier=carrier)
+        excluded = LoadFactory(payment=1000.0, carrier=other_carrier)
         DriverInvoiceFactory(
             driver=driver,
             date=datetime.date(2024, 1, 10),
@@ -337,6 +337,132 @@ class TestInvoiceReport:
         )
         data = resp.json()
         assert data["total_revenues"] == pytest.approx(2000.0)
+
+
+# ---------------------------------------------------------------------------
+# Balance Sheet report
+# ---------------------------------------------------------------------------
+
+
+class TestBalanceSheetReport:
+    url = "/api/v1/reports/balance-sheet/"
+
+    def test_unauthenticated_rejected(self, db, client):
+        resp = client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        assert resp.status_code == 401
+
+    def test_missing_dates_returns_400(self, api_client):
+        resp = api_client.get(self.url)
+        assert resp.status_code == 400
+
+    def test_empty_range_returns_legacy_sections(self, api_client, db):
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-06-01", "date_end": "2024-06-30", "period": "1"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["columns"] == [{"key": "2024-06", "label": "Jun", "priority": 1}]
+        assert data["current_assets"]["concept_code"] == "400"
+        assert data["fixed_assets"]["concept_code"] == "401"
+        assert data["current_liabilities"]["concept_code"] == "500"
+        assert data["long_term_liabilities"]["concept_code"] == "501"
+        assert data["equity"]["concept_code"] == "600"
+        assert data["total_assets"]["total"] == 0.0
+
+    def test_groups_records_by_balance_concept_and_month(self, api_client, db):
+        concept = _make_account("400", "Current Assets", is_main=True)
+        cash = _make_account("10010", "Cash")
+        cash.balance_concept = concept
+        cash.save(update_fields=["balance_concept"])
+        RecordFactory(
+            account=cash,
+            amount=1250.0,
+            date=datetime.date(2024, 6, 15),
+            progress=0,
+        )
+        RecordFactory(
+            account=cash,
+            amount=300.0,
+            date=datetime.date(2024, 7, 1),
+            progress=0,
+        )
+
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-06-01", "date_end": "2024-07-31", "period": "1"},
+        )
+        data = resp.json()
+        row = data["current_assets"]["rows"][0]
+        assert row["code"] == "400"
+        assert row["name"] == "Current Assets"
+        assert row["amounts"]["2024-06"] == pytest.approx(1250.0)
+        assert row["amounts"]["2024-07"] == pytest.approx(300.0)
+        assert data["total_assets"]["total"] == pytest.approx(1550.0)
+
+    def test_carrier_filter_and_invalid_carrier_value(self, api_client, db):
+        from apps.carriers.tests.factories import CarrierFactory
+
+        carrier = CarrierFactory(name="Best Wheels Transport LLC")
+        other_carrier = CarrierFactory()
+        concept = _make_account("500", "Current Liabilities", is_main=True)
+        payable = _make_account("20010", "Accounts Payable")
+        payable.balance_concept = concept
+        payable.save(update_fields=["balance_concept"])
+        RecordFactory(
+            account=payable,
+            carrier=carrier,
+            amount=-700.0,
+            date=datetime.date(2024, 6, 1),
+            progress=0,
+        )
+        RecordFactory(
+            account=payable,
+            carrier=other_carrier,
+            amount=-900.0,
+            date=datetime.date(2024, 6, 1),
+            progress=0,
+        )
+
+        filtered = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-06-01",
+                "date_end": "2024-06-30",
+                "carrier": str(carrier.pk),
+            },
+        ).json()
+        assert filtered["carrier_name"] == "Best Wheels Transport LLC"
+        assert filtered["current_liabilities"]["total"] == pytest.approx(-700.0)
+
+        invalid = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-06-01",
+                "date_end": "2024-06-30",
+                "carrier": "id",
+            },
+        ).json()
+        assert invalid["current_liabilities"]["total"] == pytest.approx(-1600.0)
+
+    def test_in_progress_records_excluded(self, api_client, db):
+        concept = _make_account("600", "Equity", is_main=True)
+        equity = _make_account("30010", "Owner Equity")
+        equity.balance_concept = concept
+        equity.save(update_fields=["balance_concept"])
+        RecordFactory(
+            account=equity,
+            amount=500.0,
+            date=datetime.date(2024, 6, 1),
+            progress=1,
+        )
+        resp = api_client.get(
+            self.url, {"date_begin": "2024-06-01", "date_end": "2024-06-30"}
+        )
+        data = resp.json()
+        assert data["equity"]["total"] == 0.0
 
 
 # ---------------------------------------------------------------------------

@@ -2504,6 +2504,15 @@ assert_contains "invoice has invoices" "$(body "$resp")" '"invoices"'
 assert_contains "invoice has revenues" "$(body "$resp")" '"revenues"'
 assert_contains "invoice has net_profit" "$(body "$resp")" '"net_profit"'
 
+step "Reports: balance sheet returns legacy concept sections"
+resp="$(get "/api/v1/reports/balance-sheet/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}&period=1&carrier=id")"
+assert_status "balance sheet report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "balance sheet has columns" "$(body "$resp")" '"columns"'
+assert_contains "balance sheet has current assets" "$(body "$resp")" '"current_assets"'
+assert_contains "balance sheet has fixed assets" "$(body "$resp")" '"fixed_assets"'
+assert_contains "balance sheet has current liabilities" "$(body "$resp")" '"current_liabilities"'
+assert_contains "balance sheet has equity" "$(body "$resp")" '"equity"'
+
 step "Reports: IFTA returns keys"
 resp="$(get "/api/v1/reports/ifta/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}")"
 assert_status "ifta report" "200" "$(code "$resp")" "$(body "$resp")"

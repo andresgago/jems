@@ -7,6 +7,20 @@ class Account(models.Model):
 
     code = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=200)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="child_accounts",
+    )
+    balance_concept = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="balance_accounts",
+    )
     is_active = models.BooleanField(default=True)
     is_main = models.BooleanField(default=False)
     is_assistant = models.BooleanField(default=False)

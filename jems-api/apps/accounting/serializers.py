@@ -18,6 +18,8 @@ class AccountSerializer(serializers.ModelSerializer):
             "id",
             "code",
             "name",
+            "parent",
+            "balance_concept",
             "is_active",
             "is_main",
             "is_assistant",
