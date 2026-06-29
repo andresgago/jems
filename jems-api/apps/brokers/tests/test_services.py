@@ -7,6 +7,7 @@ from apps.brokers.services import (
     BROKER_FILE_SLOTS,
     clear_broker_file,
     create_broker,
+    create_broker_from_status_result,
     create_broker_contact,
     search_brokers_status,
     set_broker_file,
@@ -155,6 +156,8 @@ class TestSearchBrokersStatus:
         assert r["debtor_buy_status"] == "Approved For Purchases"
         assert r["safer_operating_status"] == "AUTHORIZED"
         assert r["factor_company"] == "tafs"
+        assert r["exists"] is True
+        assert r["source"] == "local"
 
     def test_last_load_is_none_when_broker_has_no_loads(self):
         BrokerFactory(name="No Loads Broker", mc="MC400")
@@ -170,6 +173,7 @@ class TestSearchBrokersStatus:
         assert results[0]["last_load"] is not None
         assert results[0]["last_load"]["number"] == "LD-99999"
         assert results[0]["last_load"]["id"] == load.id
+        assert "driver" in results[0]["last_load"]
 
     def test_empty_query_returns_empty_list(self):
         BrokerFactory(name="Some Broker", mc="MC600")
@@ -181,3 +185,107 @@ class TestSearchBrokersStatus:
             BrokerFactory(name=f"Cap Broker {i:02d}", mc=f"MCCAP{i:04d}")
         results = search_brokers_status(query="Cap Broker")
         assert len(results) == 20
+
+    def test_external_results_update_existing_broker(self, monkeypatch):
+        broker = BrokerFactory(
+            name="Existing Broker",
+            mc="MC777",
+            buy_status="1",
+            debtor_buy_status="Old Status",
+            factor_account_id="old",
+        )
+        monkeypatch.setattr(
+            "apps.brokers.services.fetch_tafs_broker_statuses",
+            lambda *, query: [
+                {
+                    "mc_number": "MC777",
+                    "legal_name": "Existing Broker",
+                    "dba_name": "Existing",
+                    "account_id": "acct-777",
+                    "debtor_buy_status": "No Buy - Denied For Purchases",
+                    "debtor_rating": "C",
+                    "debtor_credit_limit": "5000",
+                    "operating_status": "AUTHORIZED FOR BROKER Property",
+                    "phone": "555-0100",
+                }
+            ],
+        )
+
+        results = search_brokers_status(query="Existing")
+
+        broker.refresh_from_db()
+        assert len(results) == 1
+        assert results[0]["exists"] is True
+        assert results[0]["source"] == "tafs"
+        assert results[0]["debtor_rating"] == "C"
+        assert results[0]["debtor_credit_limit"] == "5000"
+        assert broker.factor_account_id == "acct-777"
+        assert broker.debtor_buy_status == "No Buy - Denied For Purchases"
+        assert broker.buy_status == "0"
+        assert broker.checked_at is not None
+
+    def test_external_results_include_missing_broker_without_creating_it(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "apps.brokers.services.fetch_tafs_broker_statuses",
+            lambda *, query: [
+                {
+                    "mc_number": "MC404",
+                    "legal_name": "Missing Broker LLC",
+                    "debtor_name": "Missing Broker LLC",
+                    "debtor_buy_status": "Approved For Purchases",
+                    "operating_status": "ACTIVE",
+                }
+            ],
+        )
+
+        results = search_brokers_status(query="Missing")
+
+        assert len(results) == 1
+        assert results[0]["exists"] is False
+        assert results[0]["id"] is None
+        assert results[0]["mc"] == "MC404"
+        assert Broker.objects.filter(mc="MC404").exists() is False
+
+
+@pytest.mark.django_db
+class TestCreateBrokerFromStatusResult:
+    def test_creates_inactive_broker_from_external_result(self):
+        broker = create_broker_from_status_result(
+            data={
+                "mc_number": "MCNEW",
+                "legal_name": "New Broker LLC",
+                "dba_name": "New",
+                "phone": "555-0111",
+                "account_id": "acct-new",
+                "debtor_buy_status": "Approved For Purchases",
+                "operating_status": "AUTHORIZED",
+            }
+        )
+
+        assert broker.mc == "MCNEW"
+        assert broker.name == "New Broker LLC"
+        assert broker.status == Broker.Status.INACTIVE
+        assert broker.factor_company == "tafs"
+        assert broker.factor_account_id == "acct-new"
+        assert broker.buy_status == "1"
+        assert broker.safer_operating_status == "AUTHORIZED"
+
+    def test_denied_status_sets_buy_status_zero(self):
+        broker = create_broker_from_status_result(
+            data={
+                "mc": "MCDENIED",
+                "name": "Denied Broker LLC",
+                "debtor_buy_status": "No Buy - Denied For Purchases",
+            }
+        )
+        assert broker.buy_status == "0"
+
+    def test_missing_mc_raises_validation_error(self):
+        with pytest.raises(ValidationError):
+            create_broker_from_status_result(data={"name": "No MC LLC"})
+
+    def test_missing_name_raises_validation_error(self):
+        with pytest.raises(ValidationError):
+            create_broker_from_status_result(data={"mc": "MCNONAME"})

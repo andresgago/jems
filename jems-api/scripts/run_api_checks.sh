@@ -1147,6 +1147,9 @@ assert_status "broker status-search" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "broker name in status-search" "$(body "$resp")" "Echo"
 assert_contains "status-search has debtor_buy_status" "$(body "$resp")" "debtor_buy_status"
 assert_contains "status-search has safer_operating_status" "$(body "$resp")" "safer_operating_status"
+assert_contains "status-search has exists" "$(body "$resp")" "exists"
+assert_contains "status-search has debtor_rating" "$(body "$resp")" "debtor_rating"
+assert_contains "status-search has debtor_credit_limit" "$(body "$resp")" "debtor_credit_limit"
 assert_contains "status-search has last_load key" "$(body "$resp")" "last_load"
 
 step "Brokers: status-search by MC"
@@ -1157,6 +1160,16 @@ assert_contains "broker mc in status-search" "$(body "$resp")" "MC999888"
 step "Brokers: status-search without q returns 400"
 resp="$(get "/api/v1/brokers/status-search/")"
 assert_status "broker status-search no-q" "400" "$(code "$resp")"
+
+step "Brokers: status-search create"
+resp="$(post "/api/v1/brokers/status-search/create/" '{"mc_number":"MCSTATUSCREATE","legal_name":"Status Created Broker","dba_name":"Status Created","phone":"8005552222","account_id":"acct-status","debtor_buy_status":"No Buy - Denied For Purchases","operating_status":"AUTHORIZED"}')"
+assert_status "broker status-search create" "201" "$(code "$resp")" "$(body "$resp")"
+assert_contains "status-search create mc" "$(body "$resp")" "MCSTATUSCREATE"
+assert_contains "status-search create buy_status" "$(body "$resp")" '"buy_status":"0"'
+
+step "Brokers: status-search create duplicate MC returns 400"
+resp="$(post "/api/v1/brokers/status-search/create/" '{"mc_number":"MCSTATUSCREATE","legal_name":"Status Created Broker Duplicate"}')"
+assert_status "broker status-search create duplicate" "400" "$(code "$resp")"
 
 step "Brokers: options list"
 resp="$(get "/api/v1/brokers/options/")"

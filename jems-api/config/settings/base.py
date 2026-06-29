@@ -126,3 +126,10 @@ ANTHROPIC_API_KEY: str = env("ANTHROPIC_API_KEY", default="")
 
 # Dashboard: days ahead to show category expiration alerts (mirrors legacy category-expired-days param)
 CATEGORY_ALERT_DAYS: int = env.int("CATEGORY_ALERT_DAYS", default=30)
+
+# Optional local factor API used by the legacy Brokers status modal.
+# Example legacy shape: http://localhost:8001/tafs/search_broker/{query}
+TAFS_SEARCH_BROKER_URL: str = env("TAFS_SEARCH_BROKER_URL", default="")
+TAFS_SEARCH_TIMEOUT_SECONDS: float = env.float(
+    "TAFS_SEARCH_TIMEOUT_SECONDS", default=5.0
+)

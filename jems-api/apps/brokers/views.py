@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -10,6 +11,7 @@ from .serializers import (
     BrokerFileUploadSerializer,
     BrokerListSerializer,
     BrokerSerializer,
+    BrokerStatusCreateSerializer,
     BrokerStatusSerializer,
     BusinessSerializer,
 )
@@ -17,6 +19,7 @@ from .services import (
     BROKER_FILE_SLOTS,
     clear_broker_file,
     create_broker,
+    create_broker_from_status_result,
     create_broker_contact,
     create_business,
     delete_broker_contact,
@@ -132,6 +135,24 @@ class BrokerViewSet(ViewSet):
             )
         results = search_brokers_status(query=q)
         return Response(BrokerStatusSerializer(results, many=True).data)
+
+    @action(detail=False, methods=["post"], url_path="status-search/create")
+    def status_search_create(self, request):
+        serializer = BrokerStatusCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            broker = create_broker_from_status_result(
+                data=serializer.validated_data,
+                user=request.user,
+            )
+        except DjangoValidationError as exc:
+            return Response({"error": exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+        broker = (
+            Broker.objects.select_related("carrier", "city", "state")
+            .prefetch_related("contacts")
+            .get(pk=broker.pk)
+        )
+        return Response(BrokerSerializer(broker).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["get"], url_path="options")
     def options_list(self, request):

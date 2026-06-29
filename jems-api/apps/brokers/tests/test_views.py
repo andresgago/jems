@@ -275,6 +275,10 @@ class TestBrokerStatusSearch:
         assert "debtor_buy_status" in data
         assert data["debtor_buy_status"] == "Approved For Purchases"
         assert data["safer_operating_status"] == "AUTHORIZED"
+        assert data["exists"] is True
+        assert data["source"] == "local"
+        assert "debtor_rating" in data
+        assert "debtor_credit_limit" in data
         assert data["last_load"] is None
 
     def test_last_load_included_when_present(self, auth_client):
@@ -289,6 +293,7 @@ class TestBrokerStatusSearch:
         assert response.status_code == status.HTTP_200_OK
         assert response.data[0]["last_load"] is not None
         assert response.data[0]["last_load"]["number"] == "LD-TEST-01"
+        assert "driver" in response.data[0]["last_load"]
 
     def test_searches_by_mc(self, auth_client):
         client, _ = auth_client
@@ -297,3 +302,81 @@ class TestBrokerStatusSearch:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
         assert response.data[0]["mc"] == "MCSEARCH01"
+
+    def test_external_missing_broker_result_can_be_returned(
+        self, auth_client, monkeypatch
+    ):
+        client, _ = auth_client
+        monkeypatch.setattr(
+            "apps.brokers.services.fetch_tafs_broker_statuses",
+            lambda *, query: [
+                {
+                    "mc_number": "MC404",
+                    "legal_name": "External Broker LLC",
+                    "debtor_name": "External Broker LLC",
+                    "debtor_buy_status": "Approved For Purchases",
+                    "debtor_rating": "A",
+                    "debtor_credit_limit": "10000",
+                    "operating_status": "ACTIVE",
+                }
+            ],
+        )
+
+        response = client.get(reverse("broker-status-search"), {"q": "External"})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data[0]["id"] is None
+        assert response.data[0]["exists"] is False
+        assert response.data[0]["source"] == "tafs"
+        assert response.data[0]["debtor_rating"] == "A"
+        assert response.data[0]["debtor_credit_limit"] == "10000"
+
+
+@pytest.mark.django_db
+class TestBrokerStatusSearchCreate:
+    def test_requires_authentication(self, api_client):
+        response = api_client.post(reverse("broker-status-search-create"), {})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_creates_broker_from_external_payload(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("broker-status-search-create"),
+            {
+                "mc_number": "MCCREATE",
+                "legal_name": "Created Broker LLC",
+                "dba_name": "Created",
+                "phone": "555-0123",
+                "account_id": "acct-create",
+                "debtor_buy_status": "Credit Approval Required",
+                "operating_status": "AUTHORIZED",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["mc"] == "MCCREATE"
+        assert response.data["name"] == "Created Broker LLC"
+        broker = Broker.objects.get(mc="MCCREATE")
+        assert broker.status == Broker.Status.INACTIVE
+        assert broker.factor_company == "tafs"
+        assert broker.factor_account_id == "acct-create"
+
+    def test_missing_mc_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("broker-status-search-create"),
+            {"legal_name": "No MC LLC"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_duplicate_mc_returns_400(self, auth_client):
+        client, _ = auth_client
+        BrokerFactory(mc="MCDUP")
+        response = client.post(
+            reverse("broker-status-search-create"),
+            {"mc": "MCDUP", "name": "Duplicate LLC"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
