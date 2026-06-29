@@ -1,26 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import FinancialReportPage from '../FinancialReportPage';
 
-vi.mock('../../../services/reports', () => ({
-  reportsService: {
-    financial: vi.fn(),
-  },
+vi.mock('../../../services/api', () => ({
+  default: { get: vi.fn() },
 }));
 
-// flatpickr requires a real DOM; stub it for tests
 vi.mock('flatpickr', () => ({ default: () => ({ destroy: vi.fn(), setDate: vi.fn() }) }));
 
-import { reportsService } from '../../../services/reports';
+import api from '../../../services/api';
 
-const REPORT_DATA = {
-  revenues: [{ code: '90010', name: 'Freight Income', amount: 5000 }],
-  expenses: [{ code: '80050', name: 'Driver Pay', amount: -1000 }],
-  total_revenues: 5000,
-  total_expenses: -1000,
-  net_profit: 4000,
-};
+const CARRIER_OPTIONS = [{ id: 1, label: 'Best Wheels Transport LLC (MC-12345)' }];
+const DRIVER_OPTIONS = [{ id: 1, full_name: 'John Doe', status: 1, carrier_name: 'Best Wheels Transport LLC' }];
+const TRUCK_OPTIONS = [{ id: 10, number: 'T-001' }];
+const TRAILER_OPTIONS = [{ id: 20, number: 'TRL-001' }];
+const DISPATCHER_OPTIONS = [{ id: 5, full_name: 'Jane Smith' }];
 
 function renderPage() {
   return render(
@@ -30,51 +25,146 @@ function renderPage() {
   );
 }
 
+async function renderPageSettled() {
+  const result = renderPage();
+  await act(async () => {});
+  return result;
+}
+
 describe('FinancialReportPage', () => {
+  let mockOpen;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    api.get.mockResolvedValue({ data: [] });
+    mockOpen = vi.fn();
+    vi.stubGlobal('open', mockOpen);
   });
 
-  it('renders title and run button', () => {
-    renderPage();
+  // ── Basic rendering ────────────────────────────────────────────────────────
+
+  it('renders title', async () => {
+    await renderPageSettled();
     expect(screen.getByText('Profit and Loss')).toBeDefined();
-    expect(screen.getByRole('button', { name: /run report/i })).toBeDefined();
   });
 
-  it('calls financial service on run', async () => {
-    reportsService.financial.mockResolvedValue({ data: REPORT_DATA });
-    renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
-    await waitFor(() => expect(reportsService.financial).toHaveBeenCalledOnce());
+  it('renders Show Report button', async () => {
+    await renderPageSettled();
+    expect(screen.getByRole('button', { name: /show report/i })).toBeDefined();
   });
 
-  it('renders revenue and expense tables after run', async () => {
-    reportsService.financial.mockResolvedValue({ data: REPORT_DATA });
+  it('renders Carrier select with placeholder', async () => {
+    await renderPageSettled();
+    expect(screen.getByRole('option', { name: 'Select a carrier' })).toBeDefined();
+  });
+
+  it('renders Period select with Month/Week/Custom options', async () => {
+    await renderPageSettled();
+    expect(screen.getByRole('option', { name: 'Month' })).toBeDefined();
+    expect(screen.getByRole('option', { name: 'Week' })).toBeDefined();
+    expect(screen.getByRole('option', { name: 'Custom' })).toBeDefined();
+  });
+
+  it('renders all four filter listbox labels', async () => {
+    await renderPageSettled();
+    expect(screen.getByText('Select Driver')).toBeDefined();
+    expect(screen.getByText('Select Truck')).toBeDefined();
+    expect(screen.getByText('Select Trailer')).toBeDefined();
+    expect(screen.getByText('Select Dispatcher')).toBeDefined();
+  });
+
+  // ── Options fetching ───────────────────────────────────────────────────────
+
+  it('fetches carriers, drivers, trucks, trailers, dispatchers on mount', async () => {
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
     await waitFor(() => {
-      expect(screen.getByText('Revenues')).toBeDefined();
-      expect(screen.getByText('Expenses')).toBeDefined();
-      expect(screen.getByText('Freight Income')).toBeDefined();
-      expect(screen.getByText('Driver Pay')).toBeDefined();
+      const calls = api.get.mock.calls.map((c) => c[0]);
+      expect(calls).toContain('/carriers/options/');
+      expect(calls).toContain('/drivers/options/');
+      expect(calls).toContain('/fleet/trucks/options/');
+      expect(calls).toContain('/fleet/trailers/options/');
+      expect(calls).toContain('/users/options/');
     });
   });
 
-  it('renders net profit after run', async () => {
-    reportsService.financial.mockResolvedValue({ data: REPORT_DATA });
+  it('populates carrier select with returned options', async () => {
+    api.get.mockImplementation((url) => {
+      if (url === '/carriers/options/') return Promise.resolve({ data: CARRIER_OPTIONS });
+      return Promise.resolve({ data: [] });
+    });
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
     await waitFor(() => {
-      expect(screen.getByText('Net Profit')).toBeDefined();
+      expect(screen.getByRole('option', { name: 'Best Wheels Transport LLC (MC-12345)' })).toBeDefined();
     });
   });
 
-  it('shows error alert on failure', async () => {
-    reportsService.financial.mockRejectedValue(new Error('Network error'));
-    renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/failed to load/i)).toBeDefined();
+  it('populates driver listbox with returned options', async () => {
+    api.get.mockImplementation((url) => {
+      if (url === '/drivers/options/') return Promise.resolve({ data: DRIVER_OPTIONS });
+      return Promise.resolve({ data: [] });
     });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'John Doe (Best Wheels Transport LLC) [on]' })).toBeDefined();
+    });
+  });
+
+  it('populates truck listbox with returned options', async () => {
+    api.get.mockImplementation((url) => {
+      if (url === '/fleet/trucks/options/') return Promise.resolve({ data: TRUCK_OPTIONS });
+      return Promise.resolve({ data: [] });
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: '#T-001' })).toBeDefined();
+    });
+  });
+
+  it('populates trailer listbox with returned options', async () => {
+    api.get.mockImplementation((url) => {
+      if (url === '/fleet/trailers/options/') return Promise.resolve({ data: TRAILER_OPTIONS });
+      return Promise.resolve({ data: [] });
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: '#TRL-001' })).toBeDefined();
+    });
+  });
+
+  it('populates dispatcher listbox with returned options', async () => {
+    api.get.mockImplementation((url) => {
+      if (url === '/users/options/') return Promise.resolve({ data: DISPATCHER_OPTIONS });
+      return Promise.resolve({ data: [] });
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Jane Smith' })).toBeDefined();
+    });
+  });
+
+  // ── Show Report opens new window ───────────────────────────────────────────
+
+  it('opens /print/financial in a new tab when Show Report is clicked', async () => {
+    await renderPageSettled();
+    fireEvent.click(screen.getByRole('button', { name: /show report/i }));
+    expect(mockOpen).toHaveBeenCalledOnce();
+    const [url, target] = mockOpen.mock.calls[0];
+    expect(url).toMatch(/^\/print\/financial\?/);
+    expect(target).toBe('_blank');
+  });
+
+  it('includes date_begin and date_end in the print URL', async () => {
+    await renderPageSettled();
+    fireEvent.click(screen.getByRole('button', { name: /show report/i }));
+    const [url] = mockOpen.mock.calls[0];
+    expect(url).toContain('date_begin=');
+    expect(url).toContain('date_end=');
+  });
+
+  it('includes period param in the print URL', async () => {
+    await renderPageSettled();
+    fireEvent.click(screen.getByRole('button', { name: /show report/i }));
+    const [url] = mockOpen.mock.calls[0];
+    expect(url).toContain('period=');
   });
 });

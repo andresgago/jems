@@ -52,6 +52,7 @@ import SendPacketPage from './pages/tools/SendPacketPage';
 import BrokersStatusPage from './pages/tools/BrokersStatusPage';
 import DriversLastLoadsPage from './pages/tools/DriversLastLoadsPage';
 import FinancialReportPage from './pages/reports/FinancialReportPage';
+import FinancialReportPrintPage from './pages/reports/FinancialReportPrintPage';
 import InvoiceReportPage from './pages/reports/InvoiceReportPage';
 import IftaReportPage from './pages/reports/IftaReportPage';
 import TaxReportPage from './pages/reports/TaxReportPage';
@@ -69,6 +70,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/print/financial" element={<ProtectedRoute><FinancialReportPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={

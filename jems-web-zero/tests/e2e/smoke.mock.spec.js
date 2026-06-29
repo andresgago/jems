@@ -204,7 +204,7 @@ const DRIVERS = [
     driver_type: 1, driver_type_name: 'Company Driver', status: 1,
     phone: '5551234', email: 'john@example.com',
     license_expiration: '2030-01-01', medical_card_expiration: '2030-01-01',
-    on_vacation: false, carrier: 1,
+    on_vacation: false, carrier: 1, carrier_name: 'Best Wheels Transport LLC',
   },
 ]
 
@@ -457,11 +457,34 @@ const RTL_TRUCK_DETAIL = { ...RTL_TRUCKS[0] }
 // ── Report fixtures ─────────────────────────────────────────────────────────
 
 const REPORT_FINANCIAL = {
-  revenues: [{ code: '90010', name: 'Freight Income', amount: 50000 }],
-  expenses: [{ code: '80050', name: 'Driver Pay', amount: -15000 }],
+  carrier_name: 'Best Wheels Transport LLC',
+  date_begin: '2024-01-01',
+  date_end: '2024-12-31',
+  ytd_begin: '2024-01-01',
+  revenues: [
+    {
+      account_code: '90010',
+      account_name: 'Freight Income',
+      amount: 50000,
+      ytd_amount: 50000,
+      details: { drivers: [{ id: 1, name: 'John Driver', amount: 50000 }] },
+    },
+  ],
+  expenses: [
+    {
+      account_code: '80050',
+      account_name: 'Driver Pay',
+      amount: -15000,
+      ytd_amount: -15000,
+      details: {},
+    },
+  ],
   total_revenues: 50000,
+  ytd_total_revenues: 50000,
   total_expenses: -15000,
+  ytd_total_expenses: -15000,
   net_profit: 35000,
+  ytd_net_profit: 35000,
 }
 
 const REPORT_INVOICE = {
@@ -566,6 +589,7 @@ async function mockApi(page) {
     if (pathname.endsWith('/category-types/') && method === 'GET') return json([])
     if (pathname.endsWith('/records/') && method === 'GET') return json(RECORDS)
     if (/\/records\/\d+\/$/.test(pathname) && method === 'GET') return json(RECORD_DETAIL)
+    if (pathname.endsWith('/driver-invoices/options/')) return json([])
     if (pathname.endsWith('/driver-invoices/') && method === 'GET') return json(DRIVER_INVOICES)
     if (/\/driver-invoices\/\d+\/$/.test(pathname) && method === 'GET') return json(DRIVER_INVOICE_DETAIL)
     if (pathname.endsWith('/fleet/trailer-types/')) return json(TRAILER_TYPES)
@@ -2340,29 +2364,56 @@ test('Drivers Last Loads page: Update location button calls fetch-and-sync', asy
 
 // ── Reports ────────────────────────────────────────────────────────────────
 
-test('Financial Report page: shows title and run button', async ({ page }) => {
+test('Financial Report page: shows title and Show Report button', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/reports/financial')
-  await expect(page.getByRole('heading', { name: 'Profit and Loss' })).toBeVisible()
-  await expect(page.getByRole('button', { name: /run report/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Profit and Loss', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /show report/i })).toBeVisible()
 })
 
-test('Financial Report page: shows revenue and expense tables after run', async ({ page }) => {
+test('Financial Report page: shows Carrier and Period dropdowns', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/reports/financial')
-  await page.getByRole('button', { name: /run report/i }).click()
-  await expect(page.getByText('Freight Income')).toBeVisible()
-  await expect(page.getByText('Driver Pay')).toBeVisible()
-  await expect(page.getByText('Net Profit')).toBeVisible()
+  await expect(page.locator('#filter-carrier')).toBeVisible()
+  await expect(page.locator('#filter-period')).toBeVisible()
+})
+
+test('Financial Report page: Period select has Month, Week, Custom options', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/financial')
+  await expect(page.locator('#filter-period option', { hasText: 'Month' })).toHaveCount(1)
+  await expect(page.locator('#filter-period option', { hasText: 'Week' })).toHaveCount(1)
+  await expect(page.locator('#filter-period option', { hasText: 'Custom' })).toHaveCount(1)
+})
+
+test('Financial Report page: shows four driver/truck/trailer/dispatcher listboxes', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/financial')
+  await expect(page.getByText('Select Driver')).toBeVisible()
+  await expect(page.getByText('Select Truck')).toBeVisible()
+  await expect(page.getByText('Select Trailer')).toBeVisible()
+  await expect(page.getByText('Select Dispatcher')).toBeVisible()
+})
+
+test('Financial Report page: driver listbox populated with options', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/financial')
+  await expect(page.locator('#filter-drivers option', { hasText: 'John Doe' })).toHaveCount(1)
+})
+
+test('Financial Report page: truck listbox populated with options', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/financial')
+  await expect(page.locator('#filter-trucks option', { hasText: '#T-100' })).toHaveCount(1)
 })
 
 test('Invoice Report page: shows title and account rows after run', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/reports/invoice')
-  await expect(page.getByRole('heading', { name: 'Profit and Loss By Invoices' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Profit and Loss', exact: true })).toBeVisible()
   await page.getByRole('button', { name: /run report/i }).click()
   await expect(page.getByText('Freight Income')).toBeVisible()
-  await expect(page.getByText('Net Profit')).toBeVisible()
+  await expect(page.getByText('NET PROFIT')).toBeVisible()
 })
 
 test('IFTA Report page: shows state and card rows after run', async ({ page }) => {

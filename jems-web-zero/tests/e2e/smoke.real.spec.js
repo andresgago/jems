@@ -4,11 +4,16 @@
  * Run with: npm run test:e2e:real
  * Prereqs: backend running on http://localhost:8000 with seeded data and a valid admin user.
  */
+import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 
 const API_BASE = process.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 const ADMIN_USER = process.env.E2E_USERNAME || 'admin'
 const ADMIN_PASS = process.env.E2E_PASSWORD || 'admin1234'
+
+function uniqueE2EId(prefix) {
+  return `${prefix}-${randomUUID().slice(0, 8)}`
+}
 
 // Critical routes that must be reachable after login
 const CRITICAL_ROUTES = [
@@ -105,7 +110,9 @@ async function apiPost(page, token, path, data) {
     headers: { Authorization: `Bearer ${token}` },
     data,
   })
-  expect(res.ok()).toBeTruthy()
+  if (!res.ok()) {
+    throw new Error(`POST ${path} failed with HTTP ${res.status()}: ${await res.text()}`)
+  }
   return res.json()
 }
 
@@ -1005,11 +1012,12 @@ async function createTestLoad(page, token, overrides = {}) {
   const brokerId = brokers[0]?.id
   const cityId = cities[0]?.id
 
-  const shipper = await apiPost(page, token, '/brokers/business/', { name: `E2E Shipper ${Date.now()}` })
-  const receiver = await apiPost(page, token, '/brokers/business/', { name: `E2E Receiver ${Date.now()}` })
+  const suffix = uniqueE2EId('LOAD')
+  const shipper = await apiPost(page, token, '/brokers/business/', { name: `E2E Shipper ${suffix}` })
+  const receiver = await apiPost(page, token, '/brokers/business/', { name: `E2E Receiver ${suffix}` })
 
   const load = await apiPost(page, token, '/loads/', {
-    number: `TV-${Date.now()}`,
+    number: `TV-${suffix}`,
     pickup_date: '2026-06-25',
     pickup_city: cityId,
     pickup_address: 'E2E pickup',
