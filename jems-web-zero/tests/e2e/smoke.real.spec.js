@@ -30,6 +30,9 @@ const CRITICAL_ROUTES = [
   { path: '/settings/system', heading: /system settings/i },
   { path: '/rtl', heading: /rtl/i },
   { path: '/rtl/ifta', heading: /ifta/i },
+  { path: '/tools/send-packet', heading: /send carrier packet/i },
+  { path: '/tools/brokers-status', heading: /brokers status/i },
+  { path: '/tools/drivers-last-loads', heading: /drivers.*last loads/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1305,4 +1308,85 @@ test('move endpoint shifts start and end preserving duration (real)', async ({ p
 
   // Cleanup
   await apiDelete(page, token, `/dispatch/work/${work.id}/`)
+})
+
+test('carriers available-files endpoint returns list (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const carriers = await apiGet(page, token, '/carriers/')
+  if (!carriers.length) {
+    test.skip('No carriers in database')
+    return
+  }
+  const carrierId = carriers[0].id
+  const res = await page.request.get(`${API_BASE}/carriers/${carrierId}/available-files/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(res.ok()).toBeTruthy()
+  const data = await res.json()
+  expect(Array.isArray(data)).toBe(true)
+  // Each returned slot must have slot and label fields
+  for (const item of data) {
+    expect(item).toHaveProperty('slot')
+    expect(item).toHaveProperty('label')
+  }
+})
+
+test('carrier send-packet returns 400 when broker_email missing (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const carriers = await apiGet(page, token, '/carriers/')
+  if (!carriers.length) {
+    test.skip('No carriers in database')
+    return
+  }
+  const carrierId = carriers[0].id
+  const res = await page.request.post(`${API_BASE}/carriers/${carrierId}/send-packet/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { file_slots: ['w9_file'] },
+  })
+  expect(res.status()).toBe(400)
+})
+
+test('carrier send-packet returns 400 for unknown file slot (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const carriers = await apiGet(page, token, '/carriers/')
+  if (!carriers.length) {
+    test.skip('No carriers in database')
+    return
+  }
+  const carrierId = carriers[0].id
+  const res = await page.request.post(`${API_BASE}/carriers/${carrierId}/send-packet/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { broker_email: 'test@test.com', file_slots: ['bad_slot'] },
+  })
+  expect(res.status()).toBe(400)
+})
+
+test('drivers last-loads endpoint returns list (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const res = await page.request.get(`${API_BASE}/drivers/last-loads/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(res.ok()).toBeTruthy()
+  const data = await res.json()
+  expect(Array.isArray(data)).toBe(true)
+  // Each entry must have the expected keys
+  for (const entry of data) {
+    expect(entry).toHaveProperty('id')
+    expect(entry).toHaveProperty('full_name')
+    expect(entry).toHaveProperty('last_load')
+    expect(entry).toHaveProperty('current_load')
+  }
+})
+
+test('drivers last-loads endpoint requires authentication (real)', async ({ page }) => {
+  const res = await page.request.get(`${API_BASE}/drivers/last-loads/`)
+  expect(res.status()).toBe(401)
 })

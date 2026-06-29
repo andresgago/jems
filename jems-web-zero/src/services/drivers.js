@@ -37,6 +37,8 @@ export const driversService = {
     });
   },
   deletePhoto: (id) => api.delete(`/drivers/${id}/photo/`),
+
+  lastLoads: () => api.get('/drivers/last-loads/'),
 };
 
 export const DOCUMENT_TYPES = [

@@ -48,6 +48,9 @@ import RtlPage from './pages/integrations/RtlPage';
 import RtlDriverDetailPage from './pages/integrations/RtlDriverDetailPage';
 import RtlTruckDetailPage from './pages/integrations/RtlTruckDetailPage';
 import IftaPage from './pages/integrations/IftaPage';
+import SendPacketPage from './pages/tools/SendPacketPage';
+import BrokersStatusPage from './pages/tools/BrokersStatusPage';
+import DriversLastLoadsPage from './pages/tools/DriversLastLoadsPage';
 
 export function RequireAnyPermission({ permissions, children }) {
   const { haveAnyPermission } = useAuth();
@@ -138,9 +141,9 @@ function AppRoutes() {
                 {/* Factoring */}
                 <Route path="factoring/loads" element={<div><h5>Factoring Loads</h5><p className="text-muted">Coming soon.</p></div>} />
                 {/* Tools */}
-                <Route path="tools/drivers-last-loads" element={<div><h5>Drivers Last Loads</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="tools/send-packet" element={<div><h5>Send Packet</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="tools/brokers-status" element={<div><h5>Brokers Status</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="tools/drivers-last-loads" element={<DriversLastLoadsPage />} />
+                <Route path="tools/send-packet" element={<SendPacketPage />} />
+                <Route path="tools/brokers-status" element={<BrokersStatusPage />} />
                 {/* RTL */}
                 <Route path="rtl" element={<RtlPage />} />
                 <Route path="rtl/drivers/:id" element={<RtlDriverDetailPage />} />

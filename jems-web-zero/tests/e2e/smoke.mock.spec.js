@@ -144,6 +144,48 @@ const CARRIERS = [
   { id: 2, name: 'Best Wheels Transport LLC' },
 ]
 
+const CARRIER_AVAILABLE_FILES = [
+  { slot: 'w9_file', label: 'W9' },
+  { slot: 'coi_file', label: 'COI' },
+  { slot: 'mcc_file', label: 'MCC' },
+]
+
+const DRIVER_LAST_LOADS = [
+  {
+    id: 1,
+    full_name: 'John Doe',
+    last_load: {
+      id: 10, number: 'LD-00010', payment: 1500, trailer_type: 'DV',
+      pickup_date: '2025-01-10T08:00:00Z',
+      pickup_city: 'Charlotte', pickup_state: 'NC', pickup_zip: '28201',
+      dropoff_date: '2025-01-12T16:00:00Z',
+      dropoff_city: 'Atlanta', dropoff_state: 'GA', dropoff_zip: '30301',
+      truck: 'TRK-001', trailer: 'TRL-001',
+    },
+    current_load: null,
+  },
+  {
+    id: 2,
+    full_name: 'Alice Brown',
+    last_load: {
+      id: 20, number: 'LD-00020', payment: 2000, trailer_type: 'RF',
+      pickup_date: '2025-02-01T08:00:00Z',
+      pickup_city: 'Dallas', pickup_state: 'TX', pickup_zip: '75201',
+      dropoff_date: '2025-02-03T16:00:00Z',
+      dropoff_city: 'Houston', dropoff_state: 'TX', dropoff_zip: '77001',
+      truck: null, trailer: null,
+    },
+    current_load: {
+      id: 30, number: 'LD-00030', payment: 2500, trailer_type: 'RF',
+      pickup_date: '2025-02-10T08:00:00Z',
+      pickup_city: 'Miami', pickup_state: 'FL', pickup_zip: '33101',
+      dropoff_date: '2025-02-12T16:00:00Z',
+      dropoff_city: 'Orlando', dropoff_state: 'FL', dropoff_zip: '32801',
+      truck: 'TRK-002', trailer: 'TRL-002',
+    },
+  },
+]
+
 const STATES = [
   { id: 9, name: 'Texas', abbreviation: 'TX' },
   { id: 10, name: 'Alabama', abbreviation: 'AL' },
@@ -466,6 +508,9 @@ async function mockApi(page) {
     if (pathname.endsWith('/fleet/trailers/options/')) return json(TRAILERS)
     if (pathname.endsWith('/fleet/trailers/') && method === 'GET') return json(TRAILERS)
     if (/\/fleet\/trailers\/\d+\/$/.test(pathname) && method === 'GET') return json(TRAILER_DETAIL)
+    if (/\/carriers\/\d+\/available-files\/$/.test(pathname) && method === 'GET') return json(CARRIER_AVAILABLE_FILES)
+    if (/\/carriers\/\d+\/send-packet\/$/.test(pathname) && method === 'POST') return json({ detail: 'Packet sent successfully.' })
+    if (pathname.endsWith('/carriers/options/')) return json(CARRIERS.map((c) => ({ id: c.id, label: c.name })))
     if (pathname.endsWith('/carriers/')) return json(CARRIERS)
     if (pathname.endsWith('/locations/states/')) return json(STATES)
     if (pathname.endsWith('/locations/cities/') && method === 'GET') return json({ count: 2, results: CITIES, next: null, previous: null })
@@ -488,6 +533,7 @@ async function mockApi(page) {
     if (pathname.endsWith('/integrations/rtl/ifta/') && method === 'GET') return json(RTL_IFTA)
     if (/\/integrations\/rtl\/ifta\/\d+\/$/.test(pathname) && method === 'GET') return json(RTL_IFTA[0])
     if (pathname.endsWith('/integrations/ifta-reports/') && method === 'GET') return json([])
+    if (pathname.endsWith('/drivers/last-loads/') && method === 'GET') return json(DRIVER_LAST_LOADS)
     if (pathname.endsWith('/drivers/types/')) return json(DRIVER_TYPES)
     if (pathname.endsWith('/drivers/options/')) return json(DRIVERS)
     if (pathname.endsWith('/drivers/') && method === 'GET') return json(DRIVERS)
@@ -1919,4 +1965,129 @@ test('loads status filter dropdown shows "Detention" matching legacy TMS label',
   const select = page.locator('thead select')
   await expect(select.locator('option', { hasText: 'Detention' })).toHaveCount(1)
   await expect(select.locator('option', { hasText: 'Detention Pending' })).toHaveCount(0)
+})
+
+// ── Tools: Send Packet ─────────────────────────────────────────────────────────
+
+test('Send Packet page renders title and carrier select', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/send-packet')
+  await expect(page.getByText('Send Carrier Packet')).toBeVisible()
+  await expect(page.getByRole('combobox')).toBeVisible()
+})
+
+test('Send Packet page: carrier dropdown contains carriers', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/send-packet')
+  await expect(page.locator('option', { hasText: 'Jobee Express LLC' })).toHaveCount(1)
+  await expect(page.locator('option', { hasText: 'Best Wheels Transport LLC' })).toHaveCount(1)
+})
+
+test('Send Packet page: selecting carrier loads available files', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/send-packet')
+  await page.getByRole('combobox').selectOption({ label: 'Jobee Express LLC' })
+  await expect(page.getByText('W9')).toBeVisible()
+  await expect(page.getByText('COI')).toBeVisible()
+  await expect(page.getByText('MCC')).toBeVisible()
+})
+
+test('Send Packet page: Send button disabled until carrier + email + slot selected', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/send-packet')
+  await expect(page.getByRole('button', { name: /^Send$/ })).toBeDisabled()
+})
+
+test('Send Packet page: Send button enabled after filling all fields', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/send-packet')
+  await page.getByRole('combobox').selectOption({ label: 'Jobee Express LLC' })
+  await page.getByPlaceholder('broker@example.com').fill('broker@test.com')
+  await page.getByLabel('W9').check()
+  await expect(page.getByRole('button', { name: /^Send$/ })).toBeEnabled()
+})
+
+test('Send Packet page: shows success message after sending', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/send-packet')
+  await page.getByRole('combobox').selectOption({ label: 'Jobee Express LLC' })
+  await page.getByPlaceholder('broker@example.com').fill('broker@test.com')
+  await page.getByLabel('W9').check()
+  await page.getByRole('button', { name: /^Send$/ }).click()
+  await expect(page.getByText(/packet sent successfully/i)).toBeVisible()
+})
+
+// ── Tools: Brokers Status ─────────────────────────────────────────────────────
+
+test('Brokers Status page renders heading and search input', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/brokers-status')
+  await expect(page.getByRole('heading', { name: 'Brokers Status' })).toBeVisible()
+  await expect(page.getByPlaceholder(/search by name or mc/i)).toBeVisible()
+})
+
+test('Brokers Status page: Search button disabled when input empty', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/brokers-status')
+  await expect(page.getByRole('button', { name: /^Search$/ })).toBeDisabled()
+})
+
+test('Brokers Status page: shows results after search', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/brokers-status')
+  await page.getByPlaceholder(/search by name or mc/i).fill('Sunrise')
+  await page.getByRole('button', { name: /^Search$/ }).click()
+  await expect(page.getByText('Sunrise Freight LLC')).toBeVisible()
+})
+
+test('Brokers Status page: shows debtor buy status in results', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/brokers-status')
+  await page.getByPlaceholder(/search by name or mc/i).fill('Sunrise')
+  await page.getByRole('button', { name: /^Search$/ }).click()
+  await expect(page.getByText('Approved For Purchases')).toBeVisible()
+})
+
+test('Brokers Status page: shows last load number in results', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/brokers-status')
+  await page.getByPlaceholder(/search by name or mc/i).fill('Sunrise')
+  await page.getByRole('button', { name: /^Search$/ }).click()
+  await expect(page.getByText('#LD-00042')).toBeVisible()
+})
+
+// ── Tools: Drivers Last Loads ─────────────────────────────────────────────────
+
+test('Drivers Last Loads page renders heading', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByRole('heading', { name: /drivers.*last loads/i })).toBeVisible()
+})
+
+test('Drivers Last Loads page: shows driver rows', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByText('John Doe')).toBeVisible()
+  await expect(page.getByText('Alice Brown')).toBeVisible()
+})
+
+test('Drivers Last Loads page: shows load numbers', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByText('LD-00010')).toBeVisible()
+  await expect(page.getByText('LD-00020')).toBeVisible()
+})
+
+test('Drivers Last Loads page: shows current load when present', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByText('LD-00030')).toBeVisible()
+})
+
+test('Drivers Last Loads page: filter narrows rows by driver name', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await page.getByPlaceholder(/filter by driver name/i).fill('Alice')
+  await expect(page.getByText('Alice Brown')).toBeVisible()
+  await expect(page.getByText('John Doe')).not.toBeVisible()
 })
