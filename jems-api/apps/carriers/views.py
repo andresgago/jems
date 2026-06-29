@@ -10,6 +10,8 @@ from .serializers import CarrierSerializer, FactorSerializer
 from .services import (
     create_carrier,
     delete_carrier,
+    get_carrier_available_files,
+    send_carrier_packet,
     toggle_carrier_status,
     update_carrier,
 )
@@ -83,6 +85,56 @@ class CarrierViewSet(ViewSet):
         carriers = carriers.order_by("name")[:20]
         serializer = CarrierSerializer(carriers, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="available-files")
+    def available_files(self, request, pk=None):
+        """Return the packet file slots that have an uploaded file."""
+        try:
+            carrier = Carrier.objects.get(pk=pk)
+        except Carrier.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(get_carrier_available_files(carrier=carrier))
+
+    @action(detail=True, methods=["post"], url_path="send-packet")
+    def send_packet(self, request, pk=None):
+        try:
+            carrier = Carrier.objects.get(pk=pk)
+        except Carrier.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        broker_email = request.data.get("broker_email", "").strip()
+        file_slots = request.data.get("file_slots", [])
+
+        if not broker_email:
+            return Response(
+                {"error": "broker_email is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not file_slots:
+            return Response(
+                {"error": "At least one file slot must be selected."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from django.core.exceptions import ValidationError
+
+        try:
+            send_carrier_packet(
+                carrier=carrier,
+                broker_email=broker_email,
+                file_slots=file_slots,
+            )
+        except ValidationError as exc:
+            return Response(
+                {"error": exc.message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        return Response({"detail": "Packet sent successfully."})
 
     @action(detail=False, methods=["get"], url_path="options")
     def options_list(self, request):

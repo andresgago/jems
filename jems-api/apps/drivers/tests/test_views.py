@@ -329,3 +329,53 @@ class TestDriverLastVehicle:
         # rented trailer not included
         rented = Trailer.objects.filter(is_rented=True).first()
         assert rented.pk not in trailer_ids
+
+
+@pytest.mark.django_db
+class TestDriverLastLoads:
+    def test_returns_200(self, auth_client):
+        from apps.loads.tests.factories import LoadFactory
+
+        client, _ = auth_client
+        driver = DriverFactory(status=Driver.Status.ACTIVE)
+        LoadFactory(driver=driver, execute=True)
+        response = client.get(reverse("driver-last-loads"))
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_returns_list(self, auth_client):
+        from apps.loads.tests.factories import LoadFactory
+
+        client, _ = auth_client
+        driver = DriverFactory(status=Driver.Status.ACTIVE)
+        LoadFactory(driver=driver, execute=True)
+        response = client.get(reverse("driver-last-loads"))
+        assert isinstance(response.data, list)
+        assert len(response.data) >= 1
+
+    def test_each_entry_has_expected_keys(self, auth_client):
+        from apps.loads.tests.factories import LoadFactory
+
+        client, _ = auth_client
+        driver = DriverFactory(status=Driver.Status.ACTIVE)
+        LoadFactory(driver=driver, execute=True)
+        response = client.get(reverse("driver-last-loads"))
+        entry = response.data[0]
+        assert "id" in entry
+        assert "full_name" in entry
+        assert "last_load" in entry
+        assert "current_load" in entry
+
+    def test_excludes_inactive_drivers(self, auth_client):
+        from apps.loads.tests.factories import LoadFactory
+
+        client, _ = auth_client
+        driver = DriverFactory(status=Driver.Status.INACTIVE)
+        LoadFactory(driver=driver, execute=True)
+        response = client.get(reverse("driver-last-loads"))
+        ids = [r["id"] for r in response.data]
+        assert driver.pk not in ids
+
+    def test_unauthenticated_blocked(self):
+        api_client = APIClient()
+        response = api_client.get(reverse("driver-last-loads"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED

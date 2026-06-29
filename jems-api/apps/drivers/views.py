@@ -153,6 +153,13 @@ class DriverViewSet(ViewSet):
             }
         )
 
+    @action(detail=False, methods=["get"], url_path="last-loads")
+    def last_loads(self, request: Request) -> Response:
+        """Active drivers with their last executed load and current active load."""
+        from .selectors import get_drivers_last_loads
+
+        return Response(get_drivers_last_loads())
+
 
 class DriverVacationViewSet(ViewSet):
     permission_classes = [IsAuthenticated]

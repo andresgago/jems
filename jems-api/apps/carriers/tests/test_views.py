@@ -1,7 +1,9 @@
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
+from unittest.mock import patch
 
 from apps.carriers.tests.factories import CarrierFactory
 from apps.users.tests.factories import UserFactory
@@ -116,3 +118,127 @@ class TestCarrierOptions:
         response = client.get(reverse("carrier-options"))
         assert response.status_code == status.HTTP_200_OK
         assert all("id" in c and "label" in c for c in response.data)
+
+
+@pytest.mark.django_db
+class TestCarrierAvailableFiles:
+    def test_returns_empty_list_when_no_files(self, auth_client):
+        client, _ = auth_client
+        carrier = CarrierFactory()
+        response = client.get(
+            reverse("carrier-available-files", kwargs={"pk": carrier.pk})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_returns_slots_for_uploaded_files(self, auth_client):
+        client, _ = auth_client
+        fake = SimpleUploadedFile("w9.pdf", b"data", content_type="application/pdf")
+        carrier = CarrierFactory(w9_file=fake)
+        response = client.get(
+            reverse("carrier-available-files", kwargs={"pk": carrier.pk})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        slots = [r["slot"] for r in response.data]
+        assert "w9_file" in slots
+
+    def test_returns_404_for_unknown_carrier(self, auth_client):
+        client, _ = auth_client
+        response = client.get(reverse("carrier-available-files", kwargs={"pk": 99999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_unauthenticated_blocked(self, api_client):
+        carrier = CarrierFactory()
+        response = api_client.get(
+            reverse("carrier-available-files", kwargs={"pk": carrier.pk})
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestCarrierSendPacket:
+    def test_missing_broker_email_returns_400(self, auth_client):
+        client, _ = auth_client
+        carrier = CarrierFactory()
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {"file_slots": ["w9_file"]},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "broker_email" in response.data["error"]
+
+    def test_missing_file_slots_returns_400(self, auth_client):
+        client, _ = auth_client
+        carrier = CarrierFactory()
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {"broker_email": "broker@test.com"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "file slot" in response.data["error"].lower()
+
+    def test_no_no_reply_email_returns_400(self, auth_client):
+        client, _ = auth_client
+        carrier = CarrierFactory(no_reply_email=None)
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {"broker_email": "broker@test.com", "file_slots": ["w9_file"]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unknown_slot_returns_400(self, auth_client):
+        client, _ = auth_client
+        carrier = CarrierFactory(no_reply_email="noreply@carrier.com")
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {
+                "broker_email": "broker@test.com",
+                "file_slots": ["bad_slot"],
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_successful_send_returns_200(self, auth_client):
+        client, _ = auth_client
+        fake = SimpleUploadedFile("w9.pdf", b"data", content_type="application/pdf")
+        carrier = CarrierFactory(
+            no_reply_email="noreply@carrier.com",
+            no_reply_password="pass",
+            w9_file=fake,
+        )
+        with patch("apps.carriers.services.get_connection"), patch(
+            "apps.carriers.services.EmailMessage"
+        ) as MockMsg:
+            mock_msg = MockMsg.return_value
+            mock_msg.content_subtype = "html"
+            mock_msg.attach_file = lambda path: None
+            mock_msg.send = lambda: None
+            response = client.post(
+                reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+                {
+                    "broker_email": "broker@test.com",
+                    "file_slots": ["w9_file"],
+                },
+                format="json",
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert "sent" in response.data["detail"].lower()
+
+    def test_returns_404_for_unknown_carrier(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("carrier-send-packet", kwargs={"pk": 99999}),
+            {"broker_email": "x@x.com", "file_slots": ["w9_file"]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_unauthenticated_blocked(self, api_client):
+        carrier = CarrierFactory()
+        response = api_client.post(
+            reverse("carrier-send-packet", kwargs={"pk": carrier.pk}),
+            {"broker_email": "x@x.com", "file_slots": ["w9_file"]},
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED

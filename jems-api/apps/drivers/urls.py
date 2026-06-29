@@ -21,8 +21,11 @@ type_list = DriverTypeViewSet.as_view({"get": "list", "post": "create"})
 vacation_list = DriverVacationViewSet.as_view({"get": "list", "post": "create"})
 vacation_detail = DriverVacationViewSet.as_view({"delete": "destroy"})
 
+driver_last_loads = DriverViewSet.as_view({"get": "last_loads"})
+
 urlpatterns = [
     path("", driver_list, name="driver-list"),
+    path("last-loads/", driver_last_loads, name="driver-last-loads"),
     path("<int:pk>/", driver_detail, name="driver-detail"),
     path("<int:pk>/toggle-status/", driver_toggle_status, name="driver-toggle-status"),
     path("<int:pk>/photo/", driver_photo, name="driver-photo"),

@@ -966,6 +966,18 @@ if ! echo "$(body "$resp")" | grep -qF '"last_truck_id":null'; then
 fi
 pass "last_truck_id is null (no prior loads)"
 
+step "Drivers: last-loads list"
+resp="$(get "/api/v1/drivers/last-loads/")"
+assert_status "driver last-loads" "200" "$(code "$resp")" "$(body "$resp")"
+if ! echo "$(body "$resp")" | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d, list)" 2>/dev/null; then
+  fail "last-loads should return a JSON array" "$(body "$resp")"
+fi
+pass "last-loads returns array (may be empty — test driver has no executed loads)"
+
+step "Drivers: last-loads unauthenticated → 401"
+resp="$(curl -s -o /tmp/resp_body.txt -w "%{http_code}" "${API_URL}/api/v1/drivers/last-loads/")"
+assert_status "last-loads unauth" "401" "$resp"
+
 # ── Carriers ──────────────────────────────────────────────────────────────────
 step "Carriers: create"
 resp="$(post "/api/v1/carriers/" "{\"mc\":\"MC123456\",\"dot_number\":\"DOT654321\",\"name\":\"Jobee Express LLC\",\"dba_name\":\"Jobee\",\"email\":\"ops@jobee.com\",\"active\":true,\"state\":${STATE_ID}}")"
@@ -1028,6 +1040,31 @@ assert_status "factor delete" "204" "$(code "$resp")"
 step "Carriers: factor deleted → 404"
 resp="$(delete "/api/v1/carriers/factors/${FACTOR_ID}/")"
 assert_status "factor gone" "404" "$(code "$resp")"
+
+step "Carriers: available-files list (empty before upload)"
+resp="$(get "/api/v1/carriers/${CARRIER_ID}/available-files/")"
+assert_status "available-files list" "200" "$(code "$resp")" "$(body "$resp")"
+# result is an array (may be empty)
+if ! echo "$(body "$resp")" | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d, list)" 2>/dev/null; then
+  fail "available-files should return a JSON array" "$(body "$resp")"
+fi
+pass "available-files returns array"
+
+step "Carriers: send-packet missing broker_email → 400"
+resp="$(post "/api/v1/carriers/${CARRIER_ID}/send-packet/" '{"file_slots":["w9_file"]}')"
+assert_status "send-packet no email" "400" "$(code "$resp")"
+
+step "Carriers: send-packet missing file_slots → 400"
+resp="$(post "/api/v1/carriers/${CARRIER_ID}/send-packet/" '{"broker_email":"broker@example.com"}')"
+assert_status "send-packet no slots" "400" "$(code "$resp")"
+
+step "Carriers: send-packet unknown slot → 400"
+resp="$(post "/api/v1/carriers/${CARRIER_ID}/send-packet/" '{"broker_email":"broker@example.com","file_slots":["bad_slot"]}')"
+assert_status "send-packet bad slot" "400" "$(code "$resp")"
+
+step "Carriers: available-files 404 for unknown carrier"
+resp="$(get "/api/v1/carriers/999999/available-files/")"
+assert_status "available-files 404" "404" "$(code "$resp")"
 
 # ── Brokers ───────────────────────────────────────────────────────────────────
 step "Brokers: create"
@@ -1410,7 +1447,7 @@ else
 fi
 
 resp="$(delete "/api/v1/loads/${IDX_EXEC_ID}/")"
-assert_status "index exec cleanup" "204" "$(code "$resp")"
+assert_status "index exec cleanup" "204" "$(code "$resp")" "$(body "$resp")"
 
 step "Loads: index_view=true shows executed detention (status=4) loads"
 resp="$(post "/api/v1/loads/" "{\"number\":\"IDX-DET\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"1 Main St\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"2 Oak Ave\",\"payment\":\"500.00\",\"miles\":50,\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"status\":4}")"
