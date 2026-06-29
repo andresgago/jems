@@ -154,6 +154,7 @@ const DRIVER_LAST_LOADS = [
   {
     id: 1,
     full_name: 'John Doe',
+    location: null,
     last_load: {
       id: 10, number: 'LD-00010', payment: 1500, trailer_type: 'DV',
       pickup_date: '2025-01-10T08:00:00Z',
@@ -167,6 +168,7 @@ const DRIVER_LAST_LOADS = [
   {
     id: 2,
     full_name: 'Alice Brown',
+    location: { state: 'VA', calculated: '5.0mi NNE from Winchester, VA', timestamp: '2025-02-11T16:52:00Z' },
     last_load: {
       id: 20, number: 'LD-00020', payment: 2000, trailer_type: 'RF',
       pickup_date: '2025-02-01T08:00:00Z',
@@ -545,6 +547,7 @@ async function mockApi(page) {
     if (/\/loads\/\d+\/set-status\/$/.test(pathname) && method === 'POST') return json({ id: 1, status: 3 })
     if (/\/loads\/\d+\/files\/[^/]+\/$/.test(pathname)) return json({})
     if (pathname.endsWith('/loads/bulk-delete/') && method === 'POST') return json({ deleted: 1 })
+    if (pathname.endsWith('/drivers/bulk-delete/') && method === 'POST') return json({ terminated: [], not_found: [] })
     if (pathname.endsWith('/loads/bulk-invoiced/') && method === 'POST') return json({ updated: 1 })
     if (pathname.endsWith('/loads/bulk-paid/') && method === 'POST') return json({ updated: 1 })
     if (/\/loads\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
@@ -2090,4 +2093,100 @@ test('Drivers Last Loads page: filter narrows rows by driver name', async ({ pag
   await page.getByPlaceholder(/filter by driver name/i).fill('Alice')
   await expect(page.getByText('Alice Brown')).toBeVisible()
   await expect(page.getByText('John Doe')).not.toBeVisible()
+})
+
+test('Drivers Last Loads page: renders Current Location column header', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByRole('columnheader', { name: /current location/i })).toBeVisible()
+})
+
+test('Drivers Last Loads page: shows RTL calculated location when present', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  // Alice Brown has location: { calculated: '5.0mi NNE from Winchester, VA', ... }
+  await expect(page.getByText(/5\.0mi NNE from Winchester, VA/)).toBeVisible()
+})
+
+test('Drivers Last Loads page: driver name links to detail page', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  const link = page.getByRole('link', { name: 'John Doe' })
+  await expect(link).toBeVisible()
+  await expect(link).toHaveAttribute('href', '/fleet/drivers/1')
+})
+
+test('Drivers Last Loads page: shows truck and trailer in driver cell', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  // John Doe's last_load has truck: 'TRK-001', trailer: 'TRL-001'
+  await expect(page.getByText(/TRK-001/)).toBeVisible()
+  await expect(page.getByText(/TRL-001/)).toBeVisible()
+})
+
+test('Drivers Last Loads page: shows dispatcher dropdown', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByRole('combobox', { name: /filter by dispatcher/i })).toBeVisible()
+})
+
+test('Drivers Last Loads page: shows item count summary', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  // Fixture has 2 items → "Showing 1–2 of 2 items."
+  await expect(page.getByText(/showing 1.+2 of 2 items/i)).toBeVisible()
+})
+
+test('Drivers Last Loads page: renders # column header', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByRole('columnheader', { name: '#' })).toBeVisible()
+})
+
+test('Drivers Last Loads page: renders select-all checkbox in header', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByRole('checkbox', { name: /select all/i })).toBeVisible()
+})
+
+test('Drivers Last Loads page: selecting a row shows "With selected" footer', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByText('John Doe')).toBeVisible()
+  await page.getByRole('checkbox', { name: /select john doe/i }).check()
+  await expect(page.getByText(/with selected/i)).toBeVisible()
+})
+
+test('Drivers Last Loads page: select-all selects all visible rows', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByText('John Doe')).toBeVisible()
+  await page.getByRole('checkbox', { name: /select all/i }).check()
+  await expect(page.getByRole('checkbox', { name: /select john doe/i })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /select alice brown/i })).toBeChecked()
+})
+
+test('Drivers Last Loads page: shows Delete All button when row is selected', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByText('John Doe')).toBeVisible()
+  await page.getByRole('checkbox', { name: /select john doe/i }).check()
+  await expect(page.getByRole('button', { name: /delete all/i })).toBeVisible()
+})
+
+test('Drivers Last Loads page: Update location button calls fetch-and-sync', async ({ page }) => {
+  await withAdminAuth(page)
+  let syncCalled = false
+  await page.route('**/integrations/rtl/fetch-and-sync/**', async (route) => {
+    syncCalled = true
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ synced: {} }) })
+  })
+  await page.goto('/tools/drivers-last-loads')
+  await expect(page.getByText('John Doe')).toBeVisible()
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: /update location/i }).click()
+  await page.waitForTimeout(300)
+  page.once('dialog', (dialog) => dialog.accept()) // success alert
+  await expect(page.getByRole('button', { name: /update location/i })).toBeVisible()
+  expect(syncCalled).toBe(true)
 })

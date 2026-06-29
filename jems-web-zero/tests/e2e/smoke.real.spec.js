@@ -1377,16 +1377,91 @@ test('drivers last-loads endpoint returns list (real)', async ({ page }) => {
   expect(res.ok()).toBeTruthy()
   const data = await res.json()
   expect(Array.isArray(data)).toBe(true)
-  // Each entry must have the expected keys
+  // Each entry must have the expected keys including new location field
   for (const entry of data) {
     expect(entry).toHaveProperty('id')
     expect(entry).toHaveProperty('full_name')
     expect(entry).toHaveProperty('last_load')
     expect(entry).toHaveProperty('current_load')
+    expect(entry).toHaveProperty('location')
   }
+})
+
+test('drivers last-loads endpoint accepts dispatcher_id filter (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const headers = { Authorization: `Bearer ${token}` }
+
+  // Get all results without filter
+  const allRes = await page.request.get(`${API_BASE}/drivers/last-loads/`, { headers })
+  expect(allRes.ok()).toBeTruthy()
+  const allData = await allRes.json()
+
+  // Filter by a dispatcher_id that likely has no loads — should return empty or fewer results
+  const filteredRes = await page.request.get(
+    `${API_BASE}/drivers/last-loads/?dispatcher_id=99999`,
+    { headers }
+  )
+  expect(filteredRes.ok()).toBeTruthy()
+  const filteredData = await filteredRes.json()
+  expect(Array.isArray(filteredData)).toBe(true)
+  // A non-existent dispatcher should return fewer (or equal) results
+  expect(filteredData.length).toBeLessThanOrEqual(allData.length)
+})
+
+test('drivers last-loads rejects invalid dispatcher_id (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const res = await page.request.get(
+    `${API_BASE}/drivers/last-loads/?dispatcher_id=not-a-number`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  expect(res.status()).toBe(400)
 })
 
 test('drivers last-loads endpoint requires authentication (real)', async ({ page }) => {
   const res = await page.request.get(`${API_BASE}/drivers/last-loads/`)
+  expect(res.status()).toBe(401)
+})
+
+test('drivers bulk-delete terminates listed drivers (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const headers = { Authorization: `Bearer ${token}` }
+
+  // Create a driver to terminate (driver_type is nullable — omit to avoid seeded-ID dependency)
+  const created = await apiPost(page, token, '/drivers/', {
+    first_name: 'Bulk', last_name: 'TestDriver',
+    status: 1, phone: '5550000001', email: 'bulk@test.com',
+    license_number: 'BULK001', factor: 25,
+  })
+  const driverId = created.id
+
+  const res = await page.request.post(`${API_BASE}/drivers/bulk-delete/`, {
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    data: { ids: [driverId] },
+  })
+  expect(res.ok()).toBeTruthy()
+  const data = await res.json()
+  expect(data.terminated).toContain(driverId)
+  expect(data.not_found).toEqual([])
+})
+
+test('drivers bulk-delete rejects empty ids (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const res = await page.request.post(`${API_BASE}/drivers/bulk-delete/`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    data: { ids: [] },
+  })
+  expect(res.status()).toBe(400)
+})
+
+test('drivers bulk-delete requires authentication (real)', async ({ page }) => {
+  const res = await page.request.post(`${API_BASE}/drivers/bulk-delete/`, {
+    headers: { 'Content-Type': 'application/json' },
+    data: { ids: [1] },
+  })
   expect(res.status()).toBe(401)
 })

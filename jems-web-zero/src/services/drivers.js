@@ -38,7 +38,8 @@ export const driversService = {
   },
   deletePhoto: (id) => api.delete(`/drivers/${id}/photo/`),
 
-  lastLoads: () => api.get('/drivers/last-loads/'),
+  lastLoads: (params) => api.get('/drivers/last-loads/', { params }),
+  bulkDelete: (ids) => api.post('/drivers/bulk-delete/', { ids }),
 };
 
 export const DOCUMENT_TYPES = [
