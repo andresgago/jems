@@ -91,6 +91,9 @@ class TruckMaintenanceSerializer(serializers.ModelSerializer):
 
     truck_number = serializers.CharField(source="truck.number", read_only=True)
     truck_vin = serializers.CharField(source="truck.vin", read_only=True)
+    truck_odometer_current = serializers.FloatField(
+        source="truck.odometer_current", read_only=True
+    )
 
     class Meta:
         model = TruckMaintenance
@@ -99,6 +102,7 @@ class TruckMaintenanceSerializer(serializers.ModelSerializer):
             "truck",
             "truck_number",
             "truck_vin",
+            "truck_odometer_current",
             "date",
             "miles_alert",
             "maintenance_miles",
@@ -112,7 +116,13 @@ class TruckMaintenanceSerializer(serializers.ModelSerializer):
             "detail",
             "created_at",
         ]
-        read_only_fields = ["created_at", "truck", "truck_number", "truck_vin"]
+        read_only_fields = [
+            "created_at",
+            "truck",
+            "truck_number",
+            "truck_vin",
+            "truck_odometer_current",
+        ]
 
 
 class TruckMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):

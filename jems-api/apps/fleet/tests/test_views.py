@@ -561,6 +561,7 @@ class TestTruckMaintenanceRetrieve:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == record.pk
         assert "truck_number" in response.data
+        assert "truck_odometer_current" in response.data
         assert "maintenance_miles" in response.data
         assert "is_done" in response.data
         assert "driven_miles" in response.data
