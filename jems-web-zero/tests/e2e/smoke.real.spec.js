@@ -39,6 +39,7 @@ const CRITICAL_ROUTES = [
   { path: '/tools/brokers-status', heading: /brokers status/i },
   { path: '/tools/drivers-last-loads', heading: /drivers.*last loads/i },
   { path: '/reports/balance-sheet', heading: /balance sheet/i },
+  { path: '/reports/broker-summary', heading: /broker summary/i },
   { path: '/reports/invoice', heading: /profit and loss by invoices/i },
 ]
 
@@ -305,6 +306,24 @@ test('balance sheet report endpoint returns legacy concept sections (real)', asy
   expect(data).toHaveProperty('total_assets')
   expect(data).toHaveProperty('total_liabilities_and_equity')
   expect(Array.isArray(data.columns)).toBeTruthy()
+})
+
+test('broker summary report endpoint returns legacy annual shape (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const byBroker = await apiGet(page, token, '/reports/broker-summary/?year=2024')
+  expect(byBroker).toHaveProperty('brokers')
+  expect(byBroker).toHaveProperty('total_revenue')
+  expect(byBroker).toHaveProperty('total_deliveries')
+  expect(Array.isArray(byBroker.brokers)).toBeTruthy()
+
+  const total = await apiGet(page, token, '/reports/broker-summary/?year=2024&option=1')
+  expect(total).toHaveProperty('total')
+  expect(total.total).toHaveProperty('monthly')
+  expect(total.total).toHaveProperty('monthly_loads')
+  expect(total).toHaveProperty('total_deliveries')
 })
 
 // ── Trailer types ─────────────────────────────────────────────────────────────

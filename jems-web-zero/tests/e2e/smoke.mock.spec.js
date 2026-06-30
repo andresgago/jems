@@ -599,10 +599,38 @@ const REPORT_CATEGORY = {
 
 const REPORT_BROKER_SUMMARY = {
   year: 2024,
+  prior_year: 2023,
   option: 0,
-  brokers: [{ id: 1, name: 'ACME Broker', revenue: 50000, prior_revenue: 40000 }],
+  brokers: [{
+    id: 1,
+    name: 'ACME Broker',
+    mc: 'MC1',
+    revenue: 50000,
+    prior_revenue: 40000,
+    deliveries: 3,
+    prior_deliveries: 2,
+    monthly: [{ month: 1, revenue: 30000, deliveries: 2 }, { month: 2, revenue: 20000, deliveries: 1 }],
+    prior_monthly: [{ month: 1, revenue: 25000, deliveries: 1 }, { month: 2, revenue: 15000, deliveries: 1 }],
+    monthly_loads: [{ month: 1, deliveries: 2 }, { month: 2, deliveries: 1 }],
+    prior_monthly_loads: [{ month: 1, deliveries: 1 }, { month: 2, deliveries: 1 }],
+  }],
   total_revenue: 50000,
   total_prior_revenue: 40000,
+  total_deliveries: 3,
+  total_prior_deliveries: 2,
+  total: {
+    id: null,
+    name: 'ALL BROKERS',
+    mc: '',
+    revenue: 50000,
+    prior_revenue: 40000,
+    deliveries: 3,
+    prior_deliveries: 2,
+    monthly: [{ month: 1, revenue: 30000, deliveries: 2 }, { month: 2, revenue: 20000, deliveries: 1 }],
+    prior_monthly: [{ month: 1, revenue: 25000, deliveries: 1 }, { month: 2, revenue: 15000, deliveries: 1 }],
+    monthly_loads: [{ month: 1, deliveries: 2 }, { month: 2, deliveries: 1 }],
+    prior_monthly_loads: [{ month: 1, deliveries: 1 }, { month: 2, deliveries: 1 }],
+  },
 }
 
 const REPORT_SHIPPER_RECEIVER = {
@@ -2696,12 +2724,28 @@ test('Category Tracking print page: shows filter summary', async ({ page }) => {
   await expect(page.getByText(/All Positions/)).toBeVisible()
 })
 
-test('Broker Summary page: shows broker rows after run', async ({ page }) => {
+test('Broker Summary page: opens printable annual report', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/reports/broker-summary')
   await expect(page.getByRole('heading', { name: 'Broker Summary' })).toBeVisible()
-  await page.getByRole('button', { name: /run report/i }).click()
-  await expect(page.getByText('ACME Broker')).toBeVisible()
+  await expect(page.locator('#broker-summary-option option', { hasText: 'Annual Revenues and Deliveries By Brokers' })).toHaveCount(1)
+  await page.evaluate(() => {
+    window.__lastReportUrl = null
+    window.open = (url) => {
+      window.__lastReportUrl = url
+      return null
+    }
+  })
+  await page.getByRole('button', { name: /show report/i }).click()
+  const reportUrl = await page.evaluate(() => window.__lastReportUrl)
+  expect(reportUrl).toContain('/print/broker-summary?')
+  expect(reportUrl).toContain('year=')
+  expect(reportUrl).toContain('option=0')
+  await page.goto(reportUrl)
+  await expect(page.getByRole('heading', { name: 'Broker Summary' })).toBeVisible()
+  await expect(page.getByText('Annual by brokers')).toBeVisible()
+  await expect(page.getByText('1 ACME Broker')).toBeVisible()
+  await expect(page.getByText(/Total Deliveries/)).toBeVisible()
 })
 
 test('Shipper-Receiver page: shows pair rows after run', async ({ page }) => {

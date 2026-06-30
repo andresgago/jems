@@ -1,95 +1,61 @@
 import { useState } from 'react';
-import { reportsService } from '../../services/reports';
-
-const currentYear = new Date().getFullYear();
-
-function fmt(value) {
-  return Number(value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-}
 
 export default function BrokerSummaryReportPage() {
+  const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [option, setOption] = useState(0);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
 
-  function run() {
-    setLoading(true);
-    setError(null);
-    setData(null);
-    reportsService
-      .brokerSummary({ year, option })
-      .then(({ data: d }) => setData(d))
-      .catch(() => setError('Failed to load report.'))
-      .finally(() => setLoading(false));
+  function showReport() {
+    if (!Number.isFinite(Number(year))) return;
+    const params = new URLSearchParams({
+      year: String(year),
+      option: String(option),
+    });
+    window.open(`/print/broker-summary?${params.toString()}`, `BrokerSummary${Math.random()}`, '_blank');
   }
-
-  const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
 
   return (
     <div>
-      <div className="d-flex align-items-center gap-3 mb-4 flex-wrap">
-        <h5 className="mb-0">Broker Summary</h5>
-        <select
-          className="form-select form-select-sm w-auto"
-          value={year}
-          onChange={(e) => setYear(Number(e.target.value))}
-        >
-          {years.map((y) => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
-        <select
-          className="form-select form-select-sm w-auto"
-          value={option}
-          onChange={(e) => setOption(Number(e.target.value))}
-        >
-          <option value={0}>By Broker</option>
-          <option value={1}>With Totals</option>
-        </select>
-        <button className="btn btn-primary btn-sm" onClick={run} disabled={loading}>
-          {loading ? 'Loading…' : 'Run Report'}
-        </button>
+      <h5 className="mb-3">Broker Summary</h5>
+
+      <div className="row g-3 mb-4">
+        <div className="col-md-3">
+          <label htmlFor="broker-summary-year" className="fw-semibold small mb-1 d-block">
+            Filter by Year
+          </label>
+          <input
+            id="broker-summary-year"
+            className="form-control"
+            style={{ height: '48px' }}
+            type="number"
+            min="1900"
+            max="9999"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            placeholder="Filter by Year"
+          />
+        </div>
+
+        <div className="col-md-4">
+          <label htmlFor="broker-summary-option" className="fw-semibold small mb-1 d-block">
+            Select Option
+          </label>
+          <select
+            id="broker-summary-option"
+            className="form-select"
+            style={{ height: '48px' }}
+            value={option}
+            onChange={(e) => setOption(Number(e.target.value))}
+          >
+            <option value={0}>Annual Revenues and Deliveries By Brokers</option>
+            <option value={1}>Annual Revenues and Deliveries Total</option>
+          </select>
+        </div>
       </div>
 
-      {error && <div className="alert alert-danger">{error}</div>}
-
-      {data && (
-        <>
-          {data.brokers.length === 0 ? (
-            <p className="text-muted">No broker revenue for {year}.</p>
-          ) : (
-            <table className="table table-sm table-bordered table-hover">
-              <thead className="table-light">
-                <tr>
-                  <th>Broker</th>
-                  <th className="text-end">Revenue {year}</th>
-                  {option === 1 && <th className="text-end">Revenue {year - 1}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {data.brokers.map((b) => (
-                  <tr key={b.id}>
-                    <td>{b.name}</td>
-                    <td className="text-end">{fmt(b.revenue)}</td>
-                    {option === 1 && <td className="text-end">{fmt(b.prior_revenue)}</td>}
-                  </tr>
-                ))}
-              </tbody>
-              {option === 1 && (
-                <tfoot className="fw-bold">
-                  <tr>
-                    <td>Total</td>
-                    <td className="text-end">{fmt(data.total_revenue)}</td>
-                    <td className="text-end">{fmt(data.total_prior_revenue)}</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          )}
-        </>
-      )}
+      <button className="btn btn-success" onClick={showReport}>
+        Show Report
+      </button>
     </div>
   );
 }

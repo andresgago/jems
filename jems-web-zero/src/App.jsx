@@ -64,6 +64,7 @@ import TaxReportPrintPage from './pages/reports/TaxReportPrintPage';
 import CategoryTrackingReportPage from './pages/reports/CategoryTrackingReportPage';
 import CategoryTrackingReportPrintPage from './pages/reports/CategoryTrackingReportPrintPage';
 import BrokerSummaryReportPage from './pages/reports/BrokerSummaryReportPage';
+import BrokerSummaryReportPrintPage from './pages/reports/BrokerSummaryReportPrintPage';
 import ShipperReceiverReportPage from './pages/reports/ShipperReceiverReportPage';
 
 export function RequireAnyPermission({ permissions, children }) {
@@ -82,6 +83,7 @@ function AppRoutes() {
       <Route path="/print/ifta" element={<ProtectedRoute><IftaReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/tax" element={<ProtectedRoute><TaxReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/category-tracking" element={<ProtectedRoute><CategoryTrackingReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/broker-summary" element={<ProtectedRoute><BrokerSummaryReportPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={
