@@ -1814,6 +1814,8 @@ test('can create, update, and delete a trailer maintenance record via API (real)
   expect(alertRes.ok()).toBeTruthy()
   const alertInfo = await alertRes.json()
   expect(typeof alertInfo.miles_since_maintenance).toBe('number')
+  expect(alertInfo.miles_alert_message).toBeTruthy()
+  expect(alertInfo.time_alert_message).toBeTruthy()
 
   await apiDelete(page, token, `/fleet/trailer-maintenance/${created.id}/`)
   await apiDelete(page, token, `/fleet/trailers/${trailer.id}/`)

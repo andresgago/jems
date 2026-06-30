@@ -13,7 +13,13 @@ const TIME_YEAR_OPTIONS = Array.from({ length: 16 }, (_, i) => ({
   label: i === 0 ? '0 Years' : i === 1 ? '1 Year' : `${i} Years`,
 }));
 
-const TODAY = new Date().toISOString().split('T')[0];
+function todayISO() {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().split('T')[0];
+}
+
+const TODAY = todayISO();
 
 const FK_FIELDS = ['trailer'];
 const DATE_FIELDS = ['date'];
@@ -34,7 +40,7 @@ function buildPayload(form) {
 const EMPTY = {
   trailer: '',
   date: TODAY,
-  miles: 0,
+  miles: 13000,
   miles_alert: false,
   time_alert: false,
   time_year: 0,
@@ -86,6 +92,11 @@ export default function TrailerMaintenanceFormPage() {
     const payload = buildPayload(form);
     if (!payload.trailer) { setErrors({ trailer: 'Trailer is required.' }); return; }
     if (!payload.date) { setErrors({ date: 'Date is required.' }); return; }
+    if (!payload.detail.trim()) { setErrors({ detail: 'Details cannot be blank.' }); return; }
+    if (payload.miles_alert === 1 && payload.miles <= 0) {
+      setErrors({ miles: 'Miles cannot be blank.' });
+      return;
+    }
     setSaving(true);
     setErrors({});
     try {
@@ -126,137 +137,126 @@ export default function TrailerMaintenanceFormPage() {
         <div className="alert alert-danger">{errors.non_field_errors}</div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <div className="card mb-3">
-          <div className="card-header py-2 bg-light fw-semibold">Main Info</div>
-          <div className="card-body">
-            <div className="row g-3">
-              <div className="col-md-6">
-                <label className="form-label">Trailer <span className="text-danger">*</span></label>
-                <select
-                  className={`form-select${errors.trailer ? ' is-invalid' : ''}`}
-                  value={form.trailer}
-                  onChange={set('trailer')}
-                  disabled={isEdit}
-                >
-                  <option value="">Select trailer…</option>
-                  {trailers.map((t) => (
-                    <option key={t.id} value={t.id}>{t.number}</option>
-                  ))}
-                </select>
-                {errors.trailer && <div className="invalid-feedback">{errors.trailer}</div>}
-              </div>
+      <form onSubmit={handleSubmit} style={{ maxWidth: 1120 }}>
+        <div className="row g-3 align-items-end mb-3">
+          <div className="col-md-5">
+            <label className="form-label fw-semibold" htmlFor="trailer-maintenance-date">Date</label>
+            <input
+              id="trailer-maintenance-date"
+              type="date"
+              className={`form-control${errors.date ? ' is-invalid' : ''}`}
+              value={form.date}
+              onChange={set('date')}
+            />
+            {errors.date && <div className="invalid-feedback">{errors.date}</div>}
+          </div>
 
-              <div className="col-md-3">
-                <label className="form-label">Date <span className="text-danger">*</span></label>
-                <input
-                  type="date"
-                  className={`form-control${errors.date ? ' is-invalid' : ''}`}
-                  value={form.date}
-                  onChange={set('date')}
-                />
-                {errors.date && <div className="invalid-feedback">{errors.date}</div>}
-              </div>
+          <div className="col-md-7">
+            <label className="form-label fw-semibold" htmlFor="trailer-maintenance-trailer">Trailer</label>
+            <select
+              id="trailer-maintenance-trailer"
+              className={`form-select${errors.trailer ? ' is-invalid' : ''}`}
+              value={form.trailer}
+              onChange={set('trailer')}
+              disabled={isEdit}
+            >
+              <option value="">...</option>
+              {trailers.map((t) => (
+                <option key={t.id} value={t.id}>{t.number}{t.vin ? ` - ${t.vin}` : ''}</option>
+              ))}
+            </select>
+            {errors.trailer && <div className="invalid-feedback">{errors.trailer}</div>}
+          </div>
+        </div>
 
-              <div className="col-md-3">
-                <label className="form-label">Odometer Miles</label>
+        <div className="row g-3 mb-3">
+          <div className="col-md-6">
+            <div className="form-check mb-2">
+              <input
+                id="trailer-maintenance-miles-alert"
+                type="checkbox"
+                className="form-check-input"
+                checked={Boolean(form.miles_alert)}
+                onChange={set('miles_alert')}
+              />
+              <label className="form-check-label fw-semibold" htmlFor="trailer-maintenance-miles-alert">Miles Alert</label>
+            </div>
+            {form.miles_alert && (
+              <>
+                <label className="form-label fw-semibold" htmlFor="trailer-maintenance-miles">Miles</label>
                 <input
+                  id="trailer-maintenance-miles"
                   type="number"
-                  className="form-control"
+                  className={`form-control${errors.miles ? ' is-invalid' : ''}`}
                   value={form.miles}
                   onChange={set('miles')}
                   min={0}
                   step={100}
                 />
-              </div>
+                {errors.miles && <div className="invalid-feedback">{errors.miles}</div>}
+              </>
+            )}
+          </div>
 
-              <div className="col-12">
-                <label className="form-label">Detail</label>
-                <textarea
-                  className="form-control"
-                  rows={4}
-                  maxLength={500}
-                  value={form.detail}
-                  onChange={set('detail')}
-                  placeholder="Describe the maintenance work…"
-                />
-              </div>
+          <div className="col-md-6">
+            <div className="form-check mb-2">
+              <input
+                id="trailer-maintenance-time-alert"
+                type="checkbox"
+                className="form-check-input"
+                checked={Boolean(form.time_alert)}
+                onChange={set('time_alert')}
+              />
+              <label className="form-check-label fw-semibold" htmlFor="trailer-maintenance-time-alert">Time Alert</label>
             </div>
+            {form.time_alert && (
+              <div className="row g-2">
+                <div className="col-md-6">
+                  <label className="form-label fw-semibold" htmlFor="trailer-maintenance-years">Years</label>
+                  <select
+                    id="trailer-maintenance-years"
+                    className="form-select"
+                    value={form.time_year}
+                    onChange={set('time_year')}
+                  >
+                    {TIME_YEAR_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label fw-semibold" htmlFor="trailer-maintenance-months">Month(es)</label>
+                  <select
+                    id="trailer-maintenance-months"
+                    className="form-select"
+                    value={form.time_month}
+                    onChange={set('time_month')}
+                  >
+                    {TIME_MONTH_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="card mb-3">
-          <div className="card-header py-2 bg-light fw-semibold">Miles Alert</div>
-          <div className="card-body">
-            <div className="row g-3">
-              <div className="col-12">
-                <div className="form-check">
-                  <label className="form-check-label">
-                    <input
-                      type="checkbox"
-                      className="form-check-input"
-                      checked={Boolean(form.miles_alert)}
-                      onChange={set('miles_alert')}
-                    />
-                    {' '}Enable miles-based alert (triggered when odometer reaches the threshold)
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="card mb-3">
-          <div className="card-header py-2 bg-light fw-semibold">Time Alert</div>
-          <div className="card-body">
-            <div className="row g-3">
-              <div className="col-12">
-                <div className="form-check">
-                  <label className="form-check-label">
-                    <input
-                      type="checkbox"
-                      className="form-check-input"
-                      checked={Boolean(form.time_alert)}
-                      onChange={set('time_alert')}
-                    />
-                    {' '}Enable time-based alert
-                  </label>
-                </div>
-              </div>
-              {form.time_alert && (
-                <>
-                  <div className="col-md-3">
-                    <label className="form-label">Years</label>
-                    <select
-                      className="form-select"
-                      value={form.time_year}
-                      onChange={set('time_year')}
-                    >
-                      {TIME_YEAR_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-md-3">
-                    <label className="form-label">Months</label>
-                    <select
-                      className="form-select"
-                      value={form.time_month}
-                      onChange={set('time_month')}
-                    >
-                      {TIME_MONTH_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+        <div className="mb-3">
+          <label className="form-label fw-semibold" htmlFor="trailer-maintenance-details">Details</label>
+          <textarea
+            id="trailer-maintenance-details"
+            className={`form-control${errors.detail ? ' is-invalid' : ''}`}
+            rows={5}
+            maxLength={500}
+            value={form.detail}
+            onChange={set('detail')}
+          />
+          {errors.detail && <div className="invalid-feedback">{errors.detail}</div>}
         </div>
 
         <div className="d-flex gap-2">
-          <button type="submit" className="btn btn-primary" disabled={saving}>
+          <button type="submit" className={isEdit ? 'btn btn-primary' : 'btn btn-success'} disabled={saving}>
             {saving ? 'Saving…' : isEdit ? 'Update' : 'Create'}
           </button>
           <button type="button" className="btn btn-outline-secondary" onClick={() => navigate(-1)}>

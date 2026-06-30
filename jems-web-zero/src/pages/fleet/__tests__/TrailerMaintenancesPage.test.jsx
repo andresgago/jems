@@ -7,6 +7,7 @@ vi.mock('../../../services/trailerMaintenance', () => ({
   trailerMaintenanceService: {
     list: vi.fn(),
     destroy: vi.fn(),
+    bulkDelete: vi.fn(),
   },
 }))
 
@@ -31,6 +32,9 @@ const records = [
     time_year: 0,
     time_month: 0,
     detail: 'Annual inspection',
+    is_last_maintenance: true,
+    miles_alert_message: 'Active alert for 80000 miles (Miles traveled 0 miles)',
+    time_alert_message: 'Not Alert',
   },
   {
     id: 2,
@@ -44,6 +48,9 @@ const records = [
     time_year: 0,
     time_month: 6,
     detail: '',
+    is_last_maintenance: false,
+    miles_alert_message: 'Not Alert',
+    time_alert_message: 'Inactive alert for 6 months',
   },
 ]
 
@@ -74,7 +81,12 @@ describe('TrailerMaintenancesPage', () => {
   it('shows time alert badge when enabled', async () => {
     render(<MemoryRouter><TrailerMaintenancesPage /></MemoryRouter>)
     await screen.findByText('2024-07-15')
-    expect(screen.getByText(/6 mo/)).toBeInTheDocument()
+    expect(screen.getByText(/Inactive alert for 6 months/)).toBeInTheDocument()
+  })
+
+  it('shows legacy miles alert message', async () => {
+    render(<MemoryRouter><TrailerMaintenancesPage /></MemoryRouter>)
+    expect(await screen.findByText(/Active alert for 80000 miles/)).toBeInTheDocument()
   })
 
   it('deletes a record after confirmation', async () => {
@@ -89,7 +101,33 @@ describe('TrailerMaintenancesPage', () => {
 
   it('shows New Record link', async () => {
     render(<MemoryRouter><TrailerMaintenancesPage /></MemoryRouter>)
-    const link = await screen.findByRole('link', { name: /New Record/i })
+    const link = await screen.findByRole('link', { name: /New Trailer Maintenance/i })
     expect(link.getAttribute('href')).toBe('/fleet/trailer-maintenance/create')
+  })
+
+  it('uses show-all date search by default', async () => {
+    render(<MemoryRouter><TrailerMaintenancesPage /></MemoryRouter>)
+    await screen.findByText('2024-06-01')
+    expect(trailerMaintenanceService.list).toHaveBeenCalledWith({ date_search: '3' })
+  })
+
+  it('applies date range only in Maintenance Date mode', async () => {
+    render(<MemoryRouter><TrailerMaintenancesPage /></MemoryRouter>)
+    await screen.findByText('2024-06-01')
+    fireEvent.change(screen.getByDisplayValue('Show All (Ignore Dates)'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: /Search/i }))
+    await waitFor(() => expect(trailerMaintenanceService.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ date_search: '2', date_from: expect.any(String), date_to: expect.any(String) })
+    ))
+  })
+
+  it('bulk deletes selected rows after confirmation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    trailerMaintenanceService.bulkDelete.mockResolvedValue({})
+    render(<MemoryRouter><TrailerMaintenancesPage /></MemoryRouter>)
+    await screen.findByText('2024-06-01')
+    fireEvent.click(screen.getAllByTitle('Select')[0])
+    fireEvent.click(screen.getByRole('button', { name: /Delete All/i }))
+    await waitFor(() => expect(trailerMaintenanceService.bulkDelete).toHaveBeenCalledWith([1]))
   })
 })

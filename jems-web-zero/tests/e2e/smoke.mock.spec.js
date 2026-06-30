@@ -717,9 +717,14 @@ const TRUCK_MAINTENANCE_DETAIL = {
 const TRAILER_MAINTENANCES = [
   {
     id: 1, trailer: 1, trailer_number: 'TRL-100', trailer_vin: 'VIN001',
-    date: '2024-06-01', miles: 80000, miles_alert: 0,
+    date: '2024-06-01', miles: 80000, miles_alert: 1,
     time_alert: 1, time_year: 1, time_month: 0,
     detail: 'Annual inspection', created_at: '2024-06-01T00:00:00Z',
+    is_last_maintenance: true,
+    miles_since_maintenance: 200,
+    miles_alert_message: 'Active alert for 80000 miles (Miles traveled 200 miles)',
+    time_alert_message: 'Active alert for 1 year (at 2025-06-01)',
+    time_alert_date: '2025-06-01',
   },
 ]
 
@@ -895,7 +900,13 @@ async function mockApi(page) {
     if (pathname.endsWith('/fleet/trailer-maintenance/bulk-delete/') && method === 'POST') return route.fulfill({ status: 204 })
     if (pathname.endsWith('/fleet/trailer-maintenance/') && method === 'GET') return json(TRAILER_MAINTENANCES)
     if (pathname.endsWith('/fleet/trailer-maintenance/') && method === 'POST') return json(TRAILER_MAINTENANCE_DETAIL)
-    if (/\/fleet\/trailer-maintenance\/\d+\/alert-info\/$/.test(pathname)) return json({ miles_since_maintenance: 200, is_last_maintenance: true })
+    if (/\/fleet\/trailer-maintenance\/\d+\/alert-info\/$/.test(pathname)) return json({
+      miles_since_maintenance: 200,
+      is_last_maintenance: true,
+      miles_alert_message: 'Active alert for 80000 miles (Miles traveled 200 miles)',
+      time_alert_message: 'Active alert for 1 year (at 2025-06-01)',
+      time_alert_date: '2025-06-01',
+    })
     if (/\/fleet\/trailer-maintenance\/\d+\/$/.test(pathname) && method === 'GET') return json(TRAILER_MAINTENANCE_DETAIL)
     if (/\/fleet\/trailer-maintenance\/\d+\/$/.test(pathname) && method === 'PATCH') return json(TRAILER_MAINTENANCE_DETAIL)
     if (/\/fleet\/trailer-maintenance\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
@@ -2982,21 +2993,24 @@ test('Trailer Maintenance list: renders a record row', async ({ page }) => {
 test('Trailer Maintenance list: shows New Record link', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/trailer-maintenance')
-  await expect(page.getByRole('link', { name: /New Record/i })).toBeVisible()
+  await expect(page.getByRole('link', { name: /New Trailer Maintenance/i })).toBeVisible()
 })
 
-test('Trailer Maintenance list: time alert badge shown', async ({ page }) => {
+test('Trailer Maintenance list: legacy alert messages shown', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/trailer-maintenance')
-  await expect(page.getByText(/1 yr/)).toBeVisible()
+  await expect(page.getByText(/Active alert for 80000 miles/)).toBeVisible()
+  await expect(page.getByText(/Active alert for 1 year/)).toBeVisible()
 })
 
-test('Trailer Maintenance create form: has Create heading and form sections', async ({ page }) => {
+test('Trailer Maintenance create form: has legacy fields', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/trailer-maintenance/create')
   await expect(page.getByRole('heading', { name: /Create Trailer Maintenance/ })).toBeVisible()
-  await expect(page.locator('.card-header', { hasText: 'Main Info' })).toBeVisible()
-  await expect(page.locator('.card-header', { hasText: 'Miles Alert' })).toBeVisible()
+  await expect(page.getByLabel('Date')).toBeVisible()
+  await expect(page.getByLabel('Trailer')).toBeVisible()
+  await expect(page.getByLabel('Miles Alert')).toBeVisible()
+  await expect(page.getByLabel('Time Alert')).toBeVisible()
 })
 
 // ── Trucks Miles Reset ────────────────────────────────────────────────────────
