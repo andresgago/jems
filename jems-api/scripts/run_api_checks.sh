@@ -2525,6 +2525,22 @@ assert_status "tax report" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "tax has drivers" "$(body "$resp")" '"drivers"'
 assert_contains "tax has owners" "$(body "$resp")" '"owners"'
 assert_contains "tax has dispatchers" "$(body "$resp")" '"dispatchers"'
+assert_contains "tax has date_begin" "$(body "$resp")" '"date_begin"'
+assert_contains "tax has option" "$(body "$resp")" '"option"'
+
+step "Reports: tax with option=1 includes total_revenue"
+resp="$(get "/api/v1/reports/tax/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}&option=1")"
+assert_status "tax option=1 report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "tax option=1 drivers has total_revenue" "$(body "$resp")" '"total_revenue"'
+
+step "Reports: tax invalid carrier param ignored (no crash)"
+resp="$(get "/api/v1/reports/tax/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}&carrier=notanumber")"
+assert_status "tax invalid carrier" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "tax invalid carrier still has drivers" "$(body "$resp")" '"drivers"'
+
+step "Reports: tax with missing dates returns 400"
+resp="$(get "/api/v1/reports/tax/")"
+assert_status "tax missing dates" "400" "$(code "$resp")" "$(body "$resp")"
 
 step "Reports: category-tracking returns keys"
 resp="$(get "/api/v1/reports/category-tracking/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}")"

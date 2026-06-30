@@ -775,17 +775,26 @@ def _driver_notax_amount(driver: Driver, date_begin: str, date_end: str) -> floa
     )
 
 
-def get_tax_report(date_begin: str, date_end: str, option: int = 0) -> dict[str, Any]:
-    # Drivers (type 4 and 5)
+def get_tax_report(
+    date_begin: str,
+    date_end: str,
+    option: int = 0,
+    carrier_id: int | None = None,
+) -> dict[str, Any]:
+    # Drivers (type 4 — Solo and type 5 — Team)
+    driver_qs = Driver.objects.filter(
+        driver_type_id__in=[_DRIVER_TYPE_SOLO, _DRIVER_TYPE_TEAM]
+    )
+    if carrier_id is not None:
+        driver_qs = driver_qs.filter(carrier_id=carrier_id)
+
     driver_rows: list[dict] = []
     driver_total_tax = 0.0
     driver_total_revenue = 0.0
-    for driver in Driver.objects.filter(
-        driver_type_id__in=[_DRIVER_TYPE_SOLO, _DRIVER_TYPE_TEAM]
-    ).order_by("last_name", "first_name"):
-        tax = _driver_tax_amount(driver, date_begin, date_end, "80050")
+    for driver in driver_qs.order_by("last_name", "first_name"):
+        raw_payroll = _driver_tax_amount(driver, date_begin, date_end, "80050")
         notax = _driver_notax_amount(driver, date_begin, date_end)
-        combined = tax + notax
+        combined = raw_payroll + notax
         if combined == 0.0 and driver.status != 1:
             continue
         entry: dict[str, Any] = {
@@ -798,22 +807,25 @@ def get_tax_report(date_begin: str, date_end: str, option: int = 0) -> dict[str,
             "tax": combined,
         }
         if option == 1:
-            rev = _driver_tax_amount(driver, date_begin, date_end, "90010")
+            # Revenue = absolute value of what was paid to driver via payroll account
+            rev = -raw_payroll
             entry["revenue"] = rev
             driver_total_revenue += rev
         driver_total_tax += combined
         driver_rows.append(entry)
 
     # Owner Operators (type 3)
+    owner_qs = Driver.objects.filter(driver_type_id=_DRIVER_TYPE_OWNER_OP)
+    if carrier_id is not None:
+        owner_qs = owner_qs.filter(carrier_id=carrier_id)
+
     owner_rows: list[dict] = []
     owner_total_tax = 0.0
     owner_total_revenue = 0.0
-    for driver in Driver.objects.filter(driver_type_id=_DRIVER_TYPE_OWNER_OP).order_by(
-        "last_name", "first_name"
-    ):
-        tax = _driver_tax_amount(driver, date_begin, date_end, "80085")
+    for driver in owner_qs.order_by("last_name", "first_name"):
+        raw_payroll = _driver_tax_amount(driver, date_begin, date_end, "80085")
         notax = _driver_notax_amount(driver, date_begin, date_end)
-        combined = tax + notax
+        combined = raw_payroll + notax
         if combined == 0.0 and driver.status != 1:
             continue
         entry = {
@@ -826,13 +838,14 @@ def get_tax_report(date_begin: str, date_end: str, option: int = 0) -> dict[str,
             "tax": combined,
         }
         if option == 1:
-            rev = _driver_tax_amount(driver, date_begin, date_end, "90010")
+            # Revenue = absolute value of what was paid via owner operator payment account
+            rev = -raw_payroll
             entry["revenue"] = rev
             owner_total_revenue += rev
         owner_total_tax += combined
         owner_rows.append(entry)
 
-    # Dispatchers
+    # Dispatchers (carrier filter does not apply — dispatchers are users, not drivers)
     dispatcher_rows: list[dict] = []
     dispatcher_total_tax = 0.0
     dispatcher_total_revenue = 0.0
@@ -845,9 +858,9 @@ def get_tax_report(date_begin: str, date_end: str, option: int = 0) -> dict[str,
         "last_name", "first_name"
     ):
         if disp_account is None:
-            tax = 0.0
+            raw_payroll = 0.0
         else:
-            tax = float(
+            raw_payroll = float(
                 Record.objects.filter(
                     dispatcher=user,
                     account=disp_account,
@@ -856,7 +869,7 @@ def get_tax_report(date_begin: str, date_end: str, option: int = 0) -> dict[str,
                 ).aggregate(total=Sum("amount"))["total"]
                 or 0.0
             )
-        if tax == 0.0 and not user.is_active:
+        if raw_payroll == 0.0 and not user.is_active:
             continue
         entry = {
             "id": user.pk,
@@ -865,21 +878,14 @@ def get_tax_report(date_begin: str, date_end: str, option: int = 0) -> dict[str,
             "address": user.address,
             "ssn": user.social_security_number,
             "is_active": user.is_active,
-            "tax": tax,
+            "tax": raw_payroll,
         }
         if option == 1:
-            rev = float(
-                Record.objects.filter(
-                    dispatcher=user,
-                    account__code="90010",
-                    progress=0,
-                    date__range=[date_begin, date_end],
-                ).aggregate(total=Sum("amount"))["total"]
-                or 0.0
-            )
+            # Revenue = absolute value of what was paid via dispatcher payroll account
+            rev = -raw_payroll
             entry["revenue"] = rev
             dispatcher_total_revenue += rev
-        dispatcher_total_tax += tax
+        dispatcher_total_tax += raw_payroll
         dispatcher_rows.append(entry)
 
     result: dict[str, Any] = {

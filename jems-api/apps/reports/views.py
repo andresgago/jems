@@ -129,7 +129,11 @@ class TaxReportView(APIView):
             option = int(request.query_params.get("option", 0))
         except ValueError:
             option = 0
-        data = get_tax_report(date_begin, date_end, option=option)
+        carrier_raw = request.query_params.get("carrier", "")
+        carrier_id = int(carrier_raw) if carrier_raw.isdigit() else None
+        data = get_tax_report(
+            date_begin, date_end, option=option, carrier_id=carrier_id
+        )
         return Response(data)
 
 

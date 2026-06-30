@@ -644,6 +644,224 @@ class TestTaxReport:
         assert disp_row is not None
         assert disp_row["tax"] == pytest.approx(-300.0)
 
+    def test_carrier_filter_limits_driver_rows(self, api_client, db):
+        from apps.carriers.tests.factories import CarrierFactory
+
+        _make_account("80050", "Driver Pay")
+        solo_type, _ = DriverType.objects.get_or_create(
+            pk=4, defaults={"name": "Solo Driver", "is_active": True}
+        )
+        carrier_a = CarrierFactory()
+        carrier_b = CarrierFactory()
+        driver_a = DriverFactory(driver_type=solo_type, carrier=carrier_a, status=1)
+        driver_b = DriverFactory(driver_type=solo_type, carrier=carrier_b, status=1)
+        acct = Account.objects.get(code="80050")
+        RecordFactory(
+            account=acct,
+            amount=-500.0,
+            date=datetime.date(2024, 3, 1),
+            driver=driver_a,
+            progress=0,
+        )
+        RecordFactory(
+            account=acct,
+            amount=-800.0,
+            date=datetime.date(2024, 3, 1),
+            driver=driver_b,
+            progress=0,
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "carrier": str(carrier_a.pk),
+            },
+        )
+        data = resp.json()
+        ids = [r["id"] for r in data["drivers"]["rows"]]
+        assert driver_a.pk in ids
+        assert driver_b.pk not in ids
+
+    def test_carrier_filter_limits_owner_operator_rows(self, api_client, db):
+        from apps.carriers.tests.factories import CarrierFactory
+
+        _make_account("80085", "Owner Op Pay")
+        owner_type, _ = DriverType.objects.get_or_create(
+            pk=3, defaults={"name": "Owner Operator", "is_active": True}
+        )
+        carrier_a = CarrierFactory()
+        carrier_b = CarrierFactory()
+        owner_a = DriverFactory(driver_type=owner_type, carrier=carrier_a, status=1)
+        owner_b = DriverFactory(driver_type=owner_type, carrier=carrier_b, status=1)
+        acct = Account.objects.get(code="80085")
+        RecordFactory(
+            account=acct,
+            amount=-400.0,
+            date=datetime.date(2024, 4, 1),
+            driver=owner_a,
+            progress=0,
+        )
+        RecordFactory(
+            account=acct,
+            amount=-600.0,
+            date=datetime.date(2024, 4, 1),
+            driver=owner_b,
+            progress=0,
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "carrier": str(carrier_a.pk),
+            },
+        )
+        data = resp.json()
+        ids = [r["id"] for r in data["owners"]["rows"]]
+        assert owner_a.pk in ids
+        assert owner_b.pk not in ids
+
+    def test_option1_driver_revenue_uses_payroll_account_negated(self, api_client, db):
+        """Revenue shown for option=1 is -payroll (absolute value paid to driver),
+        not account 90010. Matches legacy PHP: $temp * -1 where $temp is 80050 sum."""
+        _make_account("80050", "Driver Pay")
+        _make_account("90010", "Rate")
+        solo_type, _ = DriverType.objects.get_or_create(
+            pk=4, defaults={"name": "Solo Driver", "is_active": True}
+        )
+        driver = DriverFactory(driver_type=solo_type, status=1)
+        payroll_acct = Account.objects.get(code="80050")
+        rate_acct = Account.objects.get(code="90010")
+        RecordFactory(
+            account=payroll_acct,
+            amount=-1000.0,
+            date=datetime.date(2024, 6, 1),
+            driver=driver,
+            progress=0,
+        )
+        # 90010 has a different amount — should NOT be used for revenue
+        RecordFactory(
+            account=rate_acct,
+            amount=3000.0,
+            date=datetime.date(2024, 6, 1),
+            driver=driver,
+            progress=0,
+        )
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "option": "1"},
+        )
+        data = resp.json()
+        row = next((r for r in data["drivers"]["rows"] if r["id"] == driver.pk), None)
+        assert row is not None
+        # Revenue must be -(−1000) = 1000, not 3000
+        assert row["revenue"] == pytest.approx(1000.0)
+        assert data["drivers"]["total_revenue"] == pytest.approx(1000.0)
+
+    def test_option1_owner_revenue_uses_payroll_account_negated(self, api_client, db):
+        """Revenue for owner operators uses account 80085 negated, not 90010."""
+        _make_account("80085", "Owner Op Pay")
+        _make_account("90010", "Rate")
+        owner_type, _ = DriverType.objects.get_or_create(
+            pk=3, defaults={"name": "Owner Operator", "is_active": True}
+        )
+        owner = DriverFactory(driver_type=owner_type, status=1)
+        oo_acct = Account.objects.get(code="80085")
+        RecordFactory(
+            account=oo_acct,
+            amount=-2500.0,
+            date=datetime.date(2024, 6, 1),
+            driver=owner,
+            progress=0,
+        )
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "option": "1"},
+        )
+        data = resp.json()
+        row = next((r for r in data["owners"]["rows"] if r["id"] == owner.pk), None)
+        assert row is not None
+        assert row["revenue"] == pytest.approx(2500.0)
+
+    def test_option1_dispatcher_revenue_uses_payroll_account_negated(
+        self, api_client, db
+    ):
+        """Revenue for dispatchers uses account 80052 negated, not 90010."""
+        _make_account("80052", "Dispatcher Pay")
+        _make_account("90010", "Rate")
+        dispatcher = DispatcherFactory()
+        disp_acct = Account.objects.get(code="80052")
+        rate_acct = Account.objects.get(code="90010")
+        RecordFactory(
+            account=disp_acct,
+            amount=-600.0,
+            date=datetime.date(2024, 5, 1),
+            dispatcher=dispatcher,
+            progress=0,
+        )
+        RecordFactory(
+            account=rate_acct,
+            amount=5000.0,
+            date=datetime.date(2024, 5, 1),
+            dispatcher=dispatcher,
+            progress=0,
+        )
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "option": "1"},
+        )
+        data = resp.json()
+        row = next(
+            (r for r in data["dispatchers"]["rows"] if r["id"] == dispatcher.pk), None
+        )
+        assert row is not None
+        # Revenue must be -(−600) = 600, not 5000
+        assert row["revenue"] == pytest.approx(600.0)
+        assert data["dispatchers"]["total_revenue"] == pytest.approx(600.0)
+
+    def test_invalid_carrier_param_ignored(self, api_client, db):
+        """Non-integer carrier param must be silently ignored (no 400, no crash)."""
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "carrier": "notanumber",
+            },
+        )
+        assert resp.status_code == 200
+
+    def test_active_driver_without_records_still_appears(self, api_client, db):
+        """Active drivers (status=1) always appear even when they have no records."""
+        _make_account("80050", "Driver Pay")
+        solo_type, _ = DriverType.objects.get_or_create(
+            pk=4, defaults={"name": "Solo Driver", "is_active": True}
+        )
+        active_driver = DriverFactory(driver_type=solo_type, status=1)
+        resp = api_client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        data = resp.json()
+        ids = [r["id"] for r in data["drivers"]["rows"]]
+        assert active_driver.pk in ids
+
+    def test_inactive_driver_without_records_excluded(self, api_client, db):
+        """Inactive drivers (status=0) with no records in range are excluded."""
+        from apps.drivers.models import Driver as DrvModel
+
+        _make_account("80050", "Driver Pay")
+        solo_type, _ = DriverType.objects.get_or_create(
+            pk=4, defaults={"name": "Solo Driver", "is_active": True}
+        )
+        inactive = DriverFactory(driver_type=solo_type, status=DrvModel.Status.INACTIVE)
+        resp = api_client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        data = resp.json()
+        ids = [r["id"] for r in data["drivers"]["rows"]]
+        assert inactive.pk not in ids
+
 
 # ---------------------------------------------------------------------------
 # Category Tracking report
