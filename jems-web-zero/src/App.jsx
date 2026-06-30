@@ -66,6 +66,7 @@ import CategoryTrackingReportPrintPage from './pages/reports/CategoryTrackingRep
 import BrokerSummaryReportPage from './pages/reports/BrokerSummaryReportPage';
 import BrokerSummaryReportPrintPage from './pages/reports/BrokerSummaryReportPrintPage';
 import ShipperReceiverReportPage from './pages/reports/ShipperReceiverReportPage';
+import ShipperReceiverReportPrintPage from './pages/reports/ShipperReceiverReportPrintPage';
 
 export function RequireAnyPermission({ permissions, children }) {
   const { haveAnyPermission } = useAuth();
@@ -84,6 +85,7 @@ function AppRoutes() {
       <Route path="/print/tax" element={<ProtectedRoute><TaxReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/category-tracking" element={<ProtectedRoute><CategoryTrackingReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/broker-summary" element={<ProtectedRoute><BrokerSummaryReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/shipper-receiver" element={<ProtectedRoute><ShipperReceiverReportPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={

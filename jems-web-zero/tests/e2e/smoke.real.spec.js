@@ -41,6 +41,7 @@ const CRITICAL_ROUTES = [
   { path: '/reports/balance-sheet', heading: /balance sheet/i },
   { path: '/reports/broker-summary', heading: /broker summary/i },
   { path: '/reports/invoice', heading: /profit and loss by invoices/i },
+  { path: '/reports/shipper-receiver', heading: /deliveries from shipper to receiver/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -324,6 +325,32 @@ test('broker summary report endpoint returns legacy annual shape (real)', async 
   expect(total.total).toHaveProperty('monthly')
   expect(total.total).toHaveProperty('monthly_loads')
   expect(total).toHaveProperty('total_deliveries')
+})
+
+test('shipper-receiver report endpoint returns legacy annual and monthly shapes (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const annual = await apiGet(page, token, '/reports/shipper-receiver/?year=2024')
+  expect(annual).toHaveProperty('pairs')
+  expect(annual).toHaveProperty('total_deliveries')
+  expect(Array.isArray(annual.pairs)).toBeTruthy()
+  if (annual.pairs.length > 0) {
+    expect(annual.pairs[0]).toHaveProperty('shipper')
+    expect(annual.pairs[0]).toHaveProperty('receiver')
+    expect(annual.pairs[0]).toHaveProperty('total')
+    expect(annual.pairs[0]).toHaveProperty('monthly')
+  }
+
+  const monthly = await apiGet(page, token, '/reports/shipper-receiver/?year=2024&option=1')
+  expect(monthly).toHaveProperty('pairs')
+  expect(monthly).toHaveProperty('total_deliveries')
+  expect(Array.isArray(monthly.pairs)).toBeTruthy()
+  if (monthly.pairs.length > 0) {
+    expect(Array.isArray(monthly.pairs[0].monthly)).toBeTruthy()
+    expect(monthly.pairs[0].monthly).toHaveLength(12)
+  }
 })
 
 // ── Trailer types ─────────────────────────────────────────────────────────────

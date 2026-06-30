@@ -636,7 +636,32 @@ const REPORT_BROKER_SUMMARY = {
 const REPORT_SHIPPER_RECEIVER = {
   year: 2024,
   option: 0,
-  pairs: [{ shipper: 'Shipper A', receiver: 'Receiver B', total: 12 }],
+  pairs: [{ shipper: 'Shipper A', receiver: 'Receiver B', total: 12, monthly: null }],
+  total_deliveries: 12,
+}
+
+const REPORT_SHIPPER_RECEIVER_MONTHLY = {
+  year: 2024,
+  option: 1,
+  pairs: [{
+    shipper: 'Shipper A',
+    receiver: 'Receiver B',
+    total: 12,
+    monthly: [
+      { month: 1, count: 4 },
+      { month: 2, count: 8 },
+      { month: 3, count: 0 },
+      { month: 4, count: 0 },
+      { month: 5, count: 0 },
+      { month: 6, count: 0 },
+      { month: 7, count: 0 },
+      { month: 8, count: 0 },
+      { month: 9, count: 0 },
+      { month: 10, count: 0 },
+      { month: 11, count: 0 },
+      { month: 12, count: 0 },
+    ],
+  }],
   total_deliveries: 12,
 }
 
@@ -791,7 +816,9 @@ async function mockApi(page) {
     if (pathname.endsWith('/accounting/categories/search/') && method === 'GET') return json([{ id: 5, label: 'Oil Filter - OF001 (Unit)', name: 'Oil Filter', code: 'OF001' }])
     if (pathname.endsWith('/reports/category-tracking/') && method === 'GET') return json(REPORT_CATEGORY)
     if (pathname.endsWith('/reports/broker-summary/') && method === 'GET') return json(REPORT_BROKER_SUMMARY)
-    if (pathname.endsWith('/reports/shipper-receiver/') && method === 'GET') return json(REPORT_SHIPPER_RECEIVER)
+    if (pathname.endsWith('/reports/shipper-receiver/') && method === 'GET') {
+      return json(url.searchParams.get('option') === '1' ? REPORT_SHIPPER_RECEIVER_MONTHLY : REPORT_SHIPPER_RECEIVER)
+    }
 
     throw new Error(`Unmocked API call: ${method} ${pathname}${url.search}`)
   })
@@ -2748,11 +2775,36 @@ test('Broker Summary page: opens printable annual report', async ({ page }) => {
   await expect(page.getByText(/Total Deliveries/)).toBeVisible()
 })
 
-test('Shipper-Receiver page: shows pair rows after run', async ({ page }) => {
+test('Shipper-Receiver page: opens printable annual report', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/reports/shipper-receiver')
   await expect(page.getByRole('heading', { name: 'Deliveries from Shipper to Receiver' })).toBeVisible()
-  await page.getByRole('button', { name: /run report/i }).click()
-  await expect(page.getByText('Shipper A')).toBeVisible()
-  await expect(page.getByText('Receiver B')).toBeVisible()
+  await expect(page.locator('#shipper-receiver-option option', { hasText: 'Deliveries from Shipper to Receiver (Annual Top 30)' })).toHaveCount(1)
+  await page.evaluate(() => {
+    window.__lastReportUrl = null
+    window.open = (url) => {
+      window.__lastReportUrl = url
+      return null
+    }
+  })
+  await page.getByRole('button', { name: /show report/i }).click()
+  const reportUrl = await page.evaluate(() => window.__lastReportUrl)
+  expect(reportUrl).toContain('/print/shipper-receiver?')
+  expect(reportUrl).toContain('year=')
+  expect(reportUrl).toContain('option=0')
+  await page.goto(reportUrl)
+  await expect(page.getByRole('heading', { name: 'Deliveries from Shipper to Receiver' })).toBeVisible()
+  await expect(page.getByText('Annual Total (Top 30)')).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Shipper A' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Receiver B' })).toBeVisible()
+  await expect(page.getByText(/Total Deliveries/)).toBeVisible()
+})
+
+test('Shipper-Receiver print page: renders monthly top 10 report', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/shipper-receiver?year=2024&option=1')
+  await expect(page.getByRole('heading', { name: 'Deliveries from Shipper to Receiver' })).toBeVisible()
+  await expect(page.getByText('By Months (Top 10)')).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Shipper A to Receiver B' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Ene' })).toBeVisible()
 })
