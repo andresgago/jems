@@ -541,11 +541,42 @@ const REPORT_TAX = {
   date_end: '2024-12-31',
   option: 0,
   drivers: {
-    rows: [{ id: 1, name: 'John Doe', email: 'john@test.com', address: '1 Main', ssn: '***-1234', status: 1, tax: 1200 }],
-    total_tax: 1200,
+    rows: [
+      { id: 1, name: 'John Doe', email: 'john@test.com', address: '1 Main St', ssn: '***-1234', status: 1, tax: -1200 },
+      { id: 2, name: 'Jane Inactive', email: '', address: '', ssn: '', status: 0, tax: -500 },
+    ],
+    total_tax: -1700,
   },
-  owners: { rows: [], total_tax: 0 },
-  dispatchers: { rows: [], total_tax: 0 },
+  owners: {
+    rows: [{ id: 3, name: 'Owner Op', email: 'owner@test.com', address: '2 Side Ave', ssn: '***-5678', status: 1, tax: -800 }],
+    total_tax: -800,
+  },
+  dispatchers: {
+    rows: [{ id: 4, name: 'Dispatch Dan', email: 'dan@test.com', address: '3 Back Ln', ssn: '***-9999', is_active: true, tax: -300 }],
+    total_tax: -300,
+  },
+}
+
+const REPORT_TAX_WITH_REVENUE = {
+  ...REPORT_TAX,
+  option: 1,
+  drivers: {
+    rows: [
+      { id: 1, name: 'John Doe', email: 'john@test.com', address: '1 Main St', ssn: '***-1234', status: 1, tax: -1200, revenue: 1200 },
+    ],
+    total_tax: -1200,
+    total_revenue: 1200,
+  },
+  owners: {
+    rows: [{ id: 3, name: 'Owner Op', email: 'owner@test.com', address: '2 Side Ave', ssn: '***-5678', status: 1, tax: -800, revenue: 800 }],
+    total_tax: -800,
+    total_revenue: 800,
+  },
+  dispatchers: {
+    rows: [{ id: 4, name: 'Dispatch Dan', email: 'dan@test.com', address: '3 Back Ln', ssn: '***-9999', is_active: true, tax: -300, revenue: 300 }],
+    total_tax: -300,
+    total_revenue: 300,
+  },
 }
 
 const REPORT_CATEGORY = {
@@ -712,7 +743,10 @@ async function mockApi(page) {
     if (pathname.endsWith('/reports/invoice/') && method === 'GET') return json(REPORT_INVOICE)
     if (pathname.endsWith('/reports/balance-sheet/') && method === 'GET') return json(REPORT_BALANCE_SHEET)
     if (pathname.endsWith('/reports/ifta/') && method === 'GET') return json(REPORT_IFTA)
-    if (pathname.endsWith('/reports/tax/') && method === 'GET') return json(REPORT_TAX)
+    if (pathname.endsWith('/reports/tax/') && method === 'GET') {
+      const opt = url.searchParams.get('option')
+      return json(opt === '1' ? REPORT_TAX_WITH_REVENUE : REPORT_TAX)
+    }
     if (pathname.endsWith('/reports/category-tracking/') && method === 'GET') return json(REPORT_CATEGORY)
     if (pathname.endsWith('/reports/broker-summary/') && method === 'GET') return json(REPORT_BROKER_SUMMARY)
     if (pathname.endsWith('/reports/shipper-receiver/') && method === 'GET') return json(REPORT_SHIPPER_RECEIVER)
@@ -2522,13 +2556,75 @@ test('IFTA Report print page: renders State/Fuel Card table with data', async ({
   await expect(page.getByText('TOTAL OF GALLONS')).toBeVisible()
 })
 
-test('Tax Report page: shows driver rows after run', async ({ page }) => {
+test('Tax Report page: renders filter page with Show Report button', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/reports/tax')
   await expect(page.getByRole('heading', { name: 'Tax Report' })).toBeVisible()
-  await page.getByRole('button', { name: /run report/i }).click()
+  await expect(page.getByRole('button', { name: /show report/i })).toBeVisible()
+  // Carrier select must be present
+  await expect(page.getByRole('combobox', { name: /carrier/i })).toBeVisible()
+})
+
+test('Tax Report page: option select has "Only Tax" and "Tax and Revenues"', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/tax')
+  // Verify select has the correct options via locator targeting option elements
+  await expect(page.locator('select#tax-option option', { hasText: 'Only Tax' })).toHaveCount(1)
+  await expect(page.locator('select#tax-option option', { hasText: 'Tax and Revenues' })).toHaveCount(1)
+})
+
+test('Tax Report print page: renders title and all sections with data', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/tax?date_begin=2024-01-01&date_end=2024-12-31&option=0')
+  await expect(page.getByRole('heading', { name: 'Tax Report' })).toBeVisible()
+  await expect(page.getByText('Drivers, Owner Operators and Dispatchers')).toBeVisible()
+  await expect(page.getByText(/Date Range:/)).toBeVisible()
+  // Section headers (exact match on th to avoid matching compound text)
+  await expect(page.getByRole('columnheader', { name: 'Owner Operators', exact: true })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Dispatchers', exact: true })).toBeVisible()
+  // Driver data
   await expect(page.getByText('John Doe')).toBeVisible()
-  await expect(page.getByText('Drivers (Solo & Team)')).toBeVisible()
+  // Owner Operator data (use exact cell match)
+  await expect(page.getByRole('cell', { name: 'Owner Op', exact: true })).toBeVisible()
+  // Dispatcher data
+  await expect(page.getByText('Dispatch Dan')).toBeVisible()
+  // Grand Total table
+  await expect(page.getByText(/^Total$/).first()).toBeVisible()
+})
+
+test('Tax Report print page: No. column appears in driver section', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/tax?date_begin=2024-01-01&date_end=2024-12-31&option=0')
+  await expect(page.getByText('John Doe')).toBeVisible()
+  const noHeaders = page.getByRole('columnheader', { name: 'No.' })
+  await expect(noHeaders.first()).toBeVisible()
+})
+
+test('Tax Report print page: inactive indicator shown for status=0 driver', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/tax?date_begin=2024-01-01&date_end=2024-12-31&option=0')
+  await expect(page.getByText('Jane Inactive')).toBeVisible()
+  await expect(page.getByText('✕')).toBeVisible()
+})
+
+test('Tax Report print page: Revenues column visible for option=1', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/tax?date_begin=2024-01-01&date_end=2024-12-31&option=1')
+  await expect(page.getByText('John Doe')).toBeVisible()
+  const revenueHeaders = page.getByRole('columnheader', { name: 'Revenues' })
+  await expect(revenueHeaders.first()).toBeVisible()
+})
+
+test('Tax Report print page: Generated on date is visible', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/tax?date_begin=2024-01-01&date_end=2024-12-31&option=0')
+  await expect(page.getByText(/Generated on:/)).toBeVisible()
+})
+
+test('Tax Report print page: copyright footer is visible', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/tax?date_begin=2024-01-01&date_end=2024-12-31&option=0')
+  await expect(page.getByText(/Copyright © 2019/)).toBeVisible()
 })
 
 test('Category Tracking page: shows record rows after run', async ({ page }) => {

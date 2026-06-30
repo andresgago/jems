@@ -3,27 +3,20 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import TaxReportPage from '../TaxReportPage';
 
-vi.mock('../../../services/reports', () => ({
-  reportsService: {
-    tax: vi.fn(),
+vi.mock('../../../services/api', () => ({
+  default: {
+    get: vi.fn(),
   },
 }));
 
 vi.mock('flatpickr', () => ({ default: () => ({ destroy: vi.fn(), setDate: vi.fn() }) }));
 
-import { reportsService } from '../../../services/reports';
+import api from '../../../services/api';
 
-const REPORT_DATA = {
-  date_begin: '2024-01-01',
-  date_end: '2024-12-31',
-  option: 0,
-  drivers: {
-    rows: [{ id: 1, name: 'John Smith', email: 'john@test.com', address: '123 Main', ssn: '***-**-1234', status: 1, tax: 500 }],
-    total_tax: 500,
-  },
-  owners: { rows: [], total_tax: 0 },
-  dispatchers: { rows: [], total_tax: 0 },
-};
+const CARRIER_OPTIONS = [
+  { id: 1, label: 'JOBEE EXPRESS LLC (041672)' },
+  { id: 2, label: 'BEST WHEELS TRANSPORT LLC (1447438)' },
+];
 
 function renderPage() {
   return render(
@@ -34,48 +27,106 @@ function renderPage() {
 }
 
 describe('TaxReportPage', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
-
-  it('renders title and run button', () => {
-    renderPage();
-    expect(screen.getByText('Tax Report')).toBeDefined();
-    expect(screen.getByRole('button', { name: /run report/i })).toBeDefined();
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.get.mockResolvedValue({ data: CARRIER_OPTIONS });
   });
 
-  it('renders option select', () => {
+  it('renders Tax Report title', async () => {
     renderPage();
-    expect(screen.getByText('Standard')).toBeDefined();
-    expect(screen.getByText('With Revenue')).toBeDefined();
-  });
-
-  it('renders driver rows after run', async () => {
-    reportsService.tax.mockResolvedValue({ data: REPORT_DATA });
-    renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
     await waitFor(() => {
-      expect(screen.getByText('John Smith')).toBeDefined();
-      expect(screen.getByText('Drivers (Solo & Team)')).toBeDefined();
+      expect(screen.getByText('Tax Report')).toBeDefined();
     });
   });
 
-  it('passes option param to service', async () => {
-    reportsService.tax.mockResolvedValue({ data: REPORT_DATA });
+  it('renders "Only Tax" and "Tax and Revenues" option labels', async () => {
     renderPage();
-    const select = screen.getByRole('combobox');
+    await waitFor(() => {
+      expect(screen.getByText('Only Tax')).toBeDefined();
+      expect(screen.getByText('Tax and Revenues')).toBeDefined();
+    });
+  });
+
+  it('renders "Show Report" button instead of "Run Report"', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /show report/i })).toBeDefined();
+    });
+    expect(screen.queryByRole('button', { name: /run report/i })).toBeNull();
+  });
+
+  it('renders Carrier select label and "Select a carrier" placeholder', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Carrier')).toBeDefined();
+      expect(screen.getByText('Select a carrier')).toBeDefined();
+    });
+  });
+
+  it('loads carrier options from api on mount', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith('/carriers/options/');
+      expect(screen.getByText('JOBEE EXPRESS LLC (041672)')).toBeDefined();
+      expect(screen.getByText('BEST WHEELS TRANSPORT LLC (1447438)')).toBeDefined();
+    });
+  });
+
+  it('opens print window on Show Report click', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderPage();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/carriers/options/'));
+    fireEvent.click(screen.getByRole('button', { name: /show report/i }));
+    expect(openSpy).toHaveBeenCalledOnce();
+    const [url] = openSpy.mock.calls[0];
+    expect(url).toContain('/print/tax');
+    expect(url).toContain('date_begin=');
+    expect(url).toContain('date_end=');
+    openSpy.mockRestore();
+  });
+
+  it('includes option=1 in print url when Tax and Revenues selected', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderPage();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/carriers/options/'));
+    const select = screen.getByRole('combobox', { name: /select option/i });
     fireEvent.change(select, { target: { value: '1' } });
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
-    await waitFor(() => {
-      const call = reportsService.tax.mock.calls[0][0];
-      expect(call.option).toBe(1);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /show report/i }));
+    const [url] = openSpy.mock.calls[0];
+    expect(url).toContain('option=1');
+    openSpy.mockRestore();
   });
 
-  it('shows error on failure', async () => {
-    reportsService.tax.mockRejectedValue(new Error('err'));
+  it('includes carrier in print url when carrier selected', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /run report/i }));
     await waitFor(() => {
-      expect(screen.getByText(/failed to load/i)).toBeDefined();
+      expect(screen.getByText('JOBEE EXPRESS LLC (041672)')).toBeDefined();
     });
+    const carrierSelect = screen.getByRole('combobox', { name: /carrier/i });
+    fireEvent.change(carrierSelect, { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: /show report/i }));
+    const [url] = openSpy.mock.calls[0];
+    expect(url).toContain('carrier=1');
+    openSpy.mockRestore();
+  });
+
+  it('omits carrier param in print url when no carrier selected', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderPage();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/carriers/options/'));
+    fireEvent.click(screen.getByRole('button', { name: /show report/i }));
+    const [url] = openSpy.mock.calls[0];
+    expect(url).not.toContain('carrier=');
+    openSpy.mockRestore();
+  });
+
+  it('handles carrier options fetch failure gracefully', async () => {
+    api.get.mockRejectedValue(new Error('network'));
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Tax Report')).toBeDefined();
+    });
+    expect(screen.getByText('Select a carrier')).toBeDefined();
   });
 });

@@ -60,6 +60,7 @@ import BalanceSheetReportPrintPage from './pages/reports/BalanceSheetReportPrint
 import IftaReportPage from './pages/reports/IftaReportPage';
 import IftaReportPrintPage from './pages/reports/IftaReportPrintPage';
 import TaxReportPage from './pages/reports/TaxReportPage';
+import TaxReportPrintPage from './pages/reports/TaxReportPrintPage';
 import CategoryTrackingReportPage from './pages/reports/CategoryTrackingReportPage';
 import BrokerSummaryReportPage from './pages/reports/BrokerSummaryReportPage';
 import ShipperReceiverReportPage from './pages/reports/ShipperReceiverReportPage';
@@ -78,6 +79,7 @@ function AppRoutes() {
       <Route path="/print/invoice" element={<ProtectedRoute><InvoiceReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/balance-sheet" element={<ProtectedRoute><BalanceSheetReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/ifta" element={<ProtectedRoute><IftaReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/tax" element={<ProtectedRoute><TaxReportPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={
