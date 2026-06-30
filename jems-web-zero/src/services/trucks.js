@@ -8,6 +8,7 @@ export const TRUCK_STATUS = {
 export const trucksService = {
   list:         (params) => api.get('/fleet/trucks/', { params }),
   get:          (id)     => api.get(`/fleet/trucks/${id}/`),
+  options:      ()       => api.get('/fleet/trucks/options/'),
   create:       (data)   => api.post('/fleet/trucks/', data),
   update:       (id, data) => api.put(`/fleet/trucks/${id}/`, data),
   destroy:      (id)     => api.delete(`/fleet/trucks/${id}/`),

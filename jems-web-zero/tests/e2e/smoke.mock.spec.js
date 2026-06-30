@@ -728,7 +728,15 @@ const TRAILER_MAINTENANCE_DETAIL = {
 }
 
 const MILES_RESETS = [
-  { id: 1, truck: 1, truck_number: 'T-100', date: '2024-01-01' },
+  {
+    id: 1,
+    truck: 1,
+    truck_number: 'T-100',
+    truck_vin: 'VIN100',
+    truck_status: 1,
+    date: '2024-01-01T00:00:00Z',
+    is_last_reset: true,
+  },
 ]
 
 const ACCIDENTS = [
@@ -893,8 +901,11 @@ async function mockApi(page) {
     if (/\/fleet\/trailer-maintenance\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     if (/\/fleet\/trailers\/\d+\/maintenance\/$/.test(pathname) && method === 'GET') return json(TRAILER_MAINTENANCES)
     if (/\/fleet\/trailers\/\d+\/maintenance\/$/.test(pathname) && method === 'POST') return json(TRAILER_MAINTENANCE_DETAIL)
+    if (pathname.endsWith('/fleet/miles-resets/bulk-delete/') && method === 'POST') return route.fulfill({ status: 204 })
     if (pathname.endsWith('/fleet/miles-resets/') && method === 'GET') return json(MILES_RESETS)
     if (pathname.endsWith('/fleet/miles-resets/') && method === 'POST') return json(MILES_RESETS[0])
+    if (/\/fleet\/miles-resets\/\d+\/$/.test(pathname) && method === 'GET') return json(MILES_RESETS[0])
+    if (/\/fleet\/miles-resets\/\d+\/$/.test(pathname) && method === 'PATCH') return json(MILES_RESETS[0])
     if (/\/fleet\/miles-resets\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     // Accidents
     if (pathname.endsWith('/fleet/accidents/') && method === 'GET') return json(ACCIDENTS)
@@ -2993,17 +3004,16 @@ test('Trailer Maintenance create form: has Create heading and form sections', as
 test('Trucks Miles Reset page: renders reset records', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/truck-miles-reset')
-  // Heading text also appears in nav; use role=heading
-  await expect(page.getByRole('heading', { name: /Trucks Miles Reset/ })).toBeVisible()
-  // Date appears in table row
-  await expect(page.getByRole('cell', { name: '2024-01-01' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Trucks Miles Reset Listing/ })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '2024-01-01 00:00:00' })).toBeVisible()
 })
 
-test('Trucks Miles Reset page: shows inline Create New Reset form', async ({ page }) => {
+test('Trucks Miles Reset page: opens create form from toolbar', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/truck-miles-reset')
-  await expect(page.getByText('Create New Reset')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Reset Miles' })).toBeVisible()
+  await page.getByRole('button', { name: /New Truck Miles Reset/ }).click()
+  await expect(page.getByText('Create New Truck Miles Reset')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Save/ })).toBeVisible()
 })
 
 // ── Accidents ─────────────────────────────────────────────────────────────────

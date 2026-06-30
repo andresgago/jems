@@ -1827,11 +1827,29 @@ test('can create and delete a truck miles reset record via API (real)', async ({
   const token = await getAccessToken(page)
 
   const truck = await apiPost(page, token, '/fleet/trucks/', { number: `E2E-MRTRK-${Date.now()}`, status: 1 })
-  const today = new Date().toISOString().split('T')[0]
+  const created = await apiPost(page, token, '/fleet/miles-resets/', {
+    truck: truck.id,
+    date: '2026-06-30T00:00:00Z',
+  })
 
-  const created = await apiPost(page, token, '/fleet/miles-resets/', { truck: truck.id, date: today })
   expect(created.id).toBeTruthy()
   expect(created.truck).toBe(truck.id)
+  expect(created.truck_number).toBe(truck.number)
+  expect(created.is_last_reset).toBeTruthy()
+
+  const listed = await apiGet(page, token, `/fleet/miles-resets/?truck=${truck.id}&search=1&date_from=2026-06-01&date_to=2026-06-30`)
+  expect(listed.some((reset) => reset.id === created.id)).toBeTruthy()
+
+  const updated = await apiPatch(page, token, `/fleet/miles-resets/${created.id}/`, {
+    date: '2026-06-30T12:30:00Z',
+  })
+  expect(updated.date).toContain('2026-06-30T12:30:00')
+
+  const dupRes = await page.request.post(`${API_BASE}/fleet/miles-resets/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { truck: truck.id, date: '2026-06-30T12:30:00Z' },
+  })
+  expect(dupRes.status()).toBe(400)
 
   await apiDelete(page, token, `/fleet/miles-resets/${created.id}/`)
   await apiDelete(page, token, `/fleet/trucks/${truck.id}/`)
