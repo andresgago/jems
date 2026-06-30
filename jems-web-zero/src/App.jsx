@@ -68,6 +68,14 @@ import BrokerSummaryReportPage from './pages/reports/BrokerSummaryReportPage';
 import BrokerSummaryReportPrintPage from './pages/reports/BrokerSummaryReportPrintPage';
 import ShipperReceiverReportPage from './pages/reports/ShipperReceiverReportPage';
 import ShipperReceiverReportPrintPage from './pages/reports/ShipperReceiverReportPrintPage';
+import TruckMaintenancesPage from './pages/fleet/TruckMaintenancesPage';
+import TruckMaintenanceFormPage from './pages/fleet/TruckMaintenanceFormPage';
+import TrailerMaintenancesPage from './pages/fleet/TrailerMaintenancesPage';
+import TrailerMaintenanceFormPage from './pages/fleet/TrailerMaintenanceFormPage';
+import TruckMilesResetPage from './pages/fleet/TruckMilesResetPage';
+import AccidentsPage from './pages/fleet/AccidentsPage';
+import AccidentDetailPage from './pages/fleet/AccidentDetailPage';
+import AccidentFormPage from './pages/fleet/AccidentFormPage';
 
 export function RequireAnyPermission({ permissions, children }) {
   const { haveAnyPermission } = useAuth();
@@ -117,14 +125,19 @@ function AppRoutes() {
                 <Route path="fleet/trailers/create" element={<TrailerFormPage />} />
                 <Route path="fleet/trailers/:id" element={<TrailerDetailPage />} />
                 <Route path="fleet/trailers/:id/edit" element={<TrailerFormPage />} />
-                <Route path="fleet/truck-maintenance" element={<div><h5>Truck Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="fleet/truck-maintenance/create" element={<div><h5>Create Truck Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="fleet/truck-miles-reset" element={<div><h5>Trucks Miles Reset</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="fleet/categories" element={<div><h5>Categories</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="fleet/trailer-maintenance" element={<div><h5>Trailer Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="fleet/trailer-maintenance/create" element={<div><h5>Create Trailer Maintenance</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="fleet/reports/truck-parts" element={<div><h5>Parts and Pieces Used By Trucks</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="fleet/accidents" element={<div><h5>Accidents</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="fleet/truck-maintenance" element={<TruckMaintenancesPage />} />
+                <Route path="fleet/truck-maintenance/create" element={<TruckMaintenanceFormPage />} />
+                <Route path="fleet/truck-maintenance/:id/edit" element={<TruckMaintenanceFormPage />} />
+                <Route path="fleet/truck-miles-reset" element={<TruckMilesResetPage />} />
+                <Route path="fleet/categories" element={<Navigate to="/accounting/categories" replace />} />
+                <Route path="fleet/trailer-maintenance" element={<TrailerMaintenancesPage />} />
+                <Route path="fleet/trailer-maintenance/create" element={<TrailerMaintenanceFormPage />} />
+                <Route path="fleet/trailer-maintenance/:id/edit" element={<TrailerMaintenanceFormPage />} />
+                <Route path="fleet/reports/truck-parts" element={<div><h5>Parts and Pieces Used By Trucks</h5><p className="text-muted">Coming soon — requires category tracking data.</p></div>} />
+                <Route path="fleet/accidents" element={<AccidentsPage />} />
+                <Route path="fleet/accidents/create" element={<AccidentFormPage />} />
+                <Route path="fleet/accidents/:id" element={<AccidentDetailPage />} />
+                <Route path="fleet/accidents/:id/edit" element={<AccidentFormPage />} />
                 {/* Accounting */}
                 <Route path="accounting/records" element={<RecordsPage />} />
                 <Route path="accounting/records/create" element={<RecordFormPage />} />

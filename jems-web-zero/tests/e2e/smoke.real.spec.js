@@ -26,6 +26,13 @@ const CRITICAL_ROUTES = [
   { path: '/fleet/trucks/create', heading: /new truck/i },
   { path: '/fleet/trailers', heading: /trailers/i },
   { path: '/fleet/trailers/create', heading: /new trailer/i },
+  { path: '/fleet/truck-maintenance', heading: /truck maintenance/i },
+  { path: '/fleet/truck-maintenance/create', heading: /create truck maintenance/i },
+  { path: '/fleet/trailer-maintenance', heading: /trailer maintenance/i },
+  { path: '/fleet/trailer-maintenance/create', heading: /create trailer maintenance/i },
+  { path: '/fleet/truck-miles-reset', heading: /trucks miles reset/i },
+  { path: '/fleet/accidents', heading: /accidents/i },
+  { path: '/fleet/accidents/create', heading: /create accident/i },
   { path: '/brokers', heading: /brokers/i },
   { path: '/brokers/create', heading: /new broker/i },
   { path: '/settings/cities', heading: /cities/i },
@@ -1704,4 +1711,197 @@ test('driver-invoices analysis endpoint returns 400 when date params are missing
     headers: { Authorization: `Bearer ${token}` },
   })
   expect(res.status()).toBe(400)
+})
+
+// ── Truck Maintenance (real) ──────────────────────────────────────────────────
+
+test('can create, update, and delete a truck maintenance record via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  // Create a truck to associate maintenance with
+  const truck = await apiPost(page, token, '/fleet/trucks/', { number: `E2E-TMTRK-${Date.now()}`, status: 1 })
+
+  // Create maintenance record
+  const today = new Date().toISOString().split('T')[0]
+  const created = await apiPost(page, token, '/fleet/truck-maintenance/', {
+    truck: truck.id,
+    date: today,
+    miles_alert: 0,
+    maintenance_miles: 0,
+    time_alert: 0,
+    time_year: 0,
+    time_month: 0,
+    detail: 'E2E test oil change',
+  })
+  expect(created.id).toBeTruthy()
+  expect(created.truck_number).toBeTruthy()
+  expect(created.detail).toBe('E2E test oil change')
+
+  // PATCH update
+  const updated = await apiPatch(page, token, `/fleet/truck-maintenance/${created.id}/`, { detail: 'E2E updated' })
+  expect(updated.detail).toBe('E2E updated')
+
+  // Alert info endpoint
+  const alertRes = await page.request.get(
+    `${API_BASE}/fleet/truck-maintenance/${created.id}/alert-info/`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  expect(alertRes.ok()).toBeTruthy()
+  const alertInfo = await alertRes.json()
+  expect(typeof alertInfo.miles_since_maintenance).toBe('number')
+  expect(typeof alertInfo.is_last_maintenance).toBe('boolean')
+
+  // Delete maintenance record, then soft-delete truck
+  await apiDelete(page, token, `/fleet/truck-maintenance/${created.id}/`)
+  await apiDelete(page, token, `/fleet/trucks/${truck.id}/`)
+})
+
+test('duplicate date rejected for truck maintenance (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const truck = await apiPost(page, token, '/fleet/trucks/', { number: `E2E-TMDP-${Date.now()}`, status: 1 })
+  const today = new Date().toISOString().split('T')[0]
+
+  await apiPost(page, token, '/fleet/truck-maintenance/', {
+    truck: truck.id, date: today, miles_alert: 0, maintenance_miles: 0,
+    time_alert: 0, time_year: 0, time_month: 0, detail: 'First record',
+  })
+
+  // Second record on the same date should return 400
+  const dupRes = await page.request.post(`${API_BASE}/fleet/truck-maintenance/`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    data: JSON.stringify({ truck: truck.id, date: today, miles_alert: 0, maintenance_miles: 0, time_alert: 0, time_year: 0, time_month: 0, detail: 'Duplicate' }),
+  })
+  expect(dupRes.status()).toBe(400)
+
+  await apiDelete(page, token, `/fleet/trucks/${truck.id}/`)
+})
+
+// ── Trailer Maintenance (real) ────────────────────────────────────────────────
+
+test('can create, update, and delete a trailer maintenance record via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const trailer = await apiPost(page, token, '/fleet/trailers/', { number: `E2E-TLTRL-${Date.now()}`, status: 1 })
+  const today = new Date().toISOString().split('T')[0]
+
+  const created = await apiPost(page, token, '/fleet/trailer-maintenance/', {
+    trailer: trailer.id,
+    date: today,
+    miles: 50000,
+    miles_alert: 0,
+    time_alert: 1,
+    time_year: 1,
+    time_month: 0,
+    detail: 'E2E annual inspection',
+  })
+  expect(created.id).toBeTruthy()
+  expect(created.trailer_number).toBeTruthy()
+
+  const updated = await apiPatch(page, token, `/fleet/trailer-maintenance/${created.id}/`, { detail: 'E2E updated inspection' })
+  expect(updated.detail).toBe('E2E updated inspection')
+
+  const alertRes = await page.request.get(
+    `${API_BASE}/fleet/trailer-maintenance/${created.id}/alert-info/`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  expect(alertRes.ok()).toBeTruthy()
+  const alertInfo = await alertRes.json()
+  expect(typeof alertInfo.miles_since_maintenance).toBe('number')
+
+  await apiDelete(page, token, `/fleet/trailer-maintenance/${created.id}/`)
+  await apiDelete(page, token, `/fleet/trailers/${trailer.id}/`)
+})
+
+// ── Truck Miles Reset (real) ──────────────────────────────────────────────────
+
+test('can create and delete a truck miles reset record via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const truck = await apiPost(page, token, '/fleet/trucks/', { number: `E2E-MRTRK-${Date.now()}`, status: 1 })
+  const today = new Date().toISOString().split('T')[0]
+
+  const created = await apiPost(page, token, '/fleet/miles-resets/', { truck: truck.id, date: today })
+  expect(created.id).toBeTruthy()
+  expect(created.truck).toBe(truck.id)
+
+  await apiDelete(page, token, `/fleet/miles-resets/${created.id}/`)
+  await apiDelete(page, token, `/fleet/trucks/${truck.id}/`)
+})
+
+// ── Accidents (real) ──────────────────────────────────────────────────────────
+
+test('can create, update, and delete an accident via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const created = await apiPost(page, token, '/fleet/accidents/', {
+    date: '2024-06-01T12:00:00Z',
+    crash_number: `E2E-${Date.now()}`,
+    address: 'I-95 Mile 42',
+    truck: null,
+    trailer: null,
+    driver: null,
+    tow_aways: true,
+    death_count: 0,
+    fatal_injuries: 0,
+  })
+  expect(created.id).toBeTruthy()
+  expect(created.tow_aways).toBe(true)
+
+  const updated = await apiPatch(page, token, `/fleet/accidents/${created.id}/`, { address: 'Updated Address' })
+  expect(updated.address).toBe('Updated Address')
+
+  await apiDelete(page, token, `/fleet/accidents/${created.id}/`)
+})
+
+test('can upload and delete an accident picture via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const accident = await apiPost(page, token, '/fleet/accidents/', {
+    date: '2024-06-02T10:00:00Z',
+    crash_number: `E2E-PIC-${Date.now()}`,
+    address: 'I-95 Mile 10', truck: null, trailer: null, driver: null,
+    tow_aways: false, death_count: 0, fatal_injuries: 0,
+  })
+
+  // Minimal valid 1×1 RGB PNG (pre-computed, no subprocess needed)
+  const pngBuffer = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+    'base64'
+  )
+
+  // Upload a picture
+  const uploadRes = await page.request.post(
+    `${API_BASE}/fleet/accidents/${accident.id}/pictures/`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      multipart: {
+        file: { name: 'scene.png', mimeType: 'image/png', buffer: pngBuffer },
+      },
+    }
+  )
+  expect(uploadRes.ok()).toBeTruthy()
+  const pic = await uploadRes.json()
+  expect(pic.id).toBeTruthy()
+
+  // Delete picture, then accident
+  const delPicRes = await page.request.delete(
+    `${API_BASE}/fleet/accidents/${accident.id}/pictures/${pic.id}/`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  expect(delPicRes.status()).toBe(204)
+
+  await apiDelete(page, token, `/fleet/accidents/${accident.id}/`)
 })

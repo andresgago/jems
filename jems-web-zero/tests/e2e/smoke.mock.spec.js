@@ -700,6 +700,47 @@ const TRAILER_DETAIL = {
   maintenance_records: [],
 }
 
+const TRUCK_MAINTENANCES = [
+  {
+    id: 1, truck: 1, truck_number: 'T-100', truck_vin: '1FUJ',
+    date: '2024-03-01', miles_alert: 1, maintenance_miles: 13000,
+    time_alert: 0, time_year: 0, time_month: 0,
+    odometer_start: 0, odometer_current: 0, is_done: false, driven_miles: 0,
+    detail: 'Oil change', created_at: '2024-03-01T00:00:00Z',
+  },
+]
+
+const TRUCK_MAINTENANCE_DETAIL = {
+  ...TRUCK_MAINTENANCES[0],
+}
+
+const TRAILER_MAINTENANCES = [
+  {
+    id: 1, trailer: 1, trailer_number: 'TRL-100', trailer_vin: 'VIN001',
+    date: '2024-06-01', miles: 80000, miles_alert: 0,
+    time_alert: 1, time_year: 1, time_month: 0,
+    detail: 'Annual inspection', created_at: '2024-06-01T00:00:00Z',
+  },
+]
+
+const TRAILER_MAINTENANCE_DETAIL = {
+  ...TRAILER_MAINTENANCES[0],
+}
+
+const MILES_RESETS = [
+  { id: 1, truck: 1, truck_number: 'T-100', date: '2024-01-01' },
+]
+
+const ACCIDENTS = [
+  {
+    id: 1, date: '2024-05-10T14:30:00Z', crash_number: 'CR-001',
+    address: 'I-95 Mile 42', truck: 1, trailer: null, driver: null,
+    tow_aways: true, death_count: 0, fatal_injuries: 0, pictures: [],
+  },
+]
+
+const ACCIDENT_DETAIL = { ...ACCIDENTS[0] }
+
 /**
  * Intercepts all /api/v1/ requests.
  * Throws on any unmocked endpoint to catch missing coverage immediately.
@@ -833,6 +874,36 @@ async function mockApi(page) {
     if (pathname.endsWith('/reports/shipper-receiver/') && method === 'GET') {
       return json(url.searchParams.get('option') === '1' ? REPORT_SHIPPER_RECEIVER_MONTHLY : REPORT_SHIPPER_RECEIVER)
     }
+    // Fleet maintenance — register options/bulk-delete before generic pk routes
+    if (pathname.endsWith('/fleet/truck-maintenance/bulk-delete/') && method === 'POST') return route.fulfill({ status: 204 })
+    if (pathname.endsWith('/fleet/truck-maintenance/') && method === 'GET') return json(TRUCK_MAINTENANCES)
+    if (pathname.endsWith('/fleet/truck-maintenance/') && method === 'POST') return json(TRUCK_MAINTENANCE_DETAIL)
+    if (/\/fleet\/truck-maintenance\/\d+\/alert-info\/$/.test(pathname)) return json({ miles_since_maintenance: 500, total_miles_since_reset: 1200, is_last_maintenance: true })
+    if (/\/fleet\/truck-maintenance\/\d+\/$/.test(pathname) && method === 'GET') return json(TRUCK_MAINTENANCE_DETAIL)
+    if (/\/fleet\/truck-maintenance\/\d+\/$/.test(pathname) && method === 'PATCH') return json(TRUCK_MAINTENANCE_DETAIL)
+    if (/\/fleet\/truck-maintenance\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
+    if (/\/fleet\/trucks\/\d+\/maintenance\/$/.test(pathname) && method === 'GET') return json(TRUCK_MAINTENANCES)
+    if (/\/fleet\/trucks\/\d+\/maintenance\/$/.test(pathname) && method === 'POST') return json(TRUCK_MAINTENANCE_DETAIL)
+    if (pathname.endsWith('/fleet/trailer-maintenance/bulk-delete/') && method === 'POST') return route.fulfill({ status: 204 })
+    if (pathname.endsWith('/fleet/trailer-maintenance/') && method === 'GET') return json(TRAILER_MAINTENANCES)
+    if (pathname.endsWith('/fleet/trailer-maintenance/') && method === 'POST') return json(TRAILER_MAINTENANCE_DETAIL)
+    if (/\/fleet\/trailer-maintenance\/\d+\/alert-info\/$/.test(pathname)) return json({ miles_since_maintenance: 200, is_last_maintenance: true })
+    if (/\/fleet\/trailer-maintenance\/\d+\/$/.test(pathname) && method === 'GET') return json(TRAILER_MAINTENANCE_DETAIL)
+    if (/\/fleet\/trailer-maintenance\/\d+\/$/.test(pathname) && method === 'PATCH') return json(TRAILER_MAINTENANCE_DETAIL)
+    if (/\/fleet\/trailer-maintenance\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
+    if (/\/fleet\/trailers\/\d+\/maintenance\/$/.test(pathname) && method === 'GET') return json(TRAILER_MAINTENANCES)
+    if (/\/fleet\/trailers\/\d+\/maintenance\/$/.test(pathname) && method === 'POST') return json(TRAILER_MAINTENANCE_DETAIL)
+    if (pathname.endsWith('/fleet/miles-resets/') && method === 'GET') return json(MILES_RESETS)
+    if (pathname.endsWith('/fleet/miles-resets/') && method === 'POST') return json(MILES_RESETS[0])
+    if (/\/fleet\/miles-resets\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
+    // Accidents
+    if (pathname.endsWith('/fleet/accidents/') && method === 'GET') return json(ACCIDENTS)
+    if (pathname.endsWith('/fleet/accidents/') && method === 'POST') return json(ACCIDENT_DETAIL)
+    if (/\/fleet\/accidents\/\d+\/pictures\/$/.test(pathname) && method === 'POST') return json({ id: 99, file: '/media/acc/new.jpg', description: '' })
+    if (/\/fleet\/accidents\/\d+\/pictures\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
+    if (/\/fleet\/accidents\/\d+\/$/.test(pathname) && method === 'GET') return json(ACCIDENT_DETAIL)
+    if (/\/fleet\/accidents\/\d+\/$/.test(pathname) && method === 'PATCH') return json(ACCIDENT_DETAIL)
+    if (/\/fleet\/accidents\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
 
     throw new Error(`Unmocked API call: ${method} ${pathname}${url.search}`)
   })
@@ -2853,4 +2924,128 @@ test('Invoices Analysis: shows Totals row after Search', async ({ page }) => {
   await page.goto('/reports/company-invoices')
   await page.getByRole('button', { name: /search/i }).click()
   await expect(page.getByText('Totals')).toBeVisible()
+})
+
+// ── Truck Maintenance ─────────────────────────────────────────────────────────
+
+test('Truck Maintenance list: renders a record row', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/truck-maintenance')
+  await expect(page.getByText('2024-03-01')).toBeVisible()
+  // T-100 appears in both the filter dropdown option AND the table link; use link role
+  await expect(page.getByRole('link', { name: 'T-100' })).toBeVisible()
+})
+
+test('Truck Maintenance list: shows New Record link', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/truck-maintenance')
+  await expect(page.getByRole('link', { name: /New Record/i })).toBeVisible()
+})
+
+test('Truck Maintenance list: miles alert badge shown', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/truck-maintenance')
+  await expect(page.getByText(/13,000 mi/)).toBeVisible()
+})
+
+test('Truck Maintenance create form: has Create heading and form sections', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/truck-maintenance/create')
+  // Heading text also appears in nav dropdown; use role=heading
+  await expect(page.getByRole('heading', { name: /Create Truck Maintenance/ })).toBeVisible()
+  // Verify the form sections are present (select option is hidden in Playwright, check card header)
+  await expect(page.locator('.card-header', { hasText: 'Main Info' })).toBeVisible()
+  await expect(page.locator('.card-header', { hasText: 'Miles Alert' })).toBeVisible()
+})
+
+// ── Trailer Maintenance ───────────────────────────────────────────────────────
+
+test('Trailer Maintenance list: renders a record row', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/trailer-maintenance')
+  await expect(page.getByText('2024-06-01')).toBeVisible()
+  // TRL-100 appears in both filter dropdown and table link; use link role
+  await expect(page.getByRole('link', { name: 'TRL-100' })).toBeVisible()
+})
+
+test('Trailer Maintenance list: shows New Record link', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/trailer-maintenance')
+  await expect(page.getByRole('link', { name: /New Record/i })).toBeVisible()
+})
+
+test('Trailer Maintenance list: time alert badge shown', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/trailer-maintenance')
+  await expect(page.getByText(/1 yr/)).toBeVisible()
+})
+
+test('Trailer Maintenance create form: has Create heading and form sections', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/trailer-maintenance/create')
+  await expect(page.getByRole('heading', { name: /Create Trailer Maintenance/ })).toBeVisible()
+  await expect(page.locator('.card-header', { hasText: 'Main Info' })).toBeVisible()
+  await expect(page.locator('.card-header', { hasText: 'Miles Alert' })).toBeVisible()
+})
+
+// ── Trucks Miles Reset ────────────────────────────────────────────────────────
+
+test('Trucks Miles Reset page: renders reset records', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/truck-miles-reset')
+  // Heading text also appears in nav; use role=heading
+  await expect(page.getByRole('heading', { name: /Trucks Miles Reset/ })).toBeVisible()
+  // Date appears in table row
+  await expect(page.getByRole('cell', { name: '2024-01-01' })).toBeVisible()
+})
+
+test('Trucks Miles Reset page: shows inline Create New Reset form', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/truck-miles-reset')
+  await expect(page.getByText('Create New Reset')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reset Miles' })).toBeVisible()
+})
+
+// ── Accidents ─────────────────────────────────────────────────────────────────
+
+test('Accidents list: renders a row', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents')
+  await expect(page.getByText('CR-001')).toBeVisible()
+  await expect(page.getByText('I-95 Mile 42')).toBeVisible()
+})
+
+test('Accidents list: shows tow-away Yes badge', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents')
+  await expect(page.getByText('Yes')).toBeVisible()
+})
+
+test('Accidents list: shows New Accident link', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents')
+  await expect(page.getByRole('link', { name: /New Accident/i })).toBeVisible()
+})
+
+test('Accident create form: has Create Accident heading', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents/create')
+  await expect(page.getByText('Create Accident')).toBeVisible()
+  await expect(page.getByText('Accident Info')).toBeVisible()
+})
+
+test('Accident detail: shows Accident heading and crash number', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents/1')
+  await expect(page.getByText('Accident #1')).toBeVisible()
+  await expect(page.getByText('CR-001')).toBeVisible()
+})
+
+test('Accident detail: shows Pictures section', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents/1')
+  // "Pictures" matches the card header and also "No pictures uploaded." (case-insensitive);
+  // use exact match on the card header span
+  await expect(page.locator('.card-header .fw-semibold', { hasText: 'Pictures' })).toBeVisible()
+  await expect(page.getByText('No pictures uploaded.')).toBeVisible()
 })

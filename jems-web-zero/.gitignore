@@ -1,6 +1,10 @@
 # Test coverage artifacts
 coverage/
 
+# Playwright failure artifacts
+test-results/
+playwright-report/
+
 # Logs
 logs
 *.log
