@@ -1312,32 +1312,50 @@ def get_broker_summary_report(year: int, option: int = 0) -> dict[str, Any]:
 
 
 def get_shipper_receiver_report(year: int, option: int = 0) -> dict[str, Any]:
-    import calendar
-
     year_start = f"{year}-01-01"
     year_end = f"{year}-12-31"
 
-    from django.db.models import Count as DjCount
-
     from apps.brokers.models import Business
 
-    pairs_qs = list(
+    base_qs = (
         Load.objects.filter(
             execute=True, pickup_date__date__range=[year_start, year_end]
         )
         .exclude(shipper__isnull=True)
         .exclude(receiver__isnull=True)
-        .values("shipper_id", "receiver_id")
-        .annotate(total=DjCount("id"))
-        .order_by("-total")
     )
-    # Exclude pairs where shipper == receiver
-    deliveries = [p for p in pairs_qs if p["shipper_id"] != p["receiver_id"]]
+    shipper_ids = list(
+        base_qs.values_list("shipper_id", flat=True).distinct().order_by("shipper_id")
+    )
+    receiver_ids = list(
+        base_qs.values_list("receiver_id", flat=True).distinct().order_by("receiver_id")
+    )
+    pair_counts = {
+        (row["shipper_id"], row["receiver_id"]): row["total"]
+        for row in base_qs.values("shipper_id", "receiver_id").annotate(
+            total=Count("id")
+        )
+    }
+
+    # Legacy parity: PHP builds every distinct shipper x distinct receiver
+    # combination for the year, excludes same-business pairs, then sorts by count.
+    deliveries = []
+    for shipper_id in shipper_ids:
+        for receiver_id in receiver_ids:
+            if shipper_id == receiver_id:
+                continue
+            deliveries.append(
+                {
+                    "shipper_id": shipper_id,
+                    "receiver_id": receiver_id,
+                    "total": pair_counts.get((shipper_id, receiver_id), 0),
+                }
+            )
+    deliveries.sort(key=lambda row: row["total"], reverse=True)
 
     limit = 30 if option == 0 else 10
     top = deliveries[:limit]
 
-    # Resolve names
     all_biz_ids = set()
     for d in top:
         all_biz_ids.add(d["shipper_id"])
@@ -1352,6 +1370,7 @@ def get_shipper_receiver_report(year: int, option: int = 0) -> dict[str, Any]:
                 "shipper": biz_names.get(d["shipper_id"], "Unknown"),
                 "receiver": biz_names.get(d["receiver_id"], "Unknown"),
                 "total": d["total"],
+                "monthly": None,
             }
             for d in top
         ]
@@ -1367,7 +1386,7 @@ def get_shipper_receiver_report(year: int, option: int = 0) -> dict[str, Any]:
         for d in top:
             monthly = []
             for month in range(1, 13):
-                last_day = calendar.monthrange(year, month)[1]
+                last_day = monthrange(year, month)[1]
                 m_start = f"{year}-{month:02d}-01"
                 m_end = f"{year}-{month:02d}-{last_day:02d}"
                 cnt = Load.objects.filter(

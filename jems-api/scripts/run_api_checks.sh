@@ -2590,6 +2590,12 @@ assert_status "shipper-receiver report" "200" "$(code "$resp")" "$(body "$resp")
 assert_contains "shipper-receiver has pairs" "$(body "$resp")" '"pairs"'
 assert_contains "shipper-receiver has total_deliveries" "$(body "$resp")" '"total_deliveries"'
 
+step "Reports: shipper-receiver monthly option returns monthly key"
+resp="$(get "/api/v1/reports/shipper-receiver/?year=${REPORT_YEAR}&option=1")"
+assert_status "shipper-receiver monthly report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "shipper-receiver monthly has pairs" "$(body "$resp")" '"pairs"'
+assert_contains "shipper-receiver monthly has monthly" "$(body "$resp")" '"monthly"'
+
 step "Reports: shipper-receiver missing year returns 400"
 resp="$(get "/api/v1/reports/shipper-receiver/")"
 assert_status "shipper-receiver 400 on missing year" "400" "$(code "$resp")"

@@ -1349,12 +1349,70 @@ class TestShipperReceiverReport:
         data = resp.json()
         assert len(data["pairs"]) == 1
         assert data["pairs"][0]["total"] == 3
+        assert data["pairs"][0]["monthly"] is None
         assert data["total_deliveries"] == 3
 
     def test_option_1_monthly_breakdown(self, api_client, db):
+        shipper = BusinessFactory()
+        receiver = BusinessFactory()
+        LoadFactory(
+            execute=True,
+            shipper=shipper,
+            receiver=receiver,
+            pickup_date=datetime.datetime(2024, 1, 10, tzinfo=datetime.timezone.utc),
+        )
+        for _ in range(2):
+            LoadFactory(
+                execute=True,
+                shipper=shipper,
+                receiver=receiver,
+                pickup_date=datetime.datetime(
+                    2024, 2, 10, tzinfo=datetime.timezone.utc
+                ),
+            )
         resp = api_client.get(self.url, {"year": "2024", "option": "1"})
         data = resp.json()
         assert data["option"] == 1
+        assert data["pairs"][0]["total"] == 3
+        assert data["pairs"][0]["monthly"][0] == {"month": 1, "count": 1}
+        assert data["pairs"][0]["monthly"][1] == {"month": 2, "count": 2}
+
+    def test_legacy_cartesian_pairs_include_zero_count_combinations(
+        self, api_client, db
+    ):
+        shipper_a = BusinessFactory(name="Shipper A")
+        shipper_b = BusinessFactory(name="Shipper B")
+        receiver_a = BusinessFactory(name="Receiver A")
+        receiver_b = BusinessFactory(name="Receiver B")
+        for _ in range(3):
+            LoadFactory(
+                execute=True,
+                shipper=shipper_a,
+                receiver=receiver_a,
+                pickup_date=datetime.datetime(
+                    2024, 4, 10, tzinfo=datetime.timezone.utc
+                ),
+            )
+        LoadFactory(
+            execute=True,
+            shipper=shipper_b,
+            receiver=receiver_b,
+            pickup_date=datetime.datetime(2024, 4, 10, tzinfo=datetime.timezone.utc),
+        )
+
+        resp = api_client.get(self.url, {"year": "2024"})
+        data = resp.json()
+
+        assert [pair["total"] for pair in data["pairs"]] == [3, 1, 0, 0]
+        assert data["total_deliveries"] == 4
+        assert {
+            (pair["shipper"], pair["receiver"], pair["total"]) for pair in data["pairs"]
+        } == {
+            ("Shipper A", "Receiver A", 3),
+            ("Shipper B", "Receiver B", 1),
+            ("Shipper A", "Receiver B", 0),
+            ("Shipper B", "Receiver A", 0),
+        }
 
     def test_non_executed_loads_excluded(self, api_client, db):
         shipper = BusinessFactory()
