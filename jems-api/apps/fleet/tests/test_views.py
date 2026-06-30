@@ -1,3 +1,4 @@
+import datetime
 import io
 
 import pytest
@@ -10,8 +11,10 @@ from rest_framework.test import APIClient
 from apps.fleet.models import Trailer, Truck
 from apps.fleet.tests.factories import (
     TrailerFactory,
+    TrailerMaintenanceFactory,
     TrailerTypeFactory,
     TruckFactory,
+    TruckMaintenanceFactory,
     TruckOwnerFactory,
     TruckTypeFactory,
 )
@@ -445,3 +448,363 @@ class TestAccidentDetail:
         accident = AccidentFactory()
         response = client.delete(reverse("accident-detail", kwargs={"pk": accident.pk}))
         assert response.status_code == status.HTTP_204_NO_CONTENT
+
+
+# ── Standalone TruckMaintenance Views ─────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestTruckMaintenanceList:
+    def test_lists_all_records_descending(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 1, 1))
+        TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 3, 1))
+        response = client.get(reverse("truck-maint-list"))
+        assert response.status_code == status.HTTP_200_OK
+        dates = [r["date"] for r in response.data]
+        assert dates == sorted(dates, reverse=True)
+
+    def test_filter_by_truck(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        other = TruckFactory()
+        TruckMaintenanceFactory(truck=truck)
+        TruckMaintenanceFactory(truck=other)
+        response = client.get(reverse("truck-maint-list") + f"?truck={truck.pk}")
+        assert response.status_code == status.HTTP_200_OK
+        assert all(r["truck"] == truck.pk for r in response.data)
+
+    def test_filter_by_date_range(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 1, 5))
+        TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 3, 15))
+        response = client.get(
+            reverse("truck-maint-list") + "?date_from=2024-03-01&date_to=2024-03-31"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert response.data[0]["date"] == "2024-03-15"
+
+    def test_search_by_truck_number(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory(number="SEARCH-001")
+        other = TruckFactory(number="OTHER-999")
+        TruckMaintenanceFactory(truck=truck)
+        TruckMaintenanceFactory(truck=other)
+        response = client.get(reverse("truck-maint-list") + "?search=SEARCH")
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+
+    def test_response_includes_truck_number(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory(number="T-99")
+        TruckMaintenanceFactory(truck=truck)
+        response = client.get(reverse("truck-maint-list"))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data[0]["truck_number"] == "T-99"
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.get(reverse("truck-maint-list"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestTruckMaintenanceCreate:
+    def test_creates_record(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        payload = {
+            "truck": truck.pk,
+            "date": "2024-05-10",
+            "detail": "Full service",
+            "miles_alert": 1,
+            "maintenance_miles": 13000.0,
+            "time_alert": 0,
+            "time_year": 0,
+            "time_month": 0,
+            "odometer_start": 100000.0,
+            "odometer_current": 100000.0,
+        }
+        response = client.post(reverse("truck-maint-list"), payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["truck"] == truck.pk
+        assert response.data["truck_number"] == truck.number
+
+    def test_duplicate_date_rejected(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 5, 10))
+        payload = {"truck": truck.pk, "date": "2024-05-10", "detail": "Dup"}
+        response = client.post(reverse("truck-maint-list"), payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_missing_truck_rejected(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("truck-maint-list"), {"date": "2024-05-10"}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.post(reverse("truck-maint-list"), {})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestTruckMaintenanceRetrieve:
+    def test_retrieves_record(self, auth_client):
+        client, _ = auth_client
+        record = TruckMaintenanceFactory(detail="Check up")
+        response = client.get(reverse("truck-maint-detail", kwargs={"pk": record.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == record.pk
+        assert "truck_number" in response.data
+        assert "maintenance_miles" in response.data
+        assert "is_done" in response.data
+        assert "driven_miles" in response.data
+
+    def test_returns_404_for_unknown(self, auth_client):
+        client, _ = auth_client
+        response = client.get(reverse("truck-maint-detail", kwargs={"pk": 99999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestTruckMaintenanceUpdate:
+    def test_updates_detail(self, auth_client):
+        client, _ = auth_client
+        record = TruckMaintenanceFactory(detail="Old")
+        response = client.patch(
+            reverse("truck-maint-detail", kwargs={"pk": record.pk}),
+            {"detail": "New"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["detail"] == "New"
+
+    def test_updates_alert_fields(self, auth_client):
+        client, _ = auth_client
+        record = TruckMaintenanceFactory(miles_alert=0, maintenance_miles=0.0)
+        response = client.patch(
+            reverse("truck-maint-detail", kwargs={"pk": record.pk}),
+            {"miles_alert": 1, "maintenance_miles": 13000.0},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["miles_alert"] == 1
+        assert response.data["maintenance_miles"] == 13000.0
+
+    def test_duplicate_date_rejected(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 3, 1))
+        m2 = TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 4, 1))
+        response = client.patch(
+            reverse("truck-maint-detail", kwargs={"pk": m2.pk}),
+            {"date": "2024-03-01"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_returns_404_for_unknown(self, auth_client):
+        client, _ = auth_client
+        response = client.patch(
+            reverse("truck-maint-detail", kwargs={"pk": 99999}), {}, format="json"
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestTruckMaintenanceDelete:
+    def test_deletes_record(self, auth_client):
+        from apps.fleet.models import TruckMaintenance
+
+        client, _ = auth_client
+        record = TruckMaintenanceFactory()
+        response = client.delete(
+            reverse("truck-maint-detail", kwargs={"pk": record.pk})
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not TruckMaintenance.objects.filter(pk=record.pk).exists()
+
+    def test_returns_404_for_unknown(self, auth_client):
+        client, _ = auth_client
+        response = client.delete(reverse("truck-maint-detail", kwargs={"pk": 99999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestTruckMaintenanceBulkDelete:
+    def test_deletes_multiple_records(self, auth_client):
+        from apps.fleet.models import TruckMaintenance
+
+        client, _ = auth_client
+        m1 = TruckMaintenanceFactory()
+        m2 = TruckMaintenanceFactory()
+        m3 = TruckMaintenanceFactory()
+        response = client.post(
+            reverse("truck-maint-bulk-delete"),
+            {"ids": [m1.pk, m2.pk]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not TruckMaintenance.objects.filter(pk__in=[m1.pk, m2.pk]).exists()
+        assert TruckMaintenance.objects.filter(pk=m3.pk).exists()
+
+    def test_empty_ids_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("truck-maint-bulk-delete"), {"ids": []}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestTruckMaintenanceAlertInfo:
+    def test_returns_alert_info(self, auth_client):
+        client, _ = auth_client
+        record = TruckMaintenanceFactory()
+        response = client.get(
+            reverse("truck-maint-alert-info", kwargs={"pk": record.pk})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert "miles_since_maintenance" in response.data
+        assert "is_last_maintenance" in response.data
+        assert "total_miles_since_reset" in response.data
+
+    def test_returns_404_for_unknown(self, auth_client):
+        client, _ = auth_client
+        response = client.get(reverse("truck-maint-alert-info", kwargs={"pk": 99999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ── Standalone TrailerMaintenance Views ───────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestTrailerMaintenanceList:
+    def test_lists_all_records(self, auth_client):
+        client, _ = auth_client
+        TrailerMaintenanceFactory.create_batch(3)
+        response = client.get(reverse("trailer-maint-list"))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) >= 3
+
+    def test_filter_by_trailer(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        other = TrailerFactory()
+        TrailerMaintenanceFactory(trailer=trailer)
+        TrailerMaintenanceFactory(trailer=other)
+        response = client.get(reverse("trailer-maint-list") + f"?trailer={trailer.pk}")
+        assert all(r["trailer"] == trailer.pk for r in response.data)
+
+    def test_response_includes_trailer_number(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory(number="TRL-99")
+        TrailerMaintenanceFactory(trailer=trailer)
+        response = client.get(reverse("trailer-maint-list"))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data[0]["trailer_number"] == "TRL-99"
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.get(reverse("trailer-maint-list"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestTrailerMaintenanceCreate:
+    def test_creates_record(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        payload = {
+            "trailer": trailer.pk,
+            "date": "2024-06-20",
+            "detail": "Inspection",
+            "miles": 80000.0,
+            "miles_alert": 1,
+            "time_alert": 0,
+            "time_year": 0,
+            "time_month": 0,
+        }
+        response = client.post(reverse("trailer-maint-list"), payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["trailer"] == trailer.pk
+        assert response.data["trailer_number"] == trailer.number
+
+    def test_duplicate_date_rejected(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 6, 20))
+        payload = {"trailer": trailer.pk, "date": "2024-06-20", "detail": "Dup"}
+        response = client.post(reverse("trailer-maint-list"), payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.post(reverse("trailer-maint-list"), {})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestTrailerMaintenanceUpdate:
+    def test_updates_detail(self, auth_client):
+        client, _ = auth_client
+        record = TrailerMaintenanceFactory(detail="Old")
+        response = client.patch(
+            reverse("trailer-maint-detail", kwargs={"pk": record.pk}),
+            {"detail": "New"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["detail"] == "New"
+
+
+@pytest.mark.django_db
+class TestTrailerMaintenanceDelete:
+    def test_deletes_record(self, auth_client):
+        from apps.fleet.models import TrailerMaintenance
+
+        client, _ = auth_client
+        record = TrailerMaintenanceFactory()
+        response = client.delete(
+            reverse("trailer-maint-detail", kwargs={"pk": record.pk})
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not TrailerMaintenance.objects.filter(pk=record.pk).exists()
+
+    def test_returns_404_for_unknown(self, auth_client):
+        client, _ = auth_client
+        response = client.delete(reverse("trailer-maint-detail", kwargs={"pk": 99999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestTrailerMaintenanceBulkDelete:
+    def test_deletes_multiple_records(self, auth_client):
+        from apps.fleet.models import TrailerMaintenance
+
+        client, _ = auth_client
+        m1 = TrailerMaintenanceFactory()
+        m2 = TrailerMaintenanceFactory()
+        response = client.post(
+            reverse("trailer-maint-bulk-delete"),
+            {"ids": [m1.pk, m2.pk]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not TrailerMaintenance.objects.filter(pk__in=[m1.pk, m2.pk]).exists()
+
+
+@pytest.mark.django_db
+class TestTrailerMaintenanceAlertInfo:
+    def test_returns_alert_info(self, auth_client):
+        client, _ = auth_client
+        record = TrailerMaintenanceFactory()
+        response = client.get(
+            reverse("trailer-maint-alert-info", kwargs={"pk": record.pk})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert "miles_since_maintenance" in response.data
+        assert "is_last_maintenance" in response.data

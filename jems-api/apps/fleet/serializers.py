@@ -83,21 +83,57 @@ class TruckOwnerCreateUpdateSerializer(serializers.ModelSerializer):
 
 
 class TruckMaintenanceSerializer(serializers.ModelSerializer):
+    """Read serializer — nested inside TruckSerializer and standalone list/detail.
+
+    truck is read_only so that nested writes (where truck comes from URL) still work
+    without requiring it in the request body.
+    """
+
+    truck_number = serializers.CharField(source="truck.number", read_only=True)
+    truck_vin = serializers.CharField(source="truck.vin", read_only=True)
+
     class Meta:
         model = TruckMaintenance
         fields = [
             "id",
+            "truck",
+            "truck_number",
+            "truck_vin",
             "date",
             "miles_alert",
+            "maintenance_miles",
             "time_alert",
             "time_year",
             "time_month",
             "odometer_start",
             "odometer_current",
+            "is_done",
+            "driven_miles",
             "detail",
             "created_at",
         ]
-        read_only_fields = ["created_at"]
+        read_only_fields = ["created_at", "truck", "truck_number", "truck_vin"]
+
+
+class TruckMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
+    """Write serializer for standalone truck-maintenance endpoints."""
+
+    class Meta:
+        model = TruckMaintenance
+        fields = [
+            "truck",
+            "date",
+            "miles_alert",
+            "maintenance_miles",
+            "time_alert",
+            "time_year",
+            "time_month",
+            "odometer_start",
+            "odometer_current",
+            "is_done",
+            "driven_miles",
+            "detail",
+        ]
 
 
 class TruckListSerializer(serializers.ModelSerializer):
@@ -228,10 +264,21 @@ class TruckCreateUpdateSerializer(serializers.ModelSerializer):
 
 
 class TrailerMaintenanceSerializer(serializers.ModelSerializer):
+    """Read serializer — nested inside TrailerSerializer and standalone list/detail.
+
+    trailer is read_only so that nested writes (where trailer comes from URL) still work.
+    """
+
+    trailer_number = serializers.CharField(source="trailer.number", read_only=True)
+    trailer_vin = serializers.CharField(source="trailer.vin", read_only=True)
+
     class Meta:
         model = TrailerMaintenance
         fields = [
             "id",
+            "trailer",
+            "trailer_number",
+            "trailer_vin",
             "date",
             "miles",
             "miles_alert",
@@ -241,7 +288,24 @@ class TrailerMaintenanceSerializer(serializers.ModelSerializer):
             "detail",
             "created_at",
         ]
-        read_only_fields = ["created_at"]
+        read_only_fields = ["created_at", "trailer", "trailer_number", "trailer_vin"]
+
+
+class TrailerMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
+    """Write serializer for standalone trailer-maintenance endpoints."""
+
+    class Meta:
+        model = TrailerMaintenance
+        fields = [
+            "trailer",
+            "date",
+            "miles",
+            "miles_alert",
+            "time_alert",
+            "time_year",
+            "time_month",
+            "detail",
+        ]
 
 
 class TrailerListSerializer(serializers.ModelSerializer):

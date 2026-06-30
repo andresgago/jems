@@ -8,8 +8,11 @@ from apps.drivers.models import Driver
 from apps.fleet.models import (
     Accident,
     Trailer,
+    TrailerMaintenance,
     TrailerType,
     Truck,
+    TruckMaintenance,
+    TruckMilesReset,
     TruckOwner,
     TruckType,
 )
@@ -74,6 +77,52 @@ class DriverFactory(DjangoModelFactory):
 
     first_name = factory.Faker("first_name")
     last_name = factory.Faker("last_name")
+
+
+class TruckMaintenanceFactory(DjangoModelFactory):
+    class Meta:
+        model = TruckMaintenance
+
+    truck = factory.SubFactory(TruckFactory)
+    date = factory.Sequence(
+        lambda n: datetime.date(2024, 1, 1) + datetime.timedelta(days=n)
+    )
+    miles_alert = 0
+    maintenance_miles = 0.0
+    time_alert = 0
+    time_year = 0
+    time_month = 0
+    odometer_start = 0.0
+    odometer_current = 0.0
+    is_done = False
+    driven_miles = 0.0
+    detail = factory.Sequence(lambda n: f"Maintenance {n}")
+
+
+class TrailerMaintenanceFactory(DjangoModelFactory):
+    class Meta:
+        model = TrailerMaintenance
+
+    trailer = factory.SubFactory(TrailerFactory)
+    date = factory.Sequence(
+        lambda n: datetime.date(2024, 1, 1) + datetime.timedelta(days=n)
+    )
+    miles = 0.0
+    miles_alert = 0
+    time_alert = 0
+    time_year = 0
+    time_month = 0
+    detail = factory.Sequence(lambda n: f"Trailer Maintenance {n}")
+
+
+class TruckMilesResetFactory(DjangoModelFactory):
+    class Meta:
+        model = TruckMilesReset
+
+    truck = factory.SubFactory(TruckFactory)
+    date = factory.Sequence(
+        lambda n: datetime.date(2024, 1, 1) + datetime.timedelta(days=n * 30)
+    )
 
 
 class AccidentFactory(DjangoModelFactory):

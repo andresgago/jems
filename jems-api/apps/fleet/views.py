@@ -42,12 +42,14 @@ from .serializers import (
     TrailerCreateUpdateSerializer,
     TrailerFileUploadSerializer,
     TrailerListSerializer,
+    TrailerMaintenanceCreateUpdateSerializer,
     TrailerMaintenanceSerializer,
     TrailerSerializer,
     TrailerTypeSerializer,
     TruckCreateUpdateSerializer,
     TruckFileUploadSerializer,
     TruckListSerializer,
+    TruckMaintenanceCreateUpdateSerializer,
     TruckMaintenanceSerializer,
     TruckOwnerCreateUpdateSerializer,
     TruckOwnerSerializer,
@@ -455,6 +457,208 @@ class AccidentViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         services.delete_accident_picture(picture=picture)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Standalone Maintenance ViewSets ──────────────────────────────────────────
+
+
+class TruckMaintenanceViewSet(ViewSet):
+    """Standalone CRUD for truck maintenance records across all trucks."""
+
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request: Request) -> Response:
+        qs = TruckMaintenance.objects.select_related("truck").order_by("-date", "-id")
+        truck_id = request.query_params.get("truck")
+        if truck_id:
+            qs = qs.filter(truck_id=truck_id)
+        date_from = request.query_params.get("date_from")
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        date_to = request.query_params.get("date_to")
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(truck__number__icontains=search)
+        return Response(TruckMaintenanceSerializer(qs, many=True).data)
+
+    def retrieve(self, request: Request, pk: int) -> Response:
+        try:
+            record = TruckMaintenance.objects.select_related("truck").get(pk=pk)
+        except TruckMaintenance.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(TruckMaintenanceSerializer(record).data)
+
+    def create(self, request: Request) -> Response:
+        serializer = TruckMaintenanceCreateUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        truck = serializer.validated_data.pop("truck")
+        record = services.add_truck_maintenance(
+            truck=truck, **serializer.validated_data
+        )
+        record.refresh_from_db()
+        return Response(
+            TruckMaintenanceSerializer(
+                TruckMaintenance.objects.select_related("truck").get(pk=record.pk)
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def partial_update(self, request: Request, pk: int) -> Response:
+        try:
+            record = TruckMaintenance.objects.select_related("truck").get(pk=pk)
+        except TruckMaintenance.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = TruckMaintenanceCreateUpdateSerializer(
+            record, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        fields = dict(serializer.validated_data)
+        if "truck" in fields:
+            fields.pop("truck")
+        record = services.update_truck_maintenance(maintenance=record, **fields)
+        return Response(
+            TruckMaintenanceSerializer(
+                TruckMaintenance.objects.select_related("truck").get(pk=record.pk)
+            ).data
+        )
+
+    def destroy(self, request: Request, pk: int) -> Response:
+        try:
+            record = TruckMaintenance.objects.get(pk=pk)
+        except TruckMaintenance.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        services.delete_truck_maintenance(maintenance=record)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request: Request) -> Response:
+        pks = request.data.get("ids", [])
+        if not pks:
+            return Response(
+                {"detail": "No ids provided."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        TruckMaintenance.objects.filter(pk__in=pks).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get"], url_path="alert-info")
+    def alert_info(self, request: Request, pk: int) -> Response:
+        try:
+            record = TruckMaintenance.objects.select_related("truck").get(pk=pk)
+        except TruckMaintenance.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        miles_since = services.get_truck_miles_since_maintenance(
+            record.truck, record.date
+        )
+        total_since_reset = services.get_truck_total_miles_since_reset(record.truck)
+        is_last = services.is_last_truck_maintenance(record)
+        return Response(
+            {
+                "miles_since_maintenance": miles_since,
+                "total_miles_since_reset": total_since_reset,
+                "is_last_maintenance": is_last,
+            }
+        )
+
+
+class TrailerMaintenanceViewSet(ViewSet):
+    """Standalone CRUD for trailer maintenance records across all trailers."""
+
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request: Request) -> Response:
+        qs = TrailerMaintenance.objects.select_related("trailer").order_by(
+            "-date", "-id"
+        )
+        trailer_id = request.query_params.get("trailer")
+        if trailer_id:
+            qs = qs.filter(trailer_id=trailer_id)
+        date_from = request.query_params.get("date_from")
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        date_to = request.query_params.get("date_to")
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(trailer__number__icontains=search)
+        return Response(TrailerMaintenanceSerializer(qs, many=True).data)
+
+    def retrieve(self, request: Request, pk: int) -> Response:
+        try:
+            record = TrailerMaintenance.objects.select_related("trailer").get(pk=pk)
+        except TrailerMaintenance.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(TrailerMaintenanceSerializer(record).data)
+
+    def create(self, request: Request) -> Response:
+        serializer = TrailerMaintenanceCreateUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        trailer = serializer.validated_data.pop("trailer")
+        record = services.add_trailer_maintenance(
+            trailer=trailer, **serializer.validated_data
+        )
+        return Response(
+            TrailerMaintenanceSerializer(
+                TrailerMaintenance.objects.select_related("trailer").get(pk=record.pk)
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def partial_update(self, request: Request, pk: int) -> Response:
+        try:
+            record = TrailerMaintenance.objects.select_related("trailer").get(pk=pk)
+        except TrailerMaintenance.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = TrailerMaintenanceCreateUpdateSerializer(
+            record, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        fields = dict(serializer.validated_data)
+        if "trailer" in fields:
+            fields.pop("trailer")
+        record = services.update_trailer_maintenance(maintenance=record, **fields)
+        return Response(
+            TrailerMaintenanceSerializer(
+                TrailerMaintenance.objects.select_related("trailer").get(pk=record.pk)
+            ).data
+        )
+
+    def destroy(self, request: Request, pk: int) -> Response:
+        try:
+            record = TrailerMaintenance.objects.get(pk=pk)
+        except TrailerMaintenance.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        services.delete_trailer_maintenance(maintenance=record)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request: Request) -> Response:
+        pks = request.data.get("ids", [])
+        if not pks:
+            return Response(
+                {"detail": "No ids provided."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        TrailerMaintenance.objects.filter(pk__in=pks).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get"], url_path="alert-info")
+    def alert_info(self, request: Request, pk: int) -> Response:
+        try:
+            record = TrailerMaintenance.objects.select_related("trailer").get(pk=pk)
+        except TrailerMaintenance.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        miles_since = services.get_trailer_miles_since_maintenance(
+            record.trailer, record.date
+        )
+        is_last = services.is_last_trailer_maintenance(record)
+        return Response(
+            {
+                "miles_since_maintenance": miles_since,
+                "is_last_maintenance": is_last,
+            }
+        )
 
 
 # ── Catalog ViewSets ──────────────────────────────────────────────────────────

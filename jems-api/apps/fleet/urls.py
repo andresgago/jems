@@ -8,9 +8,11 @@ from .views import (
     LossPayeeViewSet,
     MakeViewSet,
     TireSizeViewSet,
+    TrailerMaintenanceViewSet,
     TrailerTypeViewSet,
     TrailerViewSet,
     TransmissionTypeViewSet,
+    TruckMaintenanceViewSet,
     TruckMilesResetViewSet,
     TruckOwnerViewSet,
     TruckTypeViewSet,
@@ -78,6 +80,24 @@ accident_picture_detail = AccidentViewSet.as_view({"delete": "delete_picture"})
 miles_reset_list = TruckMilesResetViewSet.as_view({"get": "list", "post": "create"})
 miles_reset_detail = TruckMilesResetViewSet.as_view({"delete": "destroy"})
 
+# Standalone truck maintenance
+truck_maint_list = TruckMaintenanceViewSet.as_view({"get": "list", "post": "create"})
+truck_maint_detail = TruckMaintenanceViewSet.as_view(
+    {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+)
+truck_maint_bulk_delete = TruckMaintenanceViewSet.as_view({"post": "bulk_delete"})
+truck_maint_alert_info = TruckMaintenanceViewSet.as_view({"get": "alert_info"})
+
+# Standalone trailer maintenance
+trailer_maint_list = TrailerMaintenanceViewSet.as_view(
+    {"get": "list", "post": "create"}
+)
+trailer_maint_detail = TrailerMaintenanceViewSet.as_view(
+    {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+)
+trailer_maint_bulk_delete = TrailerMaintenanceViewSet.as_view({"post": "bulk_delete"})
+trailer_maint_alert_info = TrailerMaintenanceViewSet.as_view({"get": "alert_info"})
+
 urlpatterns = [
     path("trucks/", truck_list, name="truck-list"),
     path("trucks/options/", truck_options, name="truck-options"),
@@ -143,4 +163,34 @@ urlpatterns = [
     # Miles reset
     path("miles-resets/", miles_reset_list, name="truck-miles-reset-list"),
     path("miles-resets/<int:pk>/", miles_reset_detail, name="truck-miles-reset-detail"),
+    # Standalone truck maintenance
+    path(
+        "truck-maintenance/bulk-delete/",
+        truck_maint_bulk_delete,
+        name="truck-maint-bulk-delete",
+    ),
+    path("truck-maintenance/", truck_maint_list, name="truck-maint-list"),
+    path("truck-maintenance/<int:pk>/", truck_maint_detail, name="truck-maint-detail"),
+    path(
+        "truck-maintenance/<int:pk>/alert-info/",
+        truck_maint_alert_info,
+        name="truck-maint-alert-info",
+    ),
+    # Standalone trailer maintenance
+    path(
+        "trailer-maintenance/bulk-delete/",
+        trailer_maint_bulk_delete,
+        name="trailer-maint-bulk-delete",
+    ),
+    path("trailer-maintenance/", trailer_maint_list, name="trailer-maint-list"),
+    path(
+        "trailer-maintenance/<int:pk>/",
+        trailer_maint_detail,
+        name="trailer-maint-detail",
+    ),
+    path(
+        "trailer-maintenance/<int:pk>/alert-info/",
+        trailer_maint_alert_info,
+        name="trailer-maint-alert-info",
+    ),
 ]

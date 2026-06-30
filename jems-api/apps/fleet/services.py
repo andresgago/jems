@@ -1,3 +1,9 @@
+from __future__ import annotations
+
+import datetime
+
+from django.db.models import Sum
+
 from apps.users.models import User
 
 from .models import (
@@ -7,6 +13,7 @@ from .models import (
     TrailerMaintenance,
     Truck,
     TruckMaintenance,
+    TruckMilesReset,
     TruckOwner,
 )
 
@@ -68,10 +75,65 @@ def clear_truck_file(*, truck: Truck, slot: str) -> Truck:
 
 
 def add_truck_maintenance(*, truck: Truck, **fields) -> TruckMaintenance:
+    _validate_maintenance_date_unique(
+        TruckMaintenance, lookup={"truck": truck, "date": fields.get("date")}
+    )
     record = TruckMaintenance(truck=truck, **fields)
     record.full_clean()
     record.save()
     return record
+
+
+def update_truck_maintenance(
+    *, maintenance: TruckMaintenance, **fields
+) -> TruckMaintenance:
+    if "date" in fields and fields["date"] != maintenance.date:
+        _validate_maintenance_date_unique(
+            TruckMaintenance,
+            lookup={"truck": maintenance.truck, "date": fields["date"]},
+        )
+    for field, value in fields.items():
+        setattr(maintenance, field, value)
+    maintenance.full_clean()
+    maintenance.save()
+    return maintenance
+
+
+def delete_truck_maintenance(*, maintenance: TruckMaintenance) -> None:
+    maintenance.delete()
+
+
+def get_truck_miles_since_maintenance(truck: Truck, since_date: datetime.date) -> float:
+    from apps.loads.models import Load  # avoid circular import
+
+    result = Load.objects.filter(
+        truck=truck,
+        dropoff_date__date__gt=since_date,
+    ).aggregate(total=Sum("miles") + Sum("miles_empty"))
+    return result["total"] or 0.0
+
+
+def get_truck_total_miles_since_reset(truck: Truck) -> float:
+    """Miles driven since the most recent TruckMilesReset (or ever if none)."""
+    from apps.loads.models import Load  # avoid circular import
+
+    last_reset = (
+        TruckMilesReset.objects.filter(truck=truck).order_by("-date", "-id").first()
+    )
+    qs = Load.objects.filter(truck=truck)
+    if last_reset:
+        qs = qs.filter(dropoff_date__date__gt=last_reset.date)
+    result = qs.aggregate(total=Sum("miles") + Sum("miles_empty"))
+    return result["total"] or 0.0
+
+
+def is_last_truck_maintenance(maintenance: TruckMaintenance) -> bool:
+    last = (
+        TruckMaintenance.objects.filter(truck=maintenance.truck)
+        .order_by("-date", "-id")
+        .first()
+    )
+    return last is not None and last.pk == maintenance.pk
 
 
 def create_trailer(*, created_by: User | None = None, **fields) -> Trailer:
@@ -100,10 +162,66 @@ def toggle_trailer_status(*, trailer: Trailer) -> Trailer:
 
 
 def add_trailer_maintenance(*, trailer: Trailer, **fields) -> TrailerMaintenance:
+    _validate_maintenance_date_unique(
+        TrailerMaintenance, lookup={"trailer": trailer, "date": fields.get("date")}
+    )
     record = TrailerMaintenance(trailer=trailer, **fields)
     record.full_clean()
     record.save()
     return record
+
+
+def update_trailer_maintenance(
+    *, maintenance: TrailerMaintenance, **fields
+) -> TrailerMaintenance:
+    if "date" in fields and fields["date"] != maintenance.date:
+        _validate_maintenance_date_unique(
+            TrailerMaintenance,
+            lookup={"trailer": maintenance.trailer, "date": fields["date"]},
+        )
+    for field, value in fields.items():
+        setattr(maintenance, field, value)
+    maintenance.full_clean()
+    maintenance.save()
+    return maintenance
+
+
+def delete_trailer_maintenance(*, maintenance: TrailerMaintenance) -> None:
+    maintenance.delete()
+
+
+def get_trailer_miles_since_maintenance(
+    trailer: Trailer, since_date: datetime.date
+) -> float:
+    from apps.loads.models import Load  # avoid circular import
+
+    result = Load.objects.filter(
+        trailer=trailer,
+        dropoff_date__date__gt=since_date,
+    ).aggregate(total=Sum("miles") + Sum("miles_empty"))
+    return result["total"] or 0.0
+
+
+def is_last_trailer_maintenance(maintenance: TrailerMaintenance) -> bool:
+    last = (
+        TrailerMaintenance.objects.filter(trailer=maintenance.trailer)
+        .order_by("-date", "-id")
+        .first()
+    )
+    return last is not None and last.pk == maintenance.pk
+
+
+def _validate_maintenance_date_unique(model_class, *, lookup: dict) -> None:
+    if lookup.get("date") is None:
+        return
+    if model_class.objects.filter(**lookup).exists():
+        from rest_framework.exceptions import ValidationError
+
+        raise ValidationError(
+            {
+                "date": "A maintenance record already exists for this vehicle on that date."
+            }
+        )
 
 
 # Maps the public file "slot" to the Trailer model field. Mirrors legacy slots:
@@ -187,4 +305,5 @@ def add_accident_picture(*, accident: Accident, **fields) -> AccidentPicture:
 
 
 def delete_accident_picture(*, picture: AccidentPicture) -> None:
+    picture.file.delete(save=False)
     picture.delete()

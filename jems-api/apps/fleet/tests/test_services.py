@@ -1,24 +1,47 @@
-import pytest
+import datetime
 
-from apps.fleet.models import Trailer, Truck, TruckOwner
+import pytest
+from rest_framework.exceptions import ValidationError
+
+from apps.fleet.models import (
+    Trailer,
+    TrailerMaintenance,
+    Truck,
+    TruckMaintenance,
+    TruckOwner,
+)
 from apps.fleet.services import (
+    add_trailer_maintenance,
+    add_truck_maintenance,
     clear_trailer_file,
     clear_truck_file,
     create_trailer,
     create_truck,
     create_truck_owner,
+    delete_trailer_maintenance,
+    delete_truck_maintenance,
+    get_trailer_miles_since_maintenance,
+    get_truck_miles_since_maintenance,
+    get_truck_total_miles_since_reset,
+    is_last_trailer_maintenance,
+    is_last_truck_maintenance,
     set_trailer_file,
     set_truck_file,
     toggle_trailer_status,
     toggle_truck_owner_status,
     toggle_truck_status,
     update_trailer,
+    update_trailer_maintenance,
     update_truck,
+    update_truck_maintenance,
 )
 from apps.fleet.tests.factories import (
     TrailerFactory,
+    TrailerMaintenanceFactory,
     TrailerTypeFactory,
     TruckFactory,
+    TruckMaintenanceFactory,
+    TruckMilesResetFactory,
     TruckTypeFactory,
 )
 from apps.fleet.tests.test_views import make_pdf_file
@@ -237,3 +260,289 @@ class TestTruckFileServices:
         truck = TruckFactory()
         updated = clear_truck_file(truck=truck, slot="agreement")
         assert not updated.agreement_file
+
+
+# ── TruckMaintenance services ─────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestAddTruckMaintenance:
+    def test_creates_record(self):
+        truck = TruckFactory()
+        record = add_truck_maintenance(
+            truck=truck, date=datetime.date(2024, 3, 1), detail="Oil change"
+        )
+        assert record.pk is not None
+        assert record.truck == truck
+
+    def test_duplicate_date_raises(self):
+        truck = TruckFactory()
+        add_truck_maintenance(
+            truck=truck, date=datetime.date(2024, 3, 1), detail="First"
+        )
+        with pytest.raises(ValidationError):
+            add_truck_maintenance(
+                truck=truck, date=datetime.date(2024, 3, 1), detail="Duplicate"
+            )
+
+    def test_different_truck_same_date_allowed(self):
+        t1 = TruckFactory()
+        t2 = TruckFactory()
+        add_truck_maintenance(truck=t1, date=datetime.date(2024, 3, 1), detail="First")
+        record = add_truck_maintenance(
+            truck=t2, date=datetime.date(2024, 3, 1), detail="Second"
+        )
+        assert record.pk is not None
+
+    def test_different_dates_same_truck_allowed(self):
+        truck = TruckFactory()
+        add_truck_maintenance(
+            truck=truck, date=datetime.date(2024, 3, 1), detail="First"
+        )
+        record = add_truck_maintenance(
+            truck=truck, date=datetime.date(2024, 3, 15), detail="Second"
+        )
+        assert record.pk is not None
+
+
+@pytest.mark.django_db
+class TestUpdateTruckMaintenance:
+    def test_updates_detail(self):
+        m = TruckMaintenanceFactory(detail="Old")
+        updated = update_truck_maintenance(maintenance=m, detail="New")
+        assert updated.detail == "New"
+
+    def test_update_date_duplicate_raises(self):
+        truck = TruckFactory()
+        TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 3, 1))
+        m2 = TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 3, 15))
+        with pytest.raises(ValidationError):
+            update_truck_maintenance(maintenance=m2, date=datetime.date(2024, 3, 1))
+
+    def test_update_same_date_noop(self):
+        m = TruckMaintenanceFactory(date=datetime.date(2024, 3, 1))
+        updated = update_truck_maintenance(
+            maintenance=m, date=datetime.date(2024, 3, 1), detail="Same date OK"
+        )
+        assert updated.detail == "Same date OK"
+
+
+@pytest.mark.django_db
+class TestDeleteTruckMaintenance:
+    def test_deletes_record(self):
+        m = TruckMaintenanceFactory()
+        pk = m.pk
+        delete_truck_maintenance(maintenance=m)
+        assert not TruckMaintenance.objects.filter(pk=pk).exists()
+
+
+@pytest.mark.django_db
+class TestGetTruckMilesSinceMaintenance:
+    def test_returns_zero_when_no_loads(self):
+        truck = TruckFactory()
+        miles = get_truck_miles_since_maintenance(truck, datetime.date(2024, 1, 1))
+        assert miles == 0.0
+
+    def test_sums_miles_and_miles_empty_after_date(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        truck = TruckFactory()
+        maint_date = datetime.date(2024, 3, 1)
+        LoadFactory(
+            truck=truck,
+            miles=500.0,
+            miles_empty=50.0,
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 3, 5)),
+        )
+        LoadFactory(
+            truck=truck,
+            miles=300.0,
+            miles_empty=30.0,
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 3, 10)),
+        )
+        miles = get_truck_miles_since_maintenance(truck, maint_date)
+        assert miles == pytest.approx(880.0)
+
+    def test_excludes_loads_before_or_on_date(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        truck = TruckFactory()
+        maint_date = datetime.date(2024, 3, 1)
+        LoadFactory(
+            truck=truck,
+            miles=999.0,
+            miles_empty=0.0,
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 2, 28)),
+        )
+        miles = get_truck_miles_since_maintenance(truck, maint_date)
+        assert miles == 0.0
+
+    def test_excludes_loads_for_other_trucks(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        truck = TruckFactory()
+        other_truck = TruckFactory()
+        maint_date = datetime.date(2024, 3, 1)
+        LoadFactory(
+            truck=other_truck,
+            miles=1000.0,
+            miles_empty=0.0,
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 3, 5)),
+        )
+        miles = get_truck_miles_since_maintenance(truck, maint_date)
+        assert miles == 0.0
+
+
+@pytest.mark.django_db
+class TestGetTruckTotalMilesSinceReset:
+    def test_returns_all_miles_when_no_reset(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        truck = TruckFactory()
+        LoadFactory(
+            truck=truck,
+            miles=200.0,
+            miles_empty=20.0,
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 1, 10)),
+        )
+        total = get_truck_total_miles_since_reset(truck)
+        assert total == pytest.approx(220.0)
+
+    def test_counts_only_since_last_reset(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        truck = TruckFactory()
+        TruckMilesResetFactory(truck=truck, date=datetime.date(2024, 2, 1))
+        LoadFactory(
+            truck=truck,
+            miles=100.0,
+            miles_empty=0.0,
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 1, 15)),
+        )
+        LoadFactory(
+            truck=truck,
+            miles=300.0,
+            miles_empty=30.0,
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 3, 1)),
+        )
+        total = get_truck_total_miles_since_reset(truck)
+        assert total == pytest.approx(330.0)
+
+
+@pytest.mark.django_db
+class TestIsLastTruckMaintenance:
+    def test_single_record_is_last(self):
+        m = TruckMaintenanceFactory()
+        assert is_last_truck_maintenance(m) is True
+
+    def test_earlier_record_is_not_last(self):
+        truck = TruckFactory()
+        m1 = TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 1, 1))
+        TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 2, 1))
+        assert is_last_truck_maintenance(m1) is False
+
+    def test_later_record_is_last(self):
+        truck = TruckFactory()
+        TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 1, 1))
+        m2 = TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 2, 1))
+        assert is_last_truck_maintenance(m2) is True
+
+
+# ── TrailerMaintenance services ───────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestAddTrailerMaintenance:
+    def test_creates_record(self):
+        trailer = TrailerFactory()
+        record = add_trailer_maintenance(
+            trailer=trailer, date=datetime.date(2024, 3, 1), detail="Tire rotation"
+        )
+        assert record.pk is not None
+        assert record.trailer == trailer
+
+    def test_duplicate_date_raises(self):
+        trailer = TrailerFactory()
+        add_trailer_maintenance(
+            trailer=trailer, date=datetime.date(2024, 3, 1), detail="First"
+        )
+        with pytest.raises(ValidationError):
+            add_trailer_maintenance(
+                trailer=trailer, date=datetime.date(2024, 3, 1), detail="Duplicate"
+            )
+
+    def test_different_trailer_same_date_allowed(self):
+        t1 = TrailerFactory()
+        t2 = TrailerFactory()
+        add_trailer_maintenance(
+            trailer=t1, date=datetime.date(2024, 3, 1), detail="First"
+        )
+        record = add_trailer_maintenance(
+            trailer=t2, date=datetime.date(2024, 3, 1), detail="Second"
+        )
+        assert record.pk is not None
+
+
+@pytest.mark.django_db
+class TestUpdateTrailerMaintenance:
+    def test_updates_miles(self):
+        m = TrailerMaintenanceFactory(miles=0.0)
+        updated = update_trailer_maintenance(maintenance=m, miles=50000.0)
+        assert updated.miles == 50000.0
+
+    def test_update_date_duplicate_raises(self):
+        trailer = TrailerFactory()
+        TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 3, 1))
+        m2 = TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 3, 15))
+        with pytest.raises(ValidationError):
+            update_trailer_maintenance(maintenance=m2, date=datetime.date(2024, 3, 1))
+
+
+@pytest.mark.django_db
+class TestDeleteTrailerMaintenance:
+    def test_deletes_record(self):
+        m = TrailerMaintenanceFactory()
+        pk = m.pk
+        delete_trailer_maintenance(maintenance=m)
+        assert not TrailerMaintenance.objects.filter(pk=pk).exists()
+
+
+@pytest.mark.django_db
+class TestGetTrailerMilesSinceMaintenance:
+    def test_returns_zero_when_no_loads(self):
+        trailer = TrailerFactory()
+        miles = get_trailer_miles_since_maintenance(trailer, datetime.date(2024, 1, 1))
+        assert miles == 0.0
+
+    def test_sums_miles_for_trailer(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        trailer = TrailerFactory()
+        maint_date = datetime.date(2024, 3, 1)
+        LoadFactory(
+            trailer=trailer,
+            miles=400.0,
+            miles_empty=40.0,
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 3, 5)),
+        )
+        miles = get_trailer_miles_since_maintenance(trailer, maint_date)
+        assert miles == pytest.approx(440.0)
+
+
+@pytest.mark.django_db
+class TestIsLastTrailerMaintenance:
+    def test_single_record_is_last(self):
+        m = TrailerMaintenanceFactory()
+        assert is_last_trailer_maintenance(m) is True
+
+    def test_earlier_record_is_not_last(self):
+        trailer = TrailerFactory()
+        m1 = TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 1, 1))
+        TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 2, 1))
+        assert is_last_trailer_maintenance(m1) is False

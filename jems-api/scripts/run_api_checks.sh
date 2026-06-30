@@ -702,6 +702,50 @@ step "Fleet: miles reset delete"
 resp="$(delete "/api/v1/fleet/miles-resets/${MILES_RESET_ID}/")"
 assert_status "miles reset delete" "204" "$(code "$resp")"
 
+# ── Standalone truck maintenance endpoint ─────────────────────────────────────
+step "Fleet: standalone truck maintenance create"
+resp="$(post "/api/v1/fleet/truck-maintenance/" "{\"truck\":${TRUCK_ID},\"date\":\"2024-03-02\",\"detail\":\"Standalone check\",\"miles_alert\":0,\"maintenance_miles\":0,\"time_alert\":0,\"time_year\":0,\"time_month\":0}")"
+assert_status "standalone truck maint create" "201" "$(code "$resp")" "$(body "$resp")"
+STANDALONE_TRUCK_MAINT_ID="$(body "$resp" | json_get_num id)"
+assert_contains "standalone truck maint has truck_number" "$(body "$resp")" '"truck_number"'
+
+step "Fleet: standalone truck maintenance list"
+resp="$(get "/api/v1/fleet/truck-maintenance/")"
+assert_status "standalone truck maint list" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Fleet: standalone truck maintenance list filter by truck"
+resp="$(get "/api/v1/fleet/truck-maintenance/?truck=${TRUCK_ID}")"
+assert_status "standalone truck maint filter" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "standalone truck maint filtered" "$(body "$resp")" "Standalone check"
+
+step "Fleet: standalone truck maintenance retrieve"
+resp="$(get "/api/v1/fleet/truck-maintenance/${STANDALONE_TRUCK_MAINT_ID}/")"
+assert_status "standalone truck maint retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "standalone truck maint has detail" "$(body "$resp")" "Standalone check"
+
+step "Fleet: standalone truck maintenance PATCH"
+resp="$(patch "/api/v1/fleet/truck-maintenance/${STANDALONE_TRUCK_MAINT_ID}/" '{"detail":"Patched detail"}')"
+assert_status "standalone truck maint patch" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "standalone truck maint patched" "$(body "$resp")" "Patched detail"
+
+step "Fleet: standalone truck maintenance alert-info"
+resp="$(get "/api/v1/fleet/truck-maintenance/${STANDALONE_TRUCK_MAINT_ID}/alert-info/")"
+assert_status "standalone truck maint alert-info" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "alert-info has miles_since_maintenance" "$(body "$resp")" '"miles_since_maintenance"'
+assert_contains "alert-info has is_last_maintenance" "$(body "$resp")" '"is_last_maintenance"'
+
+step "Fleet: standalone truck maintenance duplicate date rejected"
+resp="$(post "/api/v1/fleet/truck-maintenance/" "{\"truck\":${TRUCK_ID},\"date\":\"2024-03-02\",\"detail\":\"Dup\",\"miles_alert\":0,\"maintenance_miles\":0,\"time_alert\":0,\"time_year\":0,\"time_month\":0}")"
+assert_status "standalone truck maint duplicate 400" "400" "$(code "$resp")"
+
+step "Fleet: standalone truck maintenance bulk delete"
+resp="$(post "/api/v1/fleet/truck-maintenance/bulk-delete/" "{\"ids\":[${STANDALONE_TRUCK_MAINT_ID}]}")"
+assert_status "standalone truck maint bulk delete" "204" "$(code "$resp")"
+
+step "Fleet: standalone truck maintenance bulk delete with empty ids returns 400"
+resp="$(post "/api/v1/fleet/truck-maintenance/bulk-delete/" '{"ids":[]}')"
+assert_status "standalone truck maint bulk delete empty 400" "400" "$(code "$resp")"
+
 # ── Trailer ───────────────────────────────────────────────────────────────────
 step "Fleet: trailer create"
 resp="$(post "/api/v1/fleet/trailers/" "{\"number\":\"TRL-001\",\"year\":2021,\"trailer_type\":${TRAILER_TYPE_ID},\"status\":1}")"
@@ -773,6 +817,49 @@ assert_status "trailer unknown slot" "400" "$(code "$resp")"
 step "Fleet: trailer file clear"
 resp="$(delete "/api/v1/fleet/trailers/${TRAILER_ID}/files/registration/")"
 assert_status "trailer file clear" "200" "$(code "$resp")" "$(body "$resp")"
+
+# ── Standalone trailer maintenance endpoint ───────────────────────────────────
+step "Fleet: standalone trailer maintenance create"
+resp="$(post "/api/v1/fleet/trailer-maintenance/" "{\"trailer\":${TRAILER_ID},\"date\":\"2024-04-02\",\"detail\":\"Standalone tire\",\"miles\":50000,\"miles_alert\":0,\"time_alert\":1,\"time_year\":1,\"time_month\":0}")"
+assert_status "standalone trailer maint create" "201" "$(code "$resp")" "$(body "$resp")"
+STANDALONE_TRAILER_MAINT_ID="$(body "$resp" | json_get_num id)"
+assert_contains "standalone trailer maint has trailer_number" "$(body "$resp")" '"trailer_number"'
+
+step "Fleet: standalone trailer maintenance list"
+resp="$(get "/api/v1/fleet/trailer-maintenance/")"
+assert_status "standalone trailer maint list" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Fleet: standalone trailer maintenance list filter by trailer"
+resp="$(get "/api/v1/fleet/trailer-maintenance/?trailer=${TRAILER_ID}")"
+assert_status "standalone trailer maint filter" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "standalone trailer maint filtered" "$(body "$resp")" "Standalone tire"
+
+step "Fleet: standalone trailer maintenance retrieve"
+resp="$(get "/api/v1/fleet/trailer-maintenance/${STANDALONE_TRAILER_MAINT_ID}/")"
+assert_status "standalone trailer maint retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Fleet: standalone trailer maintenance PATCH"
+resp="$(patch "/api/v1/fleet/trailer-maintenance/${STANDALONE_TRAILER_MAINT_ID}/" '{"detail":"Patched trailer maint"}')"
+assert_status "standalone trailer maint patch" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "standalone trailer maint patched" "$(body "$resp")" "Patched trailer maint"
+
+step "Fleet: standalone trailer maintenance alert-info"
+resp="$(get "/api/v1/fleet/trailer-maintenance/${STANDALONE_TRAILER_MAINT_ID}/alert-info/")"
+assert_status "standalone trailer maint alert-info" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "trailer alert-info has miles_since_maintenance" "$(body "$resp")" '"miles_since_maintenance"'
+assert_contains "trailer alert-info has is_last_maintenance" "$(body "$resp")" '"is_last_maintenance"'
+
+step "Fleet: standalone trailer maintenance duplicate date rejected"
+resp="$(post "/api/v1/fleet/trailer-maintenance/" "{\"trailer\":${TRAILER_ID},\"date\":\"2024-04-02\",\"detail\":\"Dup\",\"miles\":0,\"miles_alert\":0,\"time_alert\":0,\"time_year\":0,\"time_month\":0}")"
+assert_status "standalone trailer maint duplicate 400" "400" "$(code "$resp")"
+
+step "Fleet: standalone trailer maintenance bulk delete"
+resp="$(post "/api/v1/fleet/trailer-maintenance/bulk-delete/" "{\"ids\":[${STANDALONE_TRAILER_MAINT_ID}]}")"
+assert_status "standalone trailer maint bulk delete" "204" "$(code "$resp")"
+
+step "Fleet: standalone trailer maintenance bulk delete with empty ids returns 400"
+resp="$(post "/api/v1/fleet/trailer-maintenance/bulk-delete/" '{"ids":[]}')"
+assert_status "standalone trailer maint bulk delete empty 400" "400" "$(code "$resp")"
 
 # ── Accident ──────────────────────────────────────────────────────────────────
 step "Fleet: accident create"
