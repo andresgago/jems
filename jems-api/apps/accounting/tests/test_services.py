@@ -20,7 +20,9 @@ from apps.accounting.services import (
     create_record,
     delete_load_accounting_records,
     delete_record,
+    get_driver_invoice_analysis,
     open_driver_invoice,
+    parse_load_list,
     update_account,
     update_record,
 )
@@ -31,6 +33,7 @@ from apps.accounting.tests.factories import (
     DriverInvoiceFactory,
     TruckOwnerFactory,
     TruckOwnerInvoiceFactory,
+    UserFactory,
 )
 from apps.drivers.models import Driver, DriverType
 from apps.loads.tests.factories import LoadFactory
@@ -435,3 +438,251 @@ class TestCreateLoadAccountingRecords:
         remaining = Record.objects.filter(load=load)
         assert remaining.count() == 1
         assert remaining.first().is_automatic is False
+
+
+# ── parse_load_list ───────────────────────────────────────────────────────────
+
+
+class TestParseLoadList:
+    def test_empty_string(self):
+        assert parse_load_list("") == []
+
+    def test_pipe_delimited(self):
+        assert parse_load_list("|123|456|789|") == [123, 456, 789]
+
+    def test_comma_delimited(self):
+        assert parse_load_list("123,456,789") == [123, 456, 789]
+
+    def test_single_id(self):
+        assert parse_load_list("42") == [42]
+
+    def test_mixed_separators(self):
+        assert parse_load_list("|100|200,300|") == [100, 200, 300]
+
+    def test_ignores_zeros(self):
+        assert parse_load_list("|0|5|0|") == [5]
+
+    def test_strips_whitespace(self):
+        assert parse_load_list(" 10 , 20 ") == [10, 20]
+
+
+# ── get_driver_invoice_analysis ───────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestGetDriverInvoiceAnalysis:
+    TODAY = datetime.date.today()
+    DATE_BEGIN = str(TODAY)
+    DATE_END = str(TODAY)
+
+    def _make_account(self, code: str, name: str) -> Account:
+        acct, _ = Account.objects.get_or_create(code=code, defaults={"name": name})
+        return acct
+
+    def test_returns_invoice_in_date_range(self):
+        inv = DriverInvoiceFactory(date=self.TODAY)
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        assert any(r["id"] == inv.id for r in rows)
+
+    def test_excludes_invoice_outside_date_range(self):
+        yesterday = self.TODAY - datetime.timedelta(days=5)
+        inv = DriverInvoiceFactory(date=yesterday)
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        assert not any(r["id"] == inv.id for r in rows)
+
+    def test_row_has_required_fields(self):
+        DriverInvoiceFactory(date=self.TODAY)
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        assert len(rows) >= 1
+        row = rows[0]
+        for key in (
+            "id",
+            "number",
+            "date",
+            "driver_name",
+            "carrier_name",
+            "dispatcher_names",
+            "load_count",
+            "gross",
+            "net",
+            "acc_90010",
+            "acc_90011",
+            "acc_80030",
+        ):
+            assert key in row, f"Missing field: {key}"
+
+    def test_aggregates_record_amounts_by_account(self, db):
+        acct = self._make_account("90010", "Income by Rate")
+        inv = DriverInvoiceFactory(date=self.TODAY, load_list="")
+        load = LoadFactory(payment=1000.0)
+        inv.load_list = str(load.id)
+        inv.save()
+        Record.objects.create(
+            date=self.TODAY,
+            account=acct,
+            amount=1000.0,
+            load=load,
+            is_automatic=True,
+        )
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        row = next(r for r in rows if r["id"] == inv.id)
+        assert row["acc_90010"] == 1000.0
+
+    def test_gross_sums_income_accounts(self, db):
+        acct_rate = self._make_account("90010", "Income by Rate")
+        acct_det = self._make_account("90011", "Income by Detention")
+        inv = DriverInvoiceFactory(date=self.TODAY, load_list="")
+        load = LoadFactory(payment=500.0)
+        inv.load_list = str(load.id)
+        inv.save()
+        Record.objects.create(
+            date=self.TODAY,
+            account=acct_rate,
+            amount=500.0,
+            load=load,
+            is_automatic=True,
+        )
+        Record.objects.create(
+            date=self.TODAY,
+            account=acct_det,
+            amount=100.0,
+            load=load,
+            is_automatic=True,
+        )
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        row = next(r for r in rows if r["id"] == inv.id)
+        assert row["gross"] == 600.0
+
+    def test_net_subtracts_expenses(self, db):
+        acct_rate = self._make_account("90010", "Income by Rate")
+        acct_fuel = self._make_account("80030", "Fuel")
+        inv = DriverInvoiceFactory(date=self.TODAY, load_list="")
+        load = LoadFactory(payment=1000.0)
+        inv.load_list = str(load.id)
+        inv.save()
+        Record.objects.create(
+            date=self.TODAY,
+            account=acct_rate,
+            amount=1000.0,
+            load=load,
+            is_automatic=True,
+        )
+        Record.objects.create(
+            date=self.TODAY,
+            account=acct_fuel,
+            amount=200.0,
+            load=load,
+            is_automatic=True,
+        )
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        row = next(r for r in rows if r["id"] == inv.id)
+        assert row["net"] == 800.0
+
+    def test_load_count_from_load_list(self):
+        load1 = LoadFactory()
+        load2 = LoadFactory()
+        inv = DriverInvoiceFactory(
+            date=self.TODAY, load_list=f"|{load1.id}|{load2.id}|"
+        )
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        row = next(r for r in rows if r["id"] == inv.id)
+        assert row["load_count"] == 2
+
+    def test_filters_by_driver(self):
+        driver_a = DriverFactory()
+        driver_b = DriverFactory()
+        inv_a = DriverInvoiceFactory(date=self.TODAY, driver=driver_a)
+        inv_b = DriverInvoiceFactory(date=self.TODAY, driver=driver_b)
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN,
+            date_end=self.DATE_END,
+            driver_ids=[driver_a.id],
+        )
+        ids = [r["id"] for r in rows]
+        assert inv_a.id in ids
+        assert inv_b.id not in ids
+
+    def test_filters_by_carrier(self):
+        from apps.loads.tests.factories import CarrierFactory
+
+        carrier_a = CarrierFactory()
+        carrier_b = CarrierFactory()
+        driver_a = DriverFactory(carrier=carrier_a)
+        driver_b = DriverFactory(carrier=carrier_b)
+        inv_a = DriverInvoiceFactory(date=self.TODAY, driver=driver_a)
+        inv_b = DriverInvoiceFactory(date=self.TODAY, driver=driver_b)
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN,
+            date_end=self.DATE_END,
+            carrier_id=carrier_a.id,
+        )
+        ids = [r["id"] for r in rows]
+        assert inv_a.id in ids
+        assert inv_b.id not in ids
+
+    def test_filters_by_dispatcher(self):
+        disp_a = UserFactory()
+        disp_b = UserFactory()
+        inv = DriverInvoiceFactory(date=self.TODAY, load_list="")
+        load_a = LoadFactory(dispatcher=disp_a)
+        load_b = LoadFactory(dispatcher=disp_b)
+        inv.load_list = f"|{load_a.id}|"
+        inv.save()
+        inv_no_match = DriverInvoiceFactory(date=self.TODAY, load_list=f"|{load_b.id}|")
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN,
+            date_end=self.DATE_END,
+            dispatcher_ids=[disp_a.id],
+        )
+        ids = [r["id"] for r in rows]
+        assert inv.id in ids
+        assert inv_no_match.id not in ids
+
+    def test_empty_load_list_returns_zero_amounts(self):
+        inv = DriverInvoiceFactory(date=self.TODAY, load_list="")
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        row = next(r for r in rows if r["id"] == inv.id)
+        assert row["acc_90010"] == 0.0
+        assert row["gross"] == 0.0
+        assert row["net"] == 0.0
+        assert row["load_count"] == 0
+
+    def test_carrier_name_from_driver(self):
+        from apps.loads.tests.factories import CarrierFactory
+
+        carrier = CarrierFactory(name="ACME Transport LLC")
+        driver = DriverFactory(carrier=carrier)
+        inv = DriverInvoiceFactory(date=self.TODAY, driver=driver)
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        row = next(r for r in rows if r["id"] == inv.id)
+        assert row["carrier_name"] == "ACME Transport LLC"
+
+    def test_dispatcher_names_from_loads(self):
+        disp = UserFactory(first_name="Jorge", last_name="Silveira")
+        inv = DriverInvoiceFactory(date=self.TODAY, load_list="")
+        load = LoadFactory(dispatcher=disp)
+        inv.load_list = str(load.id)
+        inv.save()
+        rows = get_driver_invoice_analysis(
+            date_begin=self.DATE_BEGIN, date_end=self.DATE_END
+        )
+        row = next(r for r in rows if r["id"] == inv.id)
+        assert "Jorge Silveira" in row["dispatcher_names"]

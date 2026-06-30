@@ -21,6 +21,7 @@ from .serializers import (
     CardGainSerializer,
     CategorySerializer,
     CategoryTypeSerializer,
+    DriverInvoiceDetailSerializer,
     DriverInvoiceSerializer,
     OwnerInvoiceSerializer,
     RecordListSerializer,
@@ -37,6 +38,7 @@ from .services import (
     delete_driver_invoice,
     delete_owner_invoice,
     delete_record,
+    get_driver_invoice_analysis,
     open_driver_invoice,
     open_owner_invoice,
     update_account,
@@ -263,10 +265,10 @@ class DriverInvoiceViewSet(ViewSet):
 
     def retrieve(self, request, pk=None):
         try:
-            invoice = DriverInvoice.objects.select_related("driver").get(pk=pk)
+            invoice = DriverInvoice.objects.select_related("driver__carrier").get(pk=pk)
         except DriverInvoice.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(DriverInvoiceSerializer(invoice).data)
+        return Response(DriverInvoiceDetailSerializer(invoice).data)
 
     def update(self, request, pk=None):
         try:
@@ -342,6 +344,48 @@ class DriverInvoiceViewSet(ViewSet):
             for inv in qs.order_by("number")
         ]
         return Response(data)
+
+    @action(detail=False, methods=["get"], url_path="analysis")
+    def analysis(self, request: "Request") -> Response:
+        date_begin = request.query_params.get("date_begin", "")
+        date_end = request.query_params.get("date_end", "")
+        if not date_begin or not date_end:
+            return Response(
+                {"detail": "date_begin and date_end are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        raw_drivers = request.query_params.getlist("driver")
+        driver_ids: list[int] | None = None
+        if raw_drivers:
+            driver_ids = []
+            for item in raw_drivers:
+                driver_ids.extend(
+                    int(p) for p in item.split(",") if p.strip().isdigit()
+                )
+
+        raw_dispatchers = request.query_params.getlist("dispatcher")
+        dispatcher_ids: list[int] | None = None
+        if raw_dispatchers:
+            dispatcher_ids = []
+            for item in raw_dispatchers:
+                dispatcher_ids.extend(
+                    int(p) for p in item.split(",") if p.strip().isdigit()
+                )
+
+        carrier_param = request.query_params.get("carrier")
+        carrier_id: int | None = (
+            int(carrier_param) if carrier_param and carrier_param.isdigit() else None
+        )
+
+        rows = get_driver_invoice_analysis(
+            date_begin=date_begin,
+            date_end=date_end,
+            driver_ids=driver_ids or None,
+            dispatcher_ids=dispatcher_ids or None,
+            carrier_id=carrier_id,
+        )
+        return Response(rows)
 
 
 class OwnerInvoiceViewSet(ViewSet):

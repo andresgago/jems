@@ -1,8 +1,135 @@
+import re
 from typing import Any, Optional
 
 from django.core.exceptions import ValidationError
+from django.db.models import Sum
 
 from .models import Account, Category, DriverInvoice, OwnerInvoice, Record
+
+# ── Invoice Analysis ───────────────────────────────────────────────────────────
+
+# Ordered list of (field_name, account_code) for the analysis grid columns.
+# Order matches the legacy TMS driver_invoice table column order.
+ANALYSIS_ACCOUNT_COLUMNS: list[tuple[str, str]] = [
+    ("acc_90010", "90010"),  # I-Rate
+    ("acc_90011", "90011"),  # I-Detention
+    ("acc_80030", "80030"),  # E-Fuel
+    ("acc_80084", "80084"),  # E-Fee
+    ("acc_10040", "10040"),  # E-% FDisp
+    ("acc_10043", "10043"),  # E-% FDispO
+    ("acc_80081", "80081"),  # E-Insurance
+    ("acc_80011", "80011"),  # E-Detention
+    ("acc_80082", "80082"),  # E-Driver
+    ("acc_80080", "80080"),  # E-Toll
+    ("acc_80012", "80012"),  # E-Lumper
+    ("acc_10042", "10042"),  # E-% FDet
+    ("acc_80013", "80013"),  # E-Scale & Wash
+    ("acc_80051", "80051"),  # E-Vacation
+    ("acc_90030", "90030"),  # E-I-Driver (driver deductions)
+    ("acc_80035", "80035"),  # E-Scale
+    ("acc_80050", "80050"),  # Driver Payroll
+    ("acc_90012", "90012"),  # I-Lumper
+    ("acc_80036", "80036"),  # Misc
+    ("acc_80056", "80056"),  # BoA Fee (Driver Payment BoA Fee x Transaction)
+]
+
+# Account codes that represent income (gross revenue to the company).
+_INCOME_CODES = {"90010", "90011", "90012", "90014"}
+
+
+def parse_load_list(load_list: str) -> list[int]:
+    """Parse pipe- or comma-delimited load list into integer IDs."""
+    if not load_list:
+        return []
+    text = load_list.strip("|").strip()
+    parts = re.split(r"[|,\s]+", text)
+    return [int(p) for p in parts if p.isdigit() and int(p) > 0]
+
+
+def get_driver_invoice_analysis(
+    *,
+    date_begin: str,
+    date_end: str,
+    driver_ids: list[int] | None = None,
+    dispatcher_ids: list[int] | None = None,
+    carrier_id: int | None = None,
+) -> list[dict]:
+    """Return one analysis row per DriverInvoice in the date range.
+
+    Each row contains per-account-code aggregated Record amounts so the
+    frontend can render the Invoices Analysis grid exactly as the legacy TMS.
+    """
+    from apps.loads.models import Load  # avoid circular import
+
+    qs = (
+        DriverInvoice.objects.select_related("driver", "driver__carrier")
+        .filter(date__range=[date_begin, date_end])
+        .order_by("-date", "-number")
+    )
+
+    if driver_ids:
+        qs = qs.filter(driver_id__in=driver_ids)
+    if carrier_id:
+        qs = qs.filter(driver__carrier_id=carrier_id)
+
+    results = []
+    for invoice in qs:
+        load_ids = parse_load_list(invoice.load_list)
+
+        loads_qs = (
+            Load.objects.filter(id__in=load_ids).select_related("dispatcher")
+            if load_ids
+            else Load.objects.none()
+        )
+
+        # Dispatcher filter: skip invoice if none of its loads match.
+        if (
+            dispatcher_ids
+            and not loads_qs.filter(dispatcher_id__in=dispatcher_ids).exists()
+        ):
+            continue
+
+        dispatcher_names = ", ".join(
+            sorted({ld.dispatcher.full_name for ld in loads_qs if ld.dispatcher})
+        )
+
+        # Aggregate record amounts by account code for this invoice's loads.
+        account_totals: dict[str, float] = {}
+        if load_ids:
+            rows = (
+                Record.objects.filter(load_id__in=load_ids)
+                .values("account__code")
+                .annotate(total=Sum("amount"))
+            )
+            account_totals = {r["account__code"]: float(r["total"]) for r in rows}
+
+        row: dict[str, Any] = {
+            "id": invoice.id,
+            "number": invoice.number,
+            "date": str(invoice.date),
+            "driver_name": invoice.driver.full_name if invoice.driver else "",
+            "dispatcher_names": dispatcher_names,
+            "carrier_name": (
+                invoice.driver.carrier.name
+                if invoice.driver and invoice.driver.carrier
+                else ""
+            ),
+            "load_count": len(load_ids),
+            "status": invoice.status,
+        }
+
+        for field_name, code in ANALYSIS_ACCOUNT_COLUMNS:
+            row[field_name] = account_totals.get(code, 0.0)
+
+        income = sum(account_totals.get(c, 0.0) for c in _INCOME_CODES)
+        expenses = sum(v for c, v in account_totals.items() if c not in _INCOME_CODES)
+        row["gross"] = round(income, 2)
+        row["net"] = round(income - expenses, 2)
+
+        results.append(row)
+
+    return results
+
 
 # Seeded driver type IDs — must match apps/locations/management/commands/seed.py DRIVER_TYPES
 _DRIVER_TYPE_OWNER_OP = 3  # Owner Operator

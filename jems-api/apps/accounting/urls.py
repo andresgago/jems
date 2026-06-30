@@ -39,6 +39,7 @@ di_detail = DriverInvoiceViewSet.as_view(
 )
 di_close = DriverInvoiceViewSet.as_view({"post": "close"})
 di_open = DriverInvoiceViewSet.as_view({"post": "open"})
+di_analysis = DriverInvoiceViewSet.as_view({"get": "analysis"})
 di_options = DriverInvoiceViewSet.as_view({"get": "options"})
 
 # Owner invoices
@@ -63,6 +64,7 @@ urlpatterns = [
     path("records/", record_list, name="record-list"),
     path("records/<int:pk>/", record_detail, name="record-detail"),
     path("driver-invoices/", di_list, name="driver-invoice-list"),
+    path("driver-invoices/analysis/", di_analysis, name="driver-invoice-analysis"),
     path("driver-invoices/options/", di_options, name="driver-invoice-options"),
     path("driver-invoices/<int:pk>/", di_detail, name="driver-invoice-detail"),
     path("driver-invoices/<int:pk>/close/", di_close, name="driver-invoice-close"),

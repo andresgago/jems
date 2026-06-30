@@ -2600,6 +2600,23 @@ step "Reports: shipper-receiver missing year returns 400"
 resp="$(get "/api/v1/reports/shipper-receiver/")"
 assert_status "shipper-receiver 400 on missing year" "400" "$(code "$resp")"
 
+# ── Invoices Analysis ─────────────────────────────────────────────────────────
+TODAY="$(date +%Y-%m-%d)"
+WEEK_AGO="$(date -v-6d +%Y-%m-%d 2>/dev/null || date -d '6 days ago' +%Y-%m-%d)"
+
+step "Driver Invoices Analysis: returns 200 with date params"
+resp="$(get "/api/v1/accounting/driver-invoices/analysis/?date_begin=${WEEK_AGO}&date_end=${TODAY}")"
+assert_status "driver-invoices analysis 200" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "driver-invoices analysis is array" "$(body "$resp")" '['
+
+step "Driver Invoices Analysis: returns 400 when dates are missing"
+resp="$(get "/api/v1/accounting/driver-invoices/analysis/")"
+assert_status "driver-invoices analysis 400 on missing dates" "400" "$(code "$resp")"
+
+step "Driver Invoices Analysis: driver filter accepted"
+resp="$(get "/api/v1/accounting/driver-invoices/analysis/?date_begin=${WEEK_AGO}&date_end=${TODAY}&driver=999999")"
+assert_status "driver-invoices analysis with driver filter" "200" "$(code "$resp")" "$(body "$resp")"
+
 # ── Final summary ─────────────────────────────────────────────────────────────
 # Disable ERR trap — we're done, exit 0 is intentional.
 trap - ERR

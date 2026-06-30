@@ -5,7 +5,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.accounting.models import DriverInvoice, OwnerInvoice
+from apps.accounting.models import Account, DriverInvoice, OwnerInvoice, Record
 from apps.accounting.tests.factories import (
     AccountFactory,
     CategoryFactory,
@@ -16,6 +16,7 @@ from apps.accounting.tests.factories import (
     TruckOwnerInvoiceFactory,
     UserFactory,
 )
+from apps.loads.tests.factories import CarrierFactory, LoadFactory
 
 
 @pytest.fixture
@@ -398,3 +399,139 @@ class TestCategorySearch:
         assert "label" in item
         assert "name" in item
         assert "code" in item
+
+
+# ── Driver Invoice Analysis ────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestDriverInvoiceAnalysis:
+    TODAY = datetime.date.today()
+    URL = "/api/v1/accounting/driver-invoices/analysis/"
+
+    def _params(self, **extra):
+        return {"date_begin": str(self.TODAY), "date_end": str(self.TODAY), **extra}
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.get(self.URL, self._params())
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_missing_date_begin_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.get(self.URL, {"date_end": str(self.TODAY)})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_missing_date_end_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.get(self.URL, {"date_begin": str(self.TODAY)})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_returns_invoices_in_date_range(self, auth_client):
+        client, _ = auth_client
+        inv = DriverInvoiceFactory(date=self.TODAY)
+        response = client.get(self.URL, self._params())
+        assert response.status_code == status.HTTP_200_OK
+        ids = [r["id"] for r in response.data]
+        assert inv.id in ids
+
+    def test_excludes_invoices_outside_range(self, auth_client):
+        client, _ = auth_client
+        old_date = self.TODAY - datetime.timedelta(days=10)
+        inv = DriverInvoiceFactory(date=old_date)
+        response = client.get(self.URL, self._params())
+        assert response.status_code == status.HTTP_200_OK
+        ids = [r["id"] for r in response.data]
+        assert inv.id not in ids
+
+    def test_row_has_financial_fields(self, auth_client):
+        client, _ = auth_client
+        DriverInvoiceFactory(date=self.TODAY)
+        response = client.get(self.URL, self._params())
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) >= 1
+        row = response.data[0]
+        for key in (
+            "id",
+            "number",
+            "date",
+            "driver_name",
+            "carrier_name",
+            "dispatcher_names",
+            "load_count",
+            "gross",
+            "net",
+            "acc_90010",
+            "acc_90011",
+            "acc_80030",
+            "acc_80084",
+        ):
+            assert key in row, f"Missing field: {key}"
+
+    def test_filter_by_driver(self, auth_client):
+        client, _ = auth_client
+        driver_a = DriverFactory()
+        driver_b = DriverFactory()
+        inv_a = DriverInvoiceFactory(date=self.TODAY, driver=driver_a)
+        inv_b = DriverInvoiceFactory(date=self.TODAY, driver=driver_b)
+        response = client.get(self.URL, self._params(driver=driver_a.id))
+        assert response.status_code == status.HTTP_200_OK
+        ids = [r["id"] for r in response.data]
+        assert inv_a.id in ids
+        assert inv_b.id not in ids
+
+    def test_filter_by_carrier(self, auth_client):
+        client, _ = auth_client
+        carrier_a = CarrierFactory()
+        carrier_b = CarrierFactory()
+        driver_a = DriverFactory(carrier=carrier_a)
+        driver_b = DriverFactory(carrier=carrier_b)
+        inv_a = DriverInvoiceFactory(date=self.TODAY, driver=driver_a)
+        inv_b = DriverInvoiceFactory(date=self.TODAY, driver=driver_b)
+        response = client.get(self.URL, self._params(carrier=carrier_a.id))
+        assert response.status_code == status.HTTP_200_OK
+        ids = [r["id"] for r in response.data]
+        assert inv_a.id in ids
+        assert inv_b.id not in ids
+
+    def test_filter_by_dispatcher(self, auth_client):
+        client, _ = auth_client
+        disp = UserFactory()
+        inv = DriverInvoiceFactory(date=self.TODAY, load_list="")
+        load = LoadFactory(dispatcher=disp)
+        inv.load_list = str(load.id)
+        inv.save()
+        other_inv = DriverInvoiceFactory(date=self.TODAY, load_list="")
+        response = client.get(self.URL, self._params(dispatcher=disp.id))
+        assert response.status_code == status.HTTP_200_OK
+        ids = [r["id"] for r in response.data]
+        assert inv.id in ids
+        assert other_inv.id not in ids
+
+    def test_load_count_reflects_load_list(self, auth_client):
+        client, _ = auth_client
+        load1 = LoadFactory()
+        load2 = LoadFactory()
+        load3 = LoadFactory()
+        inv = DriverInvoiceFactory(
+            date=self.TODAY, load_list=f"|{load1.id}|{load2.id}|{load3.id}|"
+        )
+        response = client.get(self.URL, self._params())
+        row = next(r for r in response.data if r["id"] == inv.id)
+        assert row["load_count"] == 3
+
+    def test_aggregated_account_amounts(self, auth_client):
+        client, _ = auth_client
+        acct, _ = Account.objects.get_or_create(
+            code="90010", defaults={"name": "Income by Rate"}
+        )
+        inv = DriverInvoiceFactory(date=self.TODAY, load_list="")
+        load = LoadFactory(payment=5000.0)
+        inv.load_list = str(load.id)
+        inv.save()
+        Record.objects.create(
+            date=self.TODAY, account=acct, amount=5000.0, load=load, is_automatic=True
+        )
+        response = client.get(self.URL, self._params())
+        row = next(r for r in response.data if r["id"] == inv.id)
+        assert row["acc_90010"] == 5000.0
+        assert row["gross"] == 5000.0
