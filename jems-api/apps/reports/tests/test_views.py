@@ -998,6 +998,161 @@ class TestCategoryTrackingReport:
         assert len(data["rows"]) == 1
         assert data["total_amount"] == pytest.approx(500.0)
 
+    def test_trailer_filter_works(self, api_client, db):
+        from apps.fleet.models import Trailer, TrailerType
+
+        account = _make_account("80061", "Parts2")
+        trailer_type = TrailerType.objects.create(name="Flatbed", short_name="FB")
+        trailer = Trailer.objects.create(
+            number="TR01", trailer_type=trailer_type, status=1
+        )
+        other_trailer = Trailer.objects.create(
+            number="TR02", trailer_type=trailer_type, status=1
+        )
+        RecordFactory(
+            account=account,
+            amount=100.0,
+            date=datetime.date(2024, 1, 1),
+            follow=1,
+            progress=0,
+            trailer=trailer,
+        )
+        RecordFactory(
+            account=account,
+            amount=300.0,
+            date=datetime.date(2024, 1, 1),
+            follow=1,
+            progress=0,
+            trailer=other_trailer,
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "trailer": str(trailer.pk),
+            },
+        )
+        data = resp.json()
+        assert len(data["rows"]) == 1
+        assert data["total_amount"] == pytest.approx(100.0)
+
+    def test_category_filter_works(self, api_client, db):
+        from apps.accounting.tests.factories import CategoryFactory
+
+        account = _make_account("80062", "Parts3")
+        cat = CategoryFactory()
+        other_cat = CategoryFactory()
+        RecordFactory(
+            account=account,
+            amount=50.0,
+            date=datetime.date(2024, 1, 1),
+            follow=1,
+            progress=0,
+            category=cat,
+        )
+        RecordFactory(
+            account=account,
+            amount=75.0,
+            date=datetime.date(2024, 1, 1),
+            follow=1,
+            progress=0,
+            category=other_cat,
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "category": str(cat.pk),
+            },
+        )
+        data = resp.json()
+        assert len(data["rows"]) == 1
+        assert data["total_amount"] == pytest.approx(50.0)
+
+    def test_position_filter_works(self, api_client, db):
+        from apps.users.tests.factories import PositionFactory
+
+        account = _make_account("80063", "Parts4")
+        pos = PositionFactory()
+        other_pos = PositionFactory()
+        RecordFactory(
+            account=account,
+            amount=80.0,
+            date=datetime.date(2024, 1, 1),
+            follow=1,
+            progress=0,
+            position=pos.pk,
+        )
+        RecordFactory(
+            account=account,
+            amount=120.0,
+            date=datetime.date(2024, 1, 1),
+            follow=1,
+            progress=0,
+            position=other_pos.pk,
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "position": str(pos.pk),
+            },
+        )
+        data = resp.json()
+        assert len(data["rows"]) == 1
+        assert data["total_amount"] == pytest.approx(80.0)
+
+    def test_row_fields_include_truck_trailer_category_position_account(
+        self, api_client, db
+    ):
+        from apps.accounting.tests.factories import CategoryFactory, CategoryTypeFactory
+        from apps.fleet.models import Trailer, TrailerType, TruckType
+        from apps.users.tests.factories import PositionFactory
+
+        account = _make_account("80064", "Parts5")
+        ct = CategoryTypeFactory(unit_of_measure="Unit")
+        cat = CategoryFactory(category_type=ct, name="Oil Filter", code="OF001")
+        truck_type = TruckType.objects.create(name="Truck Type A")
+        truck = Truck.objects.create(number="T010", truck_type=truck_type, status=1)
+        trailer_type = TrailerType.objects.create(name="Type B", short_name="B")
+        trailer = Trailer.objects.create(
+            number="TR10", trailer_type=trailer_type, status=1
+        )
+        pos = PositionFactory(name="Steer Axle")
+        RecordFactory(
+            account=account,
+            amount=99.0,
+            quantity=3.0,
+            date=datetime.date(2024, 3, 15),
+            follow=1,
+            progress=0,
+            truck=truck,
+            trailer=trailer,
+            category=cat,
+            position=pos.pk,
+        )
+        resp = api_client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        data = resp.json()
+        assert len(data["rows"]) == 1
+        row = data["rows"][0]
+        assert "truck" in row
+        assert "T010" in row["truck"]
+        assert "trailer" in row
+        assert "TR10" in row["trailer"]
+        assert "category" in row
+        assert "Oil Filter" in row["category"]
+        assert "Unit" in row["category"]
+        assert "position" in row
+        assert row["position"] == "Steer Axle"
+        assert "account" in row
+        assert row["quantity"] == pytest.approx(3.0)
+        assert row["amount"] == pytest.approx(99.0)
+
 
 # ---------------------------------------------------------------------------
 # Broker Summary report

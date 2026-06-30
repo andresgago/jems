@@ -20,6 +20,7 @@ user_photo = UserViewSet.as_view({"post": "photo", "delete": "photo"})
 
 position_list = PositionViewSet.as_view({"get": "list", "post": "create"})
 position_detail = PositionViewSet.as_view({"patch": "partial_update"})
+position_options = PositionViewSet.as_view({"get": "options"})
 system_config = SystemConfigViewSet.as_view(
     {"get": "retrieve", "patch": "partial_update"}
 )
@@ -44,6 +45,7 @@ urlpatterns = [
         "<int:pk>/change-password/", user_change_password, name="user-change-password"
     ),
     path("<int:pk>/photo/", user_photo, name="user-photo"),
+    path("positions/options/", position_options, name="position-options"),
     path("positions/", position_list, name="position-list"),
     path("positions/<int:pk>/", position_detail, name="position-detail"),
 ]

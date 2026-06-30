@@ -417,6 +417,12 @@ resp="$(get "/api/v1/users/positions/")"
 assert_status "position list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "position listed" "$(body "$resp")" "Dispatcher"
 
+step "Positions: options"
+resp="$(get "/api/v1/users/positions/options/")"
+assert_status "position options" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "position options has id" "$(body "$resp")" '"id"'
+assert_contains "position options has name" "$(body "$resp")" '"name"'
+
 step "Positions: update"
 resp="$(patch "/api/v1/users/positions/${POSITION_ID}/" '{"name":"Senior Dispatcher"}')"
 assert_status "position update" "200" "$(code "$resp")" "$(body "$resp")"
@@ -2547,6 +2553,20 @@ resp="$(get "/api/v1/reports/category-tracking/?date_begin=${REPORT_DATE_BEGIN}&
 assert_status "category-tracking report" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "category-tracking has rows" "$(body "$resp")" '"rows"'
 assert_contains "category-tracking has total_amount" "$(body "$resp")" '"total_amount"'
+assert_contains "category-tracking has total_quantity" "$(body "$resp")" '"total_quantity"'
+
+step "Reports: category-tracking missing dates returns 400"
+resp="$(get "/api/v1/reports/category-tracking/")"
+assert_status "category-tracking missing dates" "400" "$(code "$resp")" "$(body "$resp")"
+
+step "Categories: search returns results for query >= 3 chars"
+resp="$(get "/api/v1/accounting/categories/search/?q=Oil")"
+assert_status "category search" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Categories: search returns empty for query < 3 chars"
+resp="$(get "/api/v1/accounting/categories/search/?q=Oi")"
+assert_status "category search short query" "200" "$(code "$resp")" "$(body "$resp")"
+assert_not_contains "category search short is empty (no id key)" "$(body "$resp")" '"id"'
 
 step "Reports: broker-summary returns keys"
 resp="$(get "/api/v1/reports/broker-summary/?year=${REPORT_YEAR}")"

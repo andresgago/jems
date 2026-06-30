@@ -24,6 +24,7 @@ category_list = CategoryViewSet.as_view({"get": "list", "post": "create"})
 category_detail = CategoryViewSet.as_view(
     {"get": "retrieve", "put": "update", "patch": "update"}
 )
+category_search = CategoryViewSet.as_view({"get": "search"})
 
 # Records
 record_list = RecordViewSet.as_view({"get": "list", "post": "create"})
@@ -56,6 +57,7 @@ urlpatterns = [
     path("accounts/", account_list, name="account-list"),
     path("accounts/<int:pk>/", account_detail, name="account-detail"),
     path("category-types/", category_type_list, name="category-type-list"),
+    path("categories/search/", category_search, name="category-search"),
     path("categories/", category_list, name="category-list"),
     path("categories/<int:pk>/", category_detail, name="category-detail"),
     path("records/", record_list, name="record-list"),

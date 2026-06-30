@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -123,6 +125,41 @@ class CategoryViewSet(ViewSet):
         serializer.is_valid(raise_exception=True)
         category = update_category(category=category, **serializer.validated_data)
         return Response(CategorySerializer(category).data)
+
+    @action(detail=False, methods=["get"], url_path="search")
+    def search(self, request: "Request") -> Response:
+        q = request.query_params.get("q", "").strip()
+        if len(q) < 3:
+            return Response([])
+        qs = (
+            (
+                Category.objects.select_related("category_type")
+                .filter(is_active=True)
+                .filter(name__icontains=q)
+                | Category.objects.select_related("category_type")
+                .filter(is_active=True)
+                .filter(code__icontains=q)
+            )
+            .distinct()
+            .order_by("name")
+        )
+        data = [
+            {
+                "id": cat.pk,
+                "label": (
+                    f"{cat.name} - {cat.code}"
+                    + (
+                        f" ({cat.category_type.unit_of_measure})"
+                        if cat.category_type and cat.category_type.unit_of_measure
+                        else ""
+                    )
+                ),
+                "name": cat.name,
+                "code": cat.code,
+            }
+            for cat in qs
+        ]
+        return Response(data)
 
 
 class RecordViewSet(ViewSet):

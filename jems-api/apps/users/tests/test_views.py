@@ -215,3 +215,48 @@ class TestDisplayOptionsEndpoint:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["driver"] == "name,phone"
+
+
+# ── Position options ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestPositionOptions:
+    url = "/api/v1/users/positions/options/"
+
+    def test_unauthenticated_rejected(self, api_client):
+        response = api_client.get(self.url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_returns_active_positions(self, auth_client):
+        client, _ = auth_client
+        from apps.users.tests.factories import PositionFactory
+
+        pos1 = PositionFactory(name="Steer Axle")
+        PositionFactory(name="Rear Axle", is_active=False)
+        response = client.get(self.url)
+        assert response.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in response.data]
+        assert pos1.pk in ids
+        assert all(item.get("name") for item in response.data)
+
+    def test_inactive_positions_excluded(self, auth_client):
+        client, _ = auth_client
+        from apps.users.tests.factories import PositionFactory
+
+        PositionFactory(name="Inside", is_active=False)
+        response = client.get(self.url)
+        assert response.status_code == status.HTTP_200_OK
+        names = [item["name"] for item in response.data]
+        assert "Inside" not in names
+
+    def test_response_shape_has_id_and_name(self, auth_client):
+        client, _ = auth_client
+        from apps.users.tests.factories import PositionFactory
+
+        PositionFactory(name="Both Side")
+        response = client.get(self.url)
+        assert response.status_code == status.HTTP_200_OK
+        if response.data:
+            assert "id" in response.data[0]
+            assert "name" in response.data[0]

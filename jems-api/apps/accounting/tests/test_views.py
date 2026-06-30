@@ -331,3 +331,70 @@ class TestOwnerInvoiceClose:
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == OwnerInvoice.Status.CLOSED
+
+
+# ── Category search ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestCategorySearch:
+    url = "/api/v1/accounting/categories/search/"
+
+    def test_unauthenticated_rejected(self, api_client):
+        response = api_client.get(self.url, {"q": "oil"})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_short_query_returns_empty(self, auth_client):
+        client, _ = auth_client
+        CategoryFactory(name="Oil Filter", code="OF001")
+        response = client.get(self.url, {"q": "oi"})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_matches_by_name(self, auth_client):
+        client, _ = auth_client
+        CategoryFactory(name="Oil Filter", code="OF001")
+        CategoryFactory(name="Brake Shoe", code="BS001")
+        response = client.get(self.url, {"q": "oil"})
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert response.data[0]["name"] == "Oil Filter"
+
+    def test_matches_by_code(self, auth_client):
+        client, _ = auth_client
+        CategoryFactory(name="Fuel Filter", code="FF001")
+        CategoryFactory(name="Oil Change", code="OC002")
+        response = client.get(self.url, {"q": "FF0"})
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert response.data[0]["code"] == "FF001"
+
+    def test_includes_unit_of_measure_in_label(self, auth_client):
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory(unit_of_measure="Gallons")
+        CategoryFactory(name="Transmission Oil", code="TO001", category_type=ct)
+        response = client.get(self.url, {"q": "Trans"})
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert "Gallons" in response.data[0]["label"]
+
+    def test_excludes_inactive_categories(self, auth_client):
+        client, _ = auth_client
+        CategoryFactory(name="Old Part", code="OP001", is_active=False)
+        response = client.get(self.url, {"q": "Old"})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_response_has_id_label_name_code_fields(self, auth_client):
+        client, _ = auth_client
+        CategoryFactory(name="Air Filter", code="AIR001")
+        response = client.get(self.url, {"q": "Air"})
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        item = response.data[0]
+        assert "id" in item
+        assert "label" in item
+        assert "name" in item
+        assert "code" in item

@@ -932,6 +932,7 @@ def get_category_tracking_report(
             "truck",
             "trailer",
             "category",
+            "category__category_type",
             "account",
         )
         .filter(follow=1, progress=0, date__range=[date_begin, date_end])
@@ -972,11 +973,11 @@ def get_category_tracking_report(
             f"{record.trailer.number} - {record.trailer.vin}" if record.trailer else "-"
         )
         if record.category:
-            unit = ""
-            if record.category.category_type and hasattr(
-                record.category.category_type, "unit_of_measure"
-            ):
-                unit = record.category.category_type.unit_of_measure
+            unit = (
+                record.category.category_type.unit_of_measure
+                if record.category.category_type
+                else ""
+            )
             category_label = f"{record.category.name} - {record.category.code} ({unit})"
         else:
             category_label = "-"

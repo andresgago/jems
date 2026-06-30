@@ -211,3 +211,8 @@ class PositionViewSet(ViewSet):
             setattr(pos, field, value)
         pos.save()
         return Response(PositionSerializer(pos).data)
+
+    @action(detail=False, methods=["get"], url_path="options")
+    def options(self, request: Request) -> Response:
+        qs = Position.objects.filter(is_active=True).order_by("name")
+        return Response([{"id": p.pk, "name": p.name} for p in qs])
