@@ -122,9 +122,45 @@ def get_truck_total_miles_since_reset(truck: Truck) -> float:
     )
     qs = Load.objects.filter(truck=truck)
     if last_reset:
-        qs = qs.filter(dropoff_date__date__gt=last_reset.date)
+        qs = qs.filter(dropoff_date__date__gt=last_reset.date.date())
     result = qs.aggregate(total=Sum("miles") + Sum("miles_empty"))
     return result["total"] or 0.0
+
+
+def add_truck_miles_reset(*, truck: Truck, date: datetime.datetime) -> TruckMilesReset:
+    _validate_truck_miles_reset_unique(truck=truck, date=date)
+    reset = TruckMilesReset(truck=truck, date=date)
+    reset.full_clean()
+    reset.save()
+    return reset
+
+
+def update_truck_miles_reset(*, reset: TruckMilesReset, **fields) -> TruckMilesReset:
+    truck = fields.get("truck", reset.truck)
+    date = fields.get("date", reset.date)
+    if truck != reset.truck or date != reset.date:
+        _validate_truck_miles_reset_unique(truck=truck, date=date, exclude_pk=reset.pk)
+    for field, value in fields.items():
+        setattr(reset, field, value)
+    reset.full_clean()
+    reset.save()
+    return reset
+
+
+def delete_truck_miles_reset(*, reset: TruckMilesReset) -> None:
+    reset.delete()
+
+
+def _validate_truck_miles_reset_unique(
+    *, truck: Truck, date: datetime.datetime, exclude_pk: int | None = None
+) -> None:
+    qs = TruckMilesReset.objects.filter(truck=truck, date=date)
+    if exclude_pk is not None:
+        qs = qs.exclude(pk=exclude_pk)
+    if qs.exists():
+        from rest_framework.exceptions import ValidationError
+
+        raise ValidationError({"date": "The Miles Reset Exist"})
 
 
 def is_last_truck_maintenance(maintenance: TruckMaintenance) -> bool:

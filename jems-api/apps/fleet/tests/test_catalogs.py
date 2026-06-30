@@ -13,7 +13,12 @@ from apps.fleet.models import (
     TrailerType,
     TruckMilesReset,
 )
-from apps.fleet.tests.factories import TrailerTypeFactory, TruckFactory, UserFactory
+from apps.fleet.tests.factories import (
+    TrailerTypeFactory,
+    TruckFactory,
+    TruckMilesResetFactory,
+    UserFactory,
+)
 
 
 @pytest.fixture
@@ -191,20 +196,54 @@ class TestTruckMilesReset:
     def test_list_resets(self, auth_client):
         client, _ = auth_client
         truck = TruckFactory()
-        TruckMilesReset.objects.create(truck=truck, date=datetime.date(2024, 1, 15))
+        TruckMilesResetFactory(
+            truck=truck,
+            date=datetime.datetime(2024, 1, 15, tzinfo=datetime.timezone.utc),
+        )
         response = client.get(reverse("truck-miles-reset-list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
+        assert response.data[0]["truck_number"]
+        assert "is_last_reset" in response.data[0]
 
     def test_filter_by_truck(self, auth_client):
         client, _ = auth_client
         truck = TruckFactory()
         other = TruckFactory()
-        TruckMilesReset.objects.create(truck=truck, date=datetime.date(2024, 1, 15))
-        TruckMilesReset.objects.create(truck=other, date=datetime.date(2024, 2, 1))
+        TruckMilesResetFactory(
+            truck=truck,
+            date=datetime.datetime(2024, 1, 15, tzinfo=datetime.timezone.utc),
+        )
+        TruckMilesResetFactory(
+            truck=other,
+            date=datetime.datetime(2024, 2, 1, tzinfo=datetime.timezone.utc),
+        )
         response = client.get(reverse("truck-miles-reset-list") + f"?truck={truck.pk}")
         assert response.status_code == status.HTTP_200_OK
         assert all(r["truck"] == truck.pk for r in response.data)
+
+    def test_filter_by_date_only_when_search_mode_by_date(self, auth_client):
+        client, _ = auth_client
+        TruckMilesResetFactory(
+            date=datetime.datetime(2024, 1, 15, tzinfo=datetime.timezone.utc)
+        )
+        TruckMilesResetFactory(
+            date=datetime.datetime(2024, 2, 15, tzinfo=datetime.timezone.utc)
+        )
+
+        ignored = client.get(
+            reverse("truck-miles-reset-list")
+            + "?date_from=2024-02-01&date_to=2024-02-28"
+        )
+        filtered = client.get(
+            reverse("truck-miles-reset-list")
+            + "?search=1&date_from=2024-02-01&date_to=2024-02-28"
+        )
+
+        assert ignored.status_code == status.HTTP_200_OK
+        assert len(ignored.data) >= 2
+        assert filtered.status_code == status.HTTP_200_OK
+        assert len(filtered.data) == 1
 
     def test_create_reset(self, auth_client):
         client, _ = auth_client
@@ -215,14 +254,57 @@ class TestTruckMilesReset:
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["truck"] == truck.pk
+        assert response.data["date"].startswith("2024-06-01")
+
+    def test_duplicate_reset_rejected(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        TruckMilesResetFactory(
+            truck=truck,
+            date=datetime.datetime(2024, 6, 1, tzinfo=datetime.timezone.utc),
+        )
+        response = client.post(
+            reverse("truck-miles-reset-list"),
+            {"truck": truck.pk, "date": "2024-06-01"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_retrieve_and_update_reset(self, auth_client):
+        client, _ = auth_client
+        reset = TruckMilesResetFactory()
+
+        retrieve = client.get(
+            reverse("truck-miles-reset-detail", kwargs={"pk": reset.pk})
+        )
+        update = client.patch(
+            reverse("truck-miles-reset-detail", kwargs={"pk": reset.pk}),
+            {"date": "2024-07-01T12:30:00Z"},
+            format="json",
+        )
+
+        assert retrieve.status_code == status.HTTP_200_OK
+        assert update.status_code == status.HTTP_200_OK
+        assert update.data["date"].startswith("2024-07-01T12:30:00")
 
     def test_delete_reset(self, auth_client):
         client, _ = auth_client
         truck = TruckFactory()
-        reset = TruckMilesReset.objects.create(
-            truck=truck, date=datetime.date(2024, 1, 15)
-        )
+        reset = TruckMilesResetFactory(truck=truck)
         response = client.delete(
             reverse("truck-miles-reset-detail", kwargs={"pk": reset.pk})
         )
         assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_bulk_delete_reset(self, auth_client):
+        client, _ = auth_client
+        first = TruckMilesResetFactory()
+        second = TruckMilesResetFactory()
+
+        response = client.post(
+            reverse("truck-miles-reset-bulk-delete"),
+            {"ids": [first.pk, second.pk]},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not TruckMilesReset.objects.filter(pk__in=[first.pk, second.pk]).exists()

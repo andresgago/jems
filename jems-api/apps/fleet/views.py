@@ -1,5 +1,6 @@
 from typing import Any, ClassVar
 
+from django.db.models import Max
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -775,18 +776,69 @@ class TruckMilesResetViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request: Request) -> Response:
-        qs = TruckMilesReset.objects.select_related("truck").all()
+        qs = TruckMilesReset.objects.select_related("truck").order_by("-date", "-id")
         truck_id = request.query_params.get("truck")
         if truck_id:
             qs = qs.filter(truck_id=truck_id)
-        return Response(TruckMilesResetSerializer(qs, many=True).data)
+        search_mode = request.query_params.get("search", "3")
+        if search_mode == "1":
+            date_from = request.query_params.get("date_from")
+            date_to = request.query_params.get("date_to")
+            if date_from:
+                qs = qs.filter(date__date__gte=date_from)
+            if date_to:
+                qs = qs.filter(date__date__lte=date_to)
+        latest_ids = _latest_miles_reset_ids(qs)
+        return Response(
+            TruckMilesResetSerializer(
+                qs, many=True, context={"latest_reset_ids": latest_ids}
+            ).data
+        )
+
+    def retrieve(self, request: Request, pk: int) -> Response:
+        try:
+            reset = TruckMilesReset.objects.select_related("truck").get(pk=pk)
+        except TruckMilesReset.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        latest = (
+            TruckMilesReset.objects.filter(truck=reset.truck)
+            .order_by("-date", "-id")
+            .first()
+        )
+        latest_ids = {latest.pk} if latest else set()
+        return Response(
+            TruckMilesResetSerializer(
+                reset, context={"latest_reset_ids": latest_ids}
+            ).data
+        )
 
     def create(self, request: Request) -> Response:
         serializer = TruckMilesResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        reset = TruckMilesReset.objects.create(**serializer.validated_data)
+        fields = dict(serializer.validated_data)
+        truck = fields.pop("truck")
+        reset = services.add_truck_miles_reset(truck=truck, **fields)
         return Response(
-            TruckMilesResetSerializer(reset).data, status=status.HTTP_201_CREATED
+            TruckMilesResetSerializer(
+                TruckMilesReset.objects.select_related("truck").get(pk=reset.pk)
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def partial_update(self, request: Request, pk: int) -> Response:
+        try:
+            reset = TruckMilesReset.objects.select_related("truck").get(pk=pk)
+        except TruckMilesReset.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = TruckMilesResetSerializer(reset, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        reset = services.update_truck_miles_reset(
+            reset=reset, **dict(serializer.validated_data)
+        )
+        return Response(
+            TruckMilesResetSerializer(
+                TruckMilesReset.objects.select_related("truck").get(pk=reset.pk)
+            ).data
         )
 
     def destroy(self, request: Request, pk: int) -> Response:
@@ -794,5 +846,35 @@ class TruckMilesResetViewSet(ViewSet):
             reset = TruckMilesReset.objects.get(pk=pk)
         except TruckMilesReset.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        reset.delete()
+        services.delete_truck_miles_reset(reset=reset)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request: Request) -> Response:
+        pks = request.data.get("ids", [])
+        if not pks:
+            return Response(
+                {"detail": "No ids provided."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        TruckMilesReset.objects.filter(pk__in=pks).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _latest_miles_reset_ids(qs) -> set[int]:
+    truck_ids = qs.values_list("truck_id", flat=True).distinct()
+    truck_latest_dates = (
+        TruckMilesReset.objects.filter(truck_id__in=truck_ids)
+        .values("truck_id")
+        .annotate(latest_date=Max("date"))
+        .values_list("truck_id", "latest_date")
+    )
+    latest_ids: set[int] = set()
+    for truck_id, latest_date in truck_latest_dates:
+        latest = (
+            TruckMilesReset.objects.filter(truck_id=truck_id, date=latest_date)
+            .order_by("-id")
+            .first()
+        )
+        if latest:
+            latest_ids.add(latest.pk)
+    return latest_ids

@@ -505,12 +505,12 @@ class TruckMilesReset(models.Model):
     truck = models.ForeignKey(
         Truck, on_delete=models.CASCADE, related_name="miles_resets"
     )
-    date = models.DateField()
+    date = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "truck_miles_reset"
-        ordering = ["-date"]
+        ordering = ["-date", "-id"]
 
     def __str__(self) -> str:
         return f"{self.truck} reset on {self.date}"

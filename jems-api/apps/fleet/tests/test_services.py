@@ -13,6 +13,7 @@ from apps.fleet.models import (
 from apps.fleet.services import (
     add_trailer_maintenance,
     add_truck_maintenance,
+    add_truck_miles_reset,
     clear_trailer_file,
     clear_truck_file,
     create_trailer,
@@ -34,6 +35,7 @@ from apps.fleet.services import (
     update_trailer_maintenance,
     update_truck,
     update_truck_maintenance,
+    update_truck_miles_reset,
 )
 from apps.fleet.tests.factories import (
     TrailerFactory,
@@ -417,7 +419,10 @@ class TestGetTruckTotalMilesSinceReset:
         import django.utils.timezone as tz
 
         truck = TruckFactory()
-        TruckMilesResetFactory(truck=truck, date=datetime.date(2024, 2, 1))
+        TruckMilesResetFactory(
+            truck=truck,
+            date=datetime.datetime(2024, 2, 1, tzinfo=datetime.timezone.utc),
+        )
         LoadFactory(
             truck=truck,
             miles=100.0,
@@ -451,6 +456,47 @@ class TestIsLastTruckMaintenance:
         TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 1, 1))
         m2 = TruckMaintenanceFactory(truck=truck, date=datetime.date(2024, 2, 1))
         assert is_last_truck_maintenance(m2) is True
+
+
+@pytest.mark.django_db
+class TestTruckMilesResetServices:
+    def test_add_creates_datetime_reset(self):
+        truck = TruckFactory()
+        date = datetime.datetime(2024, 4, 1, 9, 30, tzinfo=datetime.timezone.utc)
+
+        reset = add_truck_miles_reset(truck=truck, date=date)
+
+        assert reset.pk is not None
+        assert reset.truck == truck
+        assert reset.date == date
+
+    def test_duplicate_exact_truck_datetime_raises(self):
+        truck = TruckFactory()
+        date = datetime.datetime(2024, 4, 1, tzinfo=datetime.timezone.utc)
+        TruckMilesResetFactory(truck=truck, date=date)
+
+        with pytest.raises(ValidationError):
+            add_truck_miles_reset(truck=truck, date=date)
+
+    def test_same_datetime_allowed_for_different_trucks(self):
+        date = datetime.datetime(2024, 4, 1, tzinfo=datetime.timezone.utc)
+        TruckMilesResetFactory(date=date)
+
+        reset = add_truck_miles_reset(truck=TruckFactory(), date=date)
+
+        assert reset.pk is not None
+
+    def test_update_duplicate_exact_datetime_raises(self):
+        truck = TruckFactory()
+        date = datetime.datetime(2024, 4, 1, tzinfo=datetime.timezone.utc)
+        target = TruckMilesResetFactory(
+            truck=truck,
+            date=datetime.datetime(2024, 5, 1, tzinfo=datetime.timezone.utc),
+        )
+        TruckMilesResetFactory(truck=truck, date=date)
+
+        with pytest.raises(ValidationError):
+            update_truck_miles_reset(reset=target, date=date)
 
 
 # ── TrailerMaintenance services ───────────────────────────────────────────────

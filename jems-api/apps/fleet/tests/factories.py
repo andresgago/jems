@@ -121,7 +121,8 @@ class TruckMilesResetFactory(DjangoModelFactory):
 
     truck = factory.SubFactory(TruckFactory)
     date = factory.Sequence(
-        lambda n: datetime.date(2024, 1, 1) + datetime.timedelta(days=n * 30)
+        lambda n: datetime.datetime(2024, 1, 1, tzinfo=UTC)
+        + datetime.timedelta(days=n * 30)
     )
 
 

@@ -690,17 +690,43 @@ resp="$(delete "/api/v1/fleet/trucks/${TRUCK_ID}/files/avi/")"
 assert_status "truck file clear" "200" "$(code "$resp")" "$(body "$resp")"
 
 step "Fleet: miles reset create"
-resp="$(post "/api/v1/fleet/miles-resets/" "{\"truck\":${TRUCK_ID},\"date\":\"2024-01-01\"}")"
+resp="$(post "/api/v1/fleet/miles-resets/" "{\"truck\":${TRUCK_ID},\"date\":\"2024-01-01T00:00:00Z\"}")"
 assert_status "miles reset create" "201" "$(code "$resp")" "$(body "$resp")"
+assert_contains "miles reset has truck number" "$(body "$resp")" '"truck_number"'
+assert_contains "miles reset has last flag" "$(body "$resp")" '"is_last_reset"'
 MILES_RESET_ID="$(body "$resp" | json_get_num id)"
 
 step "Fleet: miles reset filter by truck"
 resp="$(get "/api/v1/fleet/miles-resets/?truck=${TRUCK_ID}")"
 assert_status "miles reset filter" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "miles reset filter has datetime" "$(body "$resp")" '2024-01-01'
 
-step "Fleet: miles reset delete"
-resp="$(delete "/api/v1/fleet/miles-resets/${MILES_RESET_ID}/")"
-assert_status "miles reset delete" "204" "$(code "$resp")"
+step "Fleet: miles reset retrieve"
+resp="$(get "/api/v1/fleet/miles-resets/${MILES_RESET_ID}/")"
+assert_status "miles reset retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "miles reset retrieve has truck status" "$(body "$resp")" '"truck_status"'
+
+step "Fleet: miles reset patch"
+resp="$(patch "/api/v1/fleet/miles-resets/${MILES_RESET_ID}/" '{"date":"2024-01-02T12:30:00Z"}')"
+assert_status "miles reset patch" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "miles reset patched date" "$(body "$resp")" '2024-01-02'
+
+step "Fleet: miles reset duplicate rejected"
+resp="$(post "/api/v1/fleet/miles-resets/" "{\"truck\":${TRUCK_ID},\"date\":\"2024-01-02T12:30:00Z\"}")"
+assert_status "miles reset duplicate" "400" "$(code "$resp")"
+
+step "Fleet: miles reset bulk-delete empty rejected"
+resp="$(post "/api/v1/fleet/miles-resets/bulk-delete/" '{"ids":[]}')"
+assert_status "miles reset empty bulk-delete" "400" "$(code "$resp")"
+
+step "Fleet: miles reset create second for bulk-delete"
+resp="$(post "/api/v1/fleet/miles-resets/" "{\"truck\":${TRUCK_ID},\"date\":\"2024-01-03T00:00:00Z\"}")"
+assert_status "miles reset second create" "201" "$(code "$resp")" "$(body "$resp")"
+MILES_RESET_ID_2="$(body "$resp" | json_get_num id)"
+
+step "Fleet: miles reset bulk-delete"
+resp="$(post "/api/v1/fleet/miles-resets/bulk-delete/" "{\"ids\":[${MILES_RESET_ID},${MILES_RESET_ID_2}]}")"
+assert_status "miles reset bulk-delete" "204" "$(code "$resp")"
 
 # ── Standalone truck maintenance endpoint ─────────────────────────────────────
 step "Fleet: standalone truck maintenance create"

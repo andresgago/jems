@@ -1,3 +1,6 @@
+import datetime
+import re
+
 from rest_framework import serializers
 
 from .models import (
@@ -19,6 +22,22 @@ from .models import (
     TruckOwner,
     TruckType,
 )
+
+
+class LegacyFlexibleDateTimeField(serializers.DateTimeField):
+    """Accept legacy date-only input while preserving datetime storage."""
+
+    DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("default_timezone", datetime.timezone.utc)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, value):
+        if isinstance(value, str) and self.DATE_ONLY_RE.match(value):
+            year, month, day = (int(part) for part in value.split("-"))
+            return datetime.datetime(year, month, day, tzinfo=datetime.timezone.utc)
+        return super().to_internal_value(value)
 
 
 class TruckTypeSerializer(serializers.ModelSerializer):
@@ -513,7 +532,33 @@ class LossPayeeSerializer(serializers.ModelSerializer):
 
 
 class TruckMilesResetSerializer(serializers.ModelSerializer):
+    date = LegacyFlexibleDateTimeField()
+    truck_number = serializers.CharField(source="truck.number", read_only=True)
+    truck_vin = serializers.CharField(source="truck.vin", read_only=True)
+    truck_status = serializers.IntegerField(source="truck.status", read_only=True)
+    is_last_reset = serializers.SerializerMethodField()
+
+    def get_is_last_reset(self, obj: TruckMilesReset) -> bool:
+        latest_ids = self.context.get("latest_reset_ids")
+        if latest_ids is not None:
+            return obj.pk in latest_ids
+        latest = (
+            TruckMilesReset.objects.filter(truck=obj.truck)
+            .order_by("-date", "-id")
+            .first()
+        )
+        return latest is not None and latest.pk == obj.pk
+
     class Meta:
         model = TruckMilesReset
-        fields = ["id", "truck", "date", "created_at"]
+        fields = [
+            "id",
+            "truck",
+            "truck_number",
+            "truck_vin",
+            "truck_status",
+            "date",
+            "is_last_reset",
+            "created_at",
+        ]
         read_only_fields = ["id", "created_at"]

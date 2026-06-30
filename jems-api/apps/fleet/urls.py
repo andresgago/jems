@@ -78,7 +78,10 @@ accident_picture_detail = AccidentViewSet.as_view({"delete": "delete_picture"})
 
 # Miles reset
 miles_reset_list = TruckMilesResetViewSet.as_view({"get": "list", "post": "create"})
-miles_reset_detail = TruckMilesResetViewSet.as_view({"delete": "destroy"})
+miles_reset_bulk_delete = TruckMilesResetViewSet.as_view({"post": "bulk_delete"})
+miles_reset_detail = TruckMilesResetViewSet.as_view(
+    {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+)
 
 # Standalone truck maintenance
 truck_maint_list = TruckMaintenanceViewSet.as_view({"get": "list", "post": "create"})
@@ -161,6 +164,11 @@ urlpatterns = [
         name="accident-picture-detail",
     ),
     # Miles reset
+    path(
+        "miles-resets/bulk-delete/",
+        miles_reset_bulk_delete,
+        name="truck-miles-reset-bulk-delete",
+    ),
     path("miles-resets/", miles_reset_list, name="truck-miles-reset-list"),
     path("miles-resets/<int:pk>/", miles_reset_detail, name="truck-miles-reset-detail"),
     # Standalone truck maintenance
