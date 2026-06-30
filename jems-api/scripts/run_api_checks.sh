@@ -2572,6 +2572,13 @@ step "Reports: broker-summary returns keys"
 resp="$(get "/api/v1/reports/broker-summary/?year=${REPORT_YEAR}")"
 assert_status "broker-summary report" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "broker-summary has brokers" "$(body "$resp")" '"brokers"'
+assert_contains "broker-summary has total_deliveries" "$(body "$resp")" '"total_deliveries"'
+
+step "Reports: broker-summary total option returns annual total"
+resp="$(get "/api/v1/reports/broker-summary/?year=${REPORT_YEAR}&option=1")"
+assert_status "broker-summary total report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "broker-summary total has total object" "$(body "$resp")" '"total"'
+assert_contains "broker-summary total has deliveries" "$(body "$resp")" '"total_deliveries"'
 
 step "Reports: broker-summary missing year returns 400"
 resp="$(get "/api/v1/reports/broker-summary/")"

@@ -5,7 +5,8 @@ from calendar import monthrange
 import re
 from typing import Any
 
-from django.db.models import Sum
+from django.db.models import Count, Sum
+from django.db.models.functions import ExtractMonth
 
 from apps.accounting.models import Account, DriverInvoice, Record
 from apps.brokers.models import Broker
@@ -1018,101 +1019,291 @@ def get_category_tracking_report(
 # ---------------------------------------------------------------------------
 
 
-def _broker_revenue(broker: Broker, year_start: str, year_end: str) -> float:
+def _broker_records_qs(
+    *,
+    date_begin: str,
+    date_end: str,
+    broker: Broker | None = None,
+    broker_ids: list[int] | None = None,
+    require_broker: bool = True,
+):
+    qs = Record.objects.filter(
+        account__code="90010",
+        date__range=[date_begin, date_end],
+    )
+    if require_broker:
+        qs = qs.filter(load__broker__isnull=False)
+    if broker is not None:
+        qs = qs.filter(load__broker=broker)
+    if broker_ids is not None:
+        qs = qs.filter(load__broker_id__in=broker_ids)
+    return qs
+
+
+def _broker_revenue(
+    *,
+    date_begin: str,
+    date_end: str,
+    broker: Broker | None = None,
+    require_broker: bool = True,
+) -> float:
     return float(
-        Record.objects.filter(
-            load__broker=broker,
-            account__code="90010",
-            date__range=[year_start, year_end],
+        _broker_records_qs(
+            date_begin=date_begin,
+            date_end=date_end,
+            broker=broker,
+            require_broker=require_broker,
         ).aggregate(total=Sum("amount"))["total"]
         or 0.0
     )
 
 
-def _broker_monthly(broker: Broker, year: int) -> list[dict]:
-    months = []
-    for month in range(1, 13):
-        import calendar
+def _broker_deliveries(
+    *,
+    date_begin: str,
+    date_end: str,
+    broker: Broker | None = None,
+    require_broker: bool = True,
+) -> int:
+    return _broker_records_qs(
+        date_begin=date_begin,
+        date_end=date_end,
+        broker=broker,
+        require_broker=require_broker,
+    ).count()
 
-        last_day = calendar.monthrange(year, month)[1]
-        m_start = f"{year}-{month:02d}-01"
-        m_end = f"{year}-{month:02d}-{last_day:02d}"
-        rev = float(
-            Record.objects.filter(
-                load__broker=broker,
-                account__code="90010",
-                date__range=[m_start, m_end],
-            ).aggregate(total=Sum("amount"))["total"]
-            or 0.0
+
+def _broker_monthly_summary_by_broker(
+    *,
+    year: int,
+    broker_ids: list[int],
+) -> dict[int, dict[int, dict[str, float | int]]]:
+    if not broker_ids:
+        return {}
+
+    start = f"{year}-01-01"
+    end = f"{year}-12-31"
+    rows = (
+        _broker_records_qs(
+            date_begin=start,
+            date_end=end,
+            broker_ids=broker_ids,
+            require_broker=True,
         )
-        months.append({"month": month, "revenue": rev})
-    return months
+        .annotate(month=ExtractMonth("date"))
+        .values("load__broker_id", "month")
+        .annotate(revenue=Sum("amount"), deliveries=Count("id"))
+    )
+
+    summary: dict[int, dict[int, dict[str, float | int]]] = {}
+    for row in rows:
+        broker_id = int(row["load__broker_id"])
+        month = int(row["month"])
+        summary.setdefault(broker_id, {})[month] = {
+            "revenue": float(row["revenue"] or 0.0),
+            "deliveries": int(row["deliveries"] or 0),
+        }
+    return summary
 
 
-def _broker_monthly_loads(broker: Broker, year: int) -> list[dict]:
-    import calendar
+def _broker_total_monthly_summary(
+    *,
+    year: int,
+    require_broker_for_revenue: bool,
+    require_broker_for_deliveries: bool,
+) -> dict[int, dict[str, float | int]]:
+    start = f"{year}-01-01"
+    end = f"{year}-12-31"
+    revenue_rows = (
+        _broker_records_qs(
+            date_begin=start,
+            date_end=end,
+            require_broker=require_broker_for_revenue,
+        )
+        .annotate(month=ExtractMonth("date"))
+        .values("month")
+        .annotate(revenue=Sum("amount"))
+    )
+    delivery_rows = (
+        _broker_records_qs(
+            date_begin=start,
+            date_end=end,
+            require_broker=require_broker_for_deliveries,
+        )
+        .annotate(month=ExtractMonth("date"))
+        .values("month")
+        .annotate(deliveries=Count("id"))
+    )
+    summary: dict[int, dict[str, float | int]] = {}
+    for row in revenue_rows:
+        month = int(row["month"])
+        summary.setdefault(month, {})["revenue"] = float(row["revenue"] or 0.0)
+    for row in delivery_rows:
+        month = int(row["month"])
+        summary.setdefault(month, {})["deliveries"] = int(row["deliveries"] or 0)
+    return summary
 
-    months = []
-    for month in range(1, 13):
-        last_day = calendar.monthrange(year, month)[1]
-        m_start = f"{year}-{month:02d}-01"
-        m_end = f"{year}-{month:02d}-{last_day:02d}"
-        count = Load.objects.filter(
-            broker=broker,
-            execute=True,
-            pickup_date__date__range=[m_start, m_end],
-        ).count()
-        months.append({"month": month, "deliveries": count})
-    return months
+
+def _monthly_list(
+    source: dict[int, dict[str, float | int]],
+) -> list[dict[str, float | int]]:
+    return [
+        {
+            "month": month,
+            "revenue": float(source.get(month, {}).get("revenue", 0.0)),
+            "deliveries": int(source.get(month, {}).get("deliveries", 0)),
+        }
+        for month in range(1, 13)
+    ]
+
+
+def _report_row_from_months(
+    *,
+    row_id: int | None,
+    name: str,
+    mc: str,
+    current_months: list[dict[str, float | int]],
+    prior_months: list[dict[str, float | int]],
+    revenue: float | None = None,
+    prior_revenue: float | None = None,
+    deliveries: int | None = None,
+    prior_deliveries: int | None = None,
+) -> dict[str, Any]:
+    current_revenue = (
+        float(revenue)
+        if revenue is not None
+        else sum(float(item["revenue"]) for item in current_months)
+    )
+    prior_revenue_value = (
+        float(prior_revenue)
+        if prior_revenue is not None
+        else sum(float(item["revenue"]) for item in prior_months)
+    )
+    current_deliveries = (
+        int(deliveries)
+        if deliveries is not None
+        else sum(int(item["deliveries"]) for item in current_months)
+    )
+    prior_deliveries_value = (
+        int(prior_deliveries)
+        if prior_deliveries is not None
+        else sum(int(item["deliveries"]) for item in prior_months)
+    )
+    return {
+        "id": row_id,
+        "name": name,
+        "mc": mc,
+        "revenue": current_revenue,
+        "prior_revenue": prior_revenue_value,
+        "deliveries": current_deliveries,
+        "prior_deliveries": prior_deliveries_value,
+        "monthly": current_months,
+        "prior_monthly": prior_months,
+        "monthly_loads": [
+            {"month": item["month"], "deliveries": item["deliveries"]}
+            for item in current_months
+        ],
+        "prior_monthly_loads": [
+            {"month": item["month"], "deliveries": item["deliveries"]}
+            for item in prior_months
+        ],
+    }
 
 
 def get_broker_summary_report(year: int, option: int = 0) -> dict[str, Any]:
     year_start = f"{year}-01-01"
     year_end = f"{year}-12-31"
-    prior_start = f"{year - 1}-01-01"
-    prior_end = f"{year - 1}-12-31"
+    prior_year = year - 1
+    prior_start = f"{prior_year}-01-01"
+    prior_end = f"{prior_year}-12-31"
 
     if option == 0:
         rows: list[dict] = []
-        for broker in Broker.objects.filter(status=1).order_by("name"):
-            revenue = _broker_revenue(broker, year_start, year_end)
-            if revenue == 0.0:
-                continue
-            prior_revenue = _broker_revenue(broker, prior_start, prior_end)
-            rows.append(
-                {
-                    "id": broker.pk,
-                    "name": broker.name,
-                    "mc": broker.mc,
-                    "revenue": revenue,
-                    "prior_revenue": prior_revenue,
-                    "monthly": _broker_monthly(broker, year),
-                    "monthly_loads": _broker_monthly_loads(broker, year),
-                }
+        brokers = list(Broker.objects.filter(status=1).order_by("name"))
+        broker_ids = [broker.pk for broker in brokers]
+        current_summary = _broker_monthly_summary_by_broker(
+            year=year,
+            broker_ids=broker_ids,
+        )
+        prior_summary = _broker_monthly_summary_by_broker(
+            year=prior_year,
+            broker_ids=broker_ids,
+        )
+        for broker in brokers:
+            row = _report_row_from_months(
+                row_id=broker.pk,
+                name=broker.name,
+                mc=broker.mc,
+                current_months=_monthly_list(current_summary.get(broker.pk, {})),
+                prior_months=_monthly_list(prior_summary.get(broker.pk, {})),
             )
+            if row["revenue"] == 0.0:
+                continue
+            rows.append(row)
         rows.sort(key=lambda r: r["revenue"], reverse=True)
-        return {"year": year, "option": option, "brokers": rows}
-    else:
-        total_revenue = float(
-            Record.objects.filter(
-                account__code="90010",
-                date__range=[year_start, year_end],
-            ).aggregate(total=Sum("amount"))["total"]
-            or 0.0
-        )
-        total_prior = float(
-            Record.objects.filter(
-                account__code="90010",
-                date__range=[prior_start, prior_end],
-            ).aggregate(total=Sum("amount"))["total"]
-            or 0.0
-        )
         return {
             "year": year,
             "option": option,
-            "total_revenue": total_revenue,
-            "total_prior_revenue": total_prior,
+            "prior_year": prior_year,
+            "brokers": rows,
+            "total_revenue": sum(row["revenue"] for row in rows),
+            "total_prior_revenue": sum(row["prior_revenue"] for row in rows),
+            "total_deliveries": sum(row["deliveries"] for row in rows),
+            "total_prior_deliveries": sum(row["prior_deliveries"] for row in rows),
         }
+
+    current_chart_summary = _broker_total_monthly_summary(
+        year=year,
+        require_broker_for_revenue=True,
+        require_broker_for_deliveries=False,
+    )
+    prior_chart_summary = _broker_total_monthly_summary(
+        year=prior_year,
+        require_broker_for_revenue=True,
+        require_broker_for_deliveries=False,
+    )
+    total_revenue = _broker_revenue(
+        date_begin=year_start,
+        date_end=year_end,
+        require_broker=False,
+    )
+    total_prior_revenue = _broker_revenue(
+        date_begin=prior_start,
+        date_end=prior_end,
+        require_broker=False,
+    )
+    total_deliveries = _broker_deliveries(
+        date_begin=year_start,
+        date_end=year_end,
+        require_broker=False,
+    )
+    total_prior_deliveries = _broker_deliveries(
+        date_begin=prior_start,
+        date_end=prior_end,
+        require_broker=False,
+    )
+    total_row = _report_row_from_months(
+        row_id=None,
+        name="ALL BROKERS",
+        mc="",
+        current_months=_monthly_list(current_chart_summary),
+        prior_months=_monthly_list(prior_chart_summary),
+        revenue=total_revenue,
+        prior_revenue=total_prior_revenue,
+        deliveries=total_deliveries,
+        prior_deliveries=total_prior_deliveries,
+    )
+    return {
+        "year": year,
+        "option": option,
+        "prior_year": prior_year,
+        "brokers": [],
+        "total": total_row,
+        "total_revenue": total_revenue,
+        "total_prior_revenue": total_prior_revenue,
+        "total_deliveries": total_deliveries,
+        "total_prior_deliveries": total_prior_deliveries,
+    }
 
 
 # ---------------------------------------------------------------------------

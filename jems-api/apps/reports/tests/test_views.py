@@ -1198,12 +1198,17 @@ class TestBrokerSummaryReport:
         row = next((b for b in data["brokers"] if b["id"] == broker.pk), None)
         assert row is not None
         assert row["revenue"] == pytest.approx(5000.0)
+        assert row["deliveries"] == 1
+        assert row["monthly"][5]["revenue"] == pytest.approx(5000.0)
+        assert row["monthly_loads"][5]["deliveries"] == 1
 
     def test_option_1_returns_total(self, api_client, db):
         resp = api_client.get(self.url, {"year": "2024", "option": "1"})
         data = resp.json()
         assert "total_revenue" in data
         assert "total_prior_revenue" in data
+        assert "total_deliveries" in data
+        assert "total" in data
 
     def test_broker_without_revenue_excluded(self, api_client, db):
         BrokerFactory()
@@ -1229,6 +1234,76 @@ class TestBrokerSummaryReport:
         data = resp.json()
         revenues = [r["revenue"] for r in data["brokers"] if r["id"] in (b1.pk, b2.pk)]
         assert revenues == sorted(revenues, reverse=True)
+
+    def test_deliveries_follow_revenue_records_not_executed_loads(self, api_client, db):
+        _make_account("90010", "Freight Income")
+        broker = BrokerFactory()
+        load = LoadFactory(
+            broker=broker,
+            execute=False,
+            pickup_date=datetime.datetime(2023, 6, 1, tzinfo=datetime.timezone.utc),
+        )
+        rev_account = Account.objects.get(code="90010")
+        RecordFactory(
+            account=rev_account,
+            amount=700.0,
+            date=datetime.date(2024, 6, 15),
+            load=load,
+            progress=1,
+        )
+
+        resp = api_client.get(self.url, {"year": "2024"})
+        data = resp.json()
+        row = next(b for b in data["brokers"] if b["id"] == broker.pk)
+        assert row["deliveries"] == 1
+        assert row["monthly_loads"][5]["deliveries"] == 1
+        assert row["monthly"][5]["revenue"] == pytest.approx(700.0)
+
+    def test_total_option_counts_revenue_record_without_load_broker(
+        self, api_client, db
+    ):
+        _make_account("90010", "Freight Income")
+        rev_account = Account.objects.get(code="90010")
+        RecordFactory(
+            account=rev_account,
+            amount=999.0,
+            date=datetime.date(2024, 6, 15),
+            load=None,
+        )
+
+        resp = api_client.get(self.url, {"year": "2024", "option": "1"})
+        data = resp.json()
+        assert data["total_revenue"] == pytest.approx(999.0)
+        assert data["total_deliveries"] == 1
+        assert data["total"]["monthly"][5]["revenue"] == pytest.approx(0.0)
+        assert data["total"]["monthly_loads"][5]["deliveries"] == 1
+
+    def test_total_option_includes_monthly_prior_and_current_series(
+        self, api_client, db
+    ):
+        _make_account("90010", "Freight Income")
+        broker = BrokerFactory()
+        load = LoadFactory(broker=broker)
+        rev_account = Account.objects.get(code="90010")
+        RecordFactory(
+            account=rev_account,
+            amount=1200.0,
+            date=datetime.date(2024, 2, 20),
+            load=load,
+        )
+        RecordFactory(
+            account=rev_account,
+            amount=800.0,
+            date=datetime.date(2023, 2, 20),
+            load=load,
+        )
+
+        resp = api_client.get(self.url, {"year": "2024", "option": "1"})
+        data = resp.json()
+        assert data["total"]["monthly"][1]["revenue"] == pytest.approx(1200.0)
+        assert data["total"]["prior_monthly"][1]["revenue"] == pytest.approx(800.0)
+        assert data["total"]["monthly_loads"][1]["deliveries"] == 1
+        assert data["total"]["prior_monthly_loads"][1]["deliveries"] == 1
 
 
 # ---------------------------------------------------------------------------
