@@ -33,6 +33,8 @@ const CRITICAL_ROUTES = [
   { path: '/fleet/truck-miles-reset', heading: /trucks miles reset/i },
   { path: '/fleet/accidents', heading: /accidents/i },
   { path: '/fleet/accidents/create', heading: /create accident/i },
+  { path: '/accounting/categories', heading: /categories/i },
+  { path: '/accounting/categories/create', heading: /new category/i },
   { path: '/brokers', heading: /brokers/i },
   { path: '/brokers/create', heading: /new broker/i },
   { path: '/settings/cities', heading: /cities/i },
@@ -1924,4 +1926,64 @@ test('can upload and delete an accident picture via API (real)', async ({ page }
   expect(delPicRes.status()).toBe(204)
 
   await apiDelete(page, token, `/fleet/accidents/${accident.id}/`)
+})
+
+// ── Accounting — Categories (real) ────────────────────────────────────────────
+
+test('can create and delete a category via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  // Get an existing category type or create one (CategoryTypeViewSet has no DELETE)
+  const typesRes = await page.request.get(`${API_BASE}/accounting/category-types/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const existingTypes = await typesRes.json()
+  let catTypeId
+  if (existingTypes.length > 0) {
+    catTypeId = existingTypes[0].id
+  } else {
+    const catType = await apiPost(page, token, '/accounting/category-types/', {
+      name: `E2E Type ${Date.now()}`,
+      unit_of_measure: 'Unit',
+      is_active: true,
+    })
+    catTypeId = catType.id
+  }
+  expect(catTypeId).toBeTruthy()
+
+  const created = await apiPost(page, token, '/accounting/categories/', {
+    code: `E2E${Date.now()}`.slice(-8),
+    name: 'E2E Category',
+    category_type: catTypeId,
+    is_active: true,
+    is_truck_part: false,
+  })
+  expect(created.id).toBeTruthy()
+  expect(created.code).toBeTruthy()
+  expect(created.is_active).toBe(true)
+
+  // Toggle status: active → inactive
+  const toggled = await page.request.post(
+    `${API_BASE}/accounting/categories/${created.id}/toggle-status/`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  expect(toggled.ok()).toBeTruthy()
+  const toggledData = await toggled.json()
+  expect(toggledData.is_active).toBe(false)
+
+  // PATCH update
+  const updated = await apiPatch(page, token, `/accounting/categories/${created.id}/`, { name: 'E2E Category Updated' })
+  expect(updated.name).toBe('E2E Category Updated')
+
+  // Options endpoint returns an array
+  const optionsRes = await page.request.get(`${API_BASE}/accounting/categories/options/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(optionsRes.ok()).toBeTruthy()
+  const options = await optionsRes.json()
+  expect(Array.isArray(options)).toBe(true)
+
+  await apiDelete(page, token, `/accounting/categories/${created.id}/`)
 })

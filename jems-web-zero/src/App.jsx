@@ -76,6 +76,9 @@ import TruckMilesResetPage from './pages/fleet/TruckMilesResetPage';
 import AccidentsPage from './pages/fleet/AccidentsPage';
 import AccidentDetailPage from './pages/fleet/AccidentDetailPage';
 import AccidentFormPage from './pages/fleet/AccidentFormPage';
+import CategoriesPage from './pages/accounting/CategoriesPage';
+import CategoryDetailPage from './pages/accounting/CategoryDetailPage';
+import CategoryFormPage from './pages/accounting/CategoryFormPage';
 
 export function RequireAnyPermission({ permissions, children }) {
   const { haveAnyPermission } = useAuth();
@@ -129,7 +132,6 @@ function AppRoutes() {
                 <Route path="fleet/truck-maintenance/create" element={<TruckMaintenanceFormPage />} />
                 <Route path="fleet/truck-maintenance/:id/edit" element={<TruckMaintenanceFormPage />} />
                 <Route path="fleet/truck-miles-reset" element={<TruckMilesResetPage />} />
-                <Route path="fleet/categories" element={<Navigate to="/accounting/categories" replace />} />
                 <Route path="fleet/trailer-maintenance" element={<TrailerMaintenancesPage />} />
                 <Route path="fleet/trailer-maintenance/create" element={<TrailerMaintenanceFormPage />} />
                 <Route path="fleet/trailer-maintenance/:id/edit" element={<TrailerMaintenanceFormPage />} />
@@ -146,7 +148,10 @@ function AppRoutes() {
                 <Route path="accounting/records/:id/edit" element={<RecordFormPage />} />
                 <Route path="accounting/invoices/drivers" element={<DriverInvoicesPage />} />
                 <Route path="accounting/invoices/drivers/:id" element={<DriverInvoiceDetailPage />} />
-                <Route path="accounting/categories" element={<div><h5>Categories</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="accounting/categories" element={<CategoriesPage />} />
+                <Route path="accounting/categories/create" element={<CategoryFormPage />} />
+                <Route path="accounting/categories/:id" element={<CategoryDetailPage />} />
+                <Route path="accounting/categories/:id/edit" element={<CategoryFormPage />} />
                 <Route path="accounting/category-types" element={<div><h5>Types of Categories</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/units" element={<div><h5>Units of Measurements</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="accounting/positions" element={<div><h5>Positions</h5><p className="text-muted">Coming soon.</p></div>} />

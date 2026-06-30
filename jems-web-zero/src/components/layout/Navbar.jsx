@@ -120,7 +120,7 @@ export default function Navbar() {
 
             {haveAnyPermission(['admin', 'basic', 'maintenance']) && (
               <li className="nav-item dropdown">
-                <a className={dropdownClass(at('/fleet/truck-maintenance', '/fleet/trailer-maintenance', '/fleet/truck-miles-reset', '/fleet/categories', '/fleet/reports', '/fleet/accidents'))} href="#" data-bs-toggle="dropdown">
+                <a className={dropdownClass(at('/fleet/truck-maintenance', '/fleet/trailer-maintenance', '/fleet/truck-miles-reset', '/fleet/reports', '/fleet/accidents'))} href="#" data-bs-toggle="dropdown">
                   <i className="bi bi-wrench-adjustable me-1" />Maintenance
                 </a>
                 <ul className="dropdown-menu dropdown-menu-dark">
@@ -128,9 +128,6 @@ export default function Navbar() {
                   <li><Link className="dropdown-item" to="/fleet/truck-maintenance/create">Create Truck Maintenance</Link></li>
                   <li><Link className="dropdown-item" to="/fleet/truck-maintenance">Trucks Maintenances</Link></li>
                   <li><Link className="dropdown-item" to="/fleet/truck-miles-reset">Trucks Miles Reset</Link></li>
-                  <li><hr className="dropdown-divider" /></li>
-                  <li><h6 className="dropdown-header">Categories</h6></li>
-                  <li><Link className="dropdown-item" to="/fleet/categories">Categories</Link></li>
                   <li><hr className="dropdown-divider" /></li>
                   <li><h6 className="dropdown-header">Trailers</h6></li>
                   <li><Link className="dropdown-item" to="/fleet/trailer-maintenance/create">Create Trailer Maintenance</Link></li>

@@ -754,6 +754,44 @@ const ACCIDENTS = [
 
 const ACCIDENT_DETAIL = { ...ACCIDENTS[0] }
 
+const ACCOUNTING_CATEGORIES = [
+  {
+    id: 1,
+    code: 'OIL001',
+    name: 'Oil Change',
+    category_type: 1,
+    category_type_name: 'Oils',
+    unit_of_measure: 'Gallons',
+    is_active: true,
+    is_truck_part: false,
+    engine_type: null,
+    cabin_type: null,
+    transmission_type: null,
+    photo: null,
+  },
+  {
+    id: 2,
+    code: 'BRK002',
+    name: 'Brake Shoe',
+    category_type: 2,
+    category_type_name: 'Parts and Pieces',
+    unit_of_measure: 'Unit',
+    is_active: false,
+    is_truck_part: true,
+    engine_type: 1,
+    cabin_type: null,
+    transmission_type: null,
+    photo: null,
+  },
+]
+
+const ACCOUNTING_CATEGORY_DETAIL = {
+  ...ACCOUNTING_CATEGORIES[0],
+  engine_type_name: null,
+  cabin_type_name: null,
+  transmission_type_name: null,
+}
+
 /**
  * Intercepts all /api/v1/ requests.
  * Throws on any unmocked endpoint to catch missing coverage immediately.
@@ -777,6 +815,16 @@ async function mockApi(page) {
       return json({ access: mockJWT() })
     }
     if (pathname.endsWith('/accounts/') && method === 'GET') return json(ACCOUNTS)
+    // Accounting categories — specific paths before generic
+    if (pathname.endsWith('/accounting/categories/options/') && method === 'GET') return json(ACCOUNTING_CATEGORIES.map((c) => ({ id: c.id, code: c.code, name: c.name, label: `${c.name} (${c.unit_of_measure})`, category_type_name: c.category_type_name, unit_of_measure: c.unit_of_measure })))
+    if (pathname.endsWith('/accounting/categories/bulk-delete/') && method === 'POST') return json({ deleted: [1], blocked: [] })
+    if (pathname.endsWith('/accounting/categories/send-category/') && method === 'POST') return json({ id: 99, code: 'NEW001', name: 'Quick Create', category_type: 1, is_active: true })
+    if (pathname.endsWith('/accounting/categories/') && method === 'GET') return json(ACCOUNTING_CATEGORIES)
+    if (pathname.endsWith('/accounting/categories/') && method === 'POST') return json({ ...ACCOUNTING_CATEGORY_DETAIL, id: 99 })
+    if (/\/accounting\/categories\/\d+\/toggle-status\/$/.test(pathname) && method === 'POST') return json({ ...ACCOUNTING_CATEGORY_DETAIL, is_active: false })
+    if (/\/accounting\/categories\/\d+\/$/.test(pathname) && method === 'GET') return json(ACCOUNTING_CATEGORY_DETAIL)
+    if (/\/accounting\/categories\/\d+\/$/.test(pathname) && method === 'PATCH') return json(ACCOUNTING_CATEGORY_DETAIL)
+    if (/\/accounting\/categories\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     if (pathname.endsWith('/categories/') && method === 'GET') return json([])
     if (pathname.endsWith('/category-types/') && method === 'GET') return json([])
     if (pathname.endsWith('/records/') && method === 'GET') return json(RECORDS)
@@ -3072,4 +3120,48 @@ test('Accident detail: shows Pictures section', async ({ page }) => {
   // use exact match on the card header span
   await expect(page.locator('.card-header .fw-semibold', { hasText: 'Pictures' })).toBeVisible()
   await expect(page.getByText('No pictures uploaded.')).toBeVisible()
+})
+
+// ── Accounting — Categories Management ────────────────────────────────────────
+
+test('Categories list: renders heading and rows', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/accounting/categories')
+  await expect(page.getByRole('heading', { name: 'Categories' })).toBeVisible()
+  await expect(page.getByText('OIL001')).toBeVisible()
+  await expect(page.getByText('Oil Change')).toBeVisible()
+  await expect(page.getByText('BRK002')).toBeVisible()
+})
+
+test('Categories list: shows unit_of_measure column', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/accounting/categories')
+  await expect(page.getByText('Gallons')).toBeVisible()
+})
+
+test('Categories list: shows New Category link', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/accounting/categories')
+  await expect(page.getByRole('link', { name: /New Category/i })).toBeVisible()
+})
+
+test('Category detail: shows code and name heading', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/accounting/categories/1')
+  await expect(page.getByText('OIL001 — Oil Change')).toBeVisible()
+  await expect(page.getByText('Category Info')).toBeVisible()
+})
+
+test('Category create form: has New Category heading', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/accounting/categories/create')
+  await expect(page.getByText('New Category')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Create Category/i })).toBeVisible()
+})
+
+test('Category edit form: has Edit Category heading', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/accounting/categories/1/edit')
+  await expect(page.getByText(/Edit Category/i)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Save Changes/i })).toBeVisible()
 })

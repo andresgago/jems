@@ -23,8 +23,22 @@ export const accountsService = {
   update: (id, data) => api.patch(`/accounting/accounts/${id}/`, data),
 };
 
+export const CATEGORY_STATUS = {
+  1: { label: 'Active', cls: 'success' },
+  0: { label: 'Inactive', cls: 'secondary' },
+};
+
 export const categoriesService = {
-  list: (params) => api.get('/accounting/categories/', { params }),
+  list:         (params) => api.get('/accounting/categories/', { params }),
+  get:          (id)     => api.get(`/accounting/categories/${id}/`),
+  options:      (params) => api.get('/accounting/categories/options/', { params }),
+  search:       (q)      => api.get('/accounting/categories/search/', { params: { q } }),
+  create:       (data)   => api.post('/accounting/categories/', data),
+  update:       (id, data) => api.patch(`/accounting/categories/${id}/`, data),
+  destroy:      (id)     => api.delete(`/accounting/categories/${id}/`),
+  toggleStatus: (id)     => api.post(`/accounting/categories/${id}/toggle-status/`),
+  bulkDelete:   (ids)    => api.post('/accounting/categories/bulk-delete/', { ids }),
+  sendCategory: (data)   => api.post('/accounting/categories/send-category/', data),
 };
 
 export const recordsService = {
