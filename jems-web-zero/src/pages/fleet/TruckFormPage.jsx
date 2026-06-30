@@ -172,7 +172,7 @@ export default function TruckFormPage() {
           label="Status"
           value={form.status}
           onChange={(v) => set('status', v)}
-          placeholder="Active"
+          placeholder="Select status…"
           options={[{ value: '1', label: 'Active' }, { value: '0', label: 'Inactive' }]}
         />
         <Text label="Plate" value={form.plate} onChange={(v) => set('plate', v)} />

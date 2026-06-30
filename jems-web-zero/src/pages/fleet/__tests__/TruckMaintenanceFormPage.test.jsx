@@ -13,20 +13,21 @@ vi.mock('../../../services/truckMaintenance', () => ({
 
 vi.mock('../../../services/trucks', async () => {
   const actual = await vi.importActual('../../../services/trucks')
-  return { ...actual, trucksService: { list: vi.fn() } }
+  return { ...actual, trucksService: { list: vi.fn(), get: vi.fn() } }
 })
 
 import { truckMaintenanceService } from '../../../services/truckMaintenance'
 import { trucksService } from '../../../services/trucks'
 
 const trucks = [
-  { id: 1, number: 'T-100' },
-  { id: 2, number: 'T-200' },
+  { id: 1, number: 'T-100', odometer_current: 125000 },
+  { id: 2, number: 'T-200', odometer_current: 88000 },
 ]
 
 beforeEach(() => {
   vi.clearAllMocks()
   trucksService.list.mockResolvedValue({ data: trucks })
+  trucksService.get.mockResolvedValue({ data: trucks[0] })
 })
 
 const renderCreate = () =>
@@ -88,6 +89,38 @@ describe('TruckMaintenanceFormPage - Create', () => {
     expect(truckMaintenanceService.create).not.toHaveBeenCalled()
   })
 
+  it('validates detail is required before submit', async () => {
+    renderCreate()
+    await screen.findByText(/Create Truck Maintenance/)
+    // Select a truck so truck validation passes
+    const truckSelect = screen.getByText('Select truck…').closest('select')
+    fireEvent.change(truckSelect, { target: { value: '1' } })
+    fireEvent.click(screen.getByText('Create'))
+    expect(await screen.findByText('Detail is required.')).toBeInTheDocument()
+    expect(truckMaintenanceService.create).not.toHaveBeenCalled()
+  })
+
+  it('detail label shows required asterisk', async () => {
+    renderCreate()
+    await screen.findByText(/Create Truck Maintenance/)
+    const detailLabel = screen.getByText('Detail', { selector: 'label' })
+    expect(detailLabel.querySelector('.text-danger')).not.toBeNull()
+  })
+
+  it('shows status select with Pending and Done options', async () => {
+    renderCreate()
+    await screen.findByText(/Create Truck Maintenance/)
+    expect(screen.getByRole('option', { name: 'Pending' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Done' })).toBeInTheDocument()
+  })
+
+  it('status defaults to Pending on create', async () => {
+    renderCreate()
+    await screen.findByText(/Create Truck Maintenance/)
+    const statusSelect = screen.getByDisplayValue('Pending')
+    expect(statusSelect).toBeInTheDocument()
+  })
+
   it('calls create with correct payload and navigates', async () => {
     truckMaintenanceService.create.mockResolvedValue({ data: { id: 99 } })
     renderCreate()
@@ -96,14 +129,70 @@ describe('TruckMaintenanceFormPage - Create', () => {
     fireEvent.change(truckSelect, { target: { value: '1' } })
     const dateInput = screen.getByDisplayValue(new Date().toISOString().split('T')[0])
     fireEvent.change(dateInput, { target: { value: '2024-05-10' } })
+    fireEvent.change(screen.getByPlaceholderText('Describe the maintenance work…'), {
+      target: { value: 'Oil change done' },
+    })
     fireEvent.click(screen.getByText('Create'))
     await waitFor(() => expect(truckMaintenanceService.create).toHaveBeenCalled())
     const payload = truckMaintenanceService.create.mock.calls[0][0]
     expect(payload.truck).toBe(1)
     expect(payload.date).toBe('2024-05-10')
+    expect(payload.detail).toBe('Oil change done')
+    expect(payload.is_done).toBe(false)
     expect(payload.miles_alert).toBe(0)
     expect(payload.time_alert).toBe(0)
     expect(typeof payload.maintenance_miles).toBe('number')
+  })
+
+  it('sends is_done=true when Done is selected', async () => {
+    truckMaintenanceService.create.mockResolvedValue({ data: { id: 99 } })
+    renderCreate()
+    await screen.findByText('T-100')
+    const truckSelect = screen.getByText('Select truck…').closest('select')
+    fireEvent.change(truckSelect, { target: { value: '1' } })
+    fireEvent.change(screen.getByPlaceholderText('Describe the maintenance work…'), {
+      target: { value: 'Oil change done' },
+    })
+    const statusSelect = screen.getByDisplayValue('Pending')
+    fireEvent.change(statusSelect, { target: { value: 'true' } })
+    fireEvent.click(screen.getByText('Create'))
+    await waitFor(() => expect(truckMaintenanceService.create).toHaveBeenCalled())
+    const payload = truckMaintenanceService.create.mock.calls[0][0]
+    expect(payload.is_done).toBe(true)
+  })
+
+  // ── odometer auto-populate ────────────────────────────────────────────────
+
+  it('auto-populates odometer_start from truck odometer_current when truck is selected', async () => {
+    trucksService.get.mockResolvedValue({ data: { id: 1, number: 'T-100', odometer_current: 125000 } })
+    renderCreate()
+    await screen.findByText('T-100')
+    const truckSelect = screen.getByText('Select truck…').closest('select')
+    fireEvent.change(truckSelect, { target: { value: '1' } })
+    await waitFor(() => expect(trucksService.get).toHaveBeenCalledWith('1'))
+    // odometer_start input should be populated with 125000
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('125000')).toBeInTheDocument()
+    })
+  })
+
+  it('does not call trucksService.get when truck is cleared', async () => {
+    renderCreate()
+    await screen.findByText('T-100')
+    const truckSelect = screen.getByText('Select truck…').closest('select')
+    fireEvent.change(truckSelect, { target: { value: '' } })
+    expect(trucksService.get).not.toHaveBeenCalled()
+  })
+
+  it('does not fail if truck fetch fails during odometer auto-populate', async () => {
+    trucksService.get.mockRejectedValue(new Error('network'))
+    renderCreate()
+    await screen.findByText('T-100')
+    const truckSelect = screen.getByText('Select truck…').closest('select')
+    fireEvent.change(truckSelect, { target: { value: '1' } })
+    await waitFor(() => expect(trucksService.get).toHaveBeenCalled())
+    // Should not crash — form is still usable
+    expect(screen.getByText(/Create Truck Maintenance/)).toBeInTheDocument()
   })
 })
 
@@ -133,16 +222,24 @@ describe('TruckMaintenanceFormPage - Edit', () => {
     expect(await screen.findByText(/Edit Truck Maintenance/)).toBeInTheDocument()
     expect(screen.getByDisplayValue('Oil change service')).toBeInTheDocument()
     expect(screen.getByDisplayValue('2024-03-01')).toBeInTheDocument()
+    // is_done=false → Status select shows Pending
+    expect(screen.getByDisplayValue('Pending')).toBeInTheDocument()
   })
 
   it('truck select is disabled in edit mode', async () => {
     renderEdit()
     await screen.findByText(/Edit Truck Maintenance/)
-    // Labels have no htmlFor so combobox name lookup won't work; find disabled select directly
     const allSelects = screen.getAllByRole('combobox')
     const disabledSelect = allSelects.find((s) => s.disabled)
     expect(disabledSelect).toBeTruthy()
     expect(disabledSelect).toBeDisabled()
+  })
+
+  it('does not auto-populate odometer_start in edit mode when truck changes', async () => {
+    renderEdit()
+    await screen.findByDisplayValue('Oil change service')
+    // trucksService.get should NOT be called in edit mode
+    expect(trucksService.get).not.toHaveBeenCalled()
   })
 
   it('calls update without truck field on submit', async () => {
@@ -155,5 +252,15 @@ describe('TruckMaintenanceFormPage - Edit', () => {
     const payload = truckMaintenanceService.update.mock.calls[0][1]
     expect(payload.detail).toBe('Full tune-up')
     expect(payload.truck).toBeUndefined()
+  })
+
+  it('validates detail is required in edit mode', async () => {
+    truckMaintenanceService.update.mockResolvedValue({ data: {} })
+    renderEdit()
+    await screen.findByDisplayValue('Oil change service')
+    fireEvent.change(screen.getByDisplayValue('Oil change service'), { target: { value: '' } })
+    fireEvent.click(screen.getByText('Update'))
+    expect(await screen.findByText('Detail is required.')).toBeInTheDocument()
+    expect(truckMaintenanceService.update).not.toHaveBeenCalled()
   })
 })

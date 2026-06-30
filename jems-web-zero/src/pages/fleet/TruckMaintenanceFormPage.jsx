@@ -90,11 +90,27 @@ export default function TruckMaintenanceFormPage() {
     setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
+  // On create mode: when truck is selected, pre-fill odometer_start from truck's current odometer
+  const handleTruckChange = (e) => {
+    const truckId = e.target.value;
+    setForm((prev) => ({ ...prev, truck: truckId }));
+    setErrors((prev) => ({ ...prev, truck: undefined }));
+    if (!isEdit && truckId) {
+      trucksService.get(truckId).then((r) => {
+        const odom = r.data?.odometer_current ?? 0;
+        setForm((prev) => ({ ...prev, odometer_start: odom }));
+      }).catch(() => {});
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const payload = buildPayload(form);
-    if (!payload.truck) { setErrors({ truck: 'Truck is required.' }); return; }
-    if (!payload.date) { setErrors({ date: 'Date is required.' }); return; }
+    const errs = {};
+    if (!payload.truck) errs.truck = 'Truck is required.';
+    if (!payload.date) errs.date = 'Date is required.';
+    if (!form.detail.trim()) errs.detail = 'Detail is required.';
+    if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true);
     setErrors({});
     try {
@@ -145,7 +161,7 @@ export default function TruckMaintenanceFormPage() {
                 <select
                   className={`form-select${errors.truck ? ' is-invalid' : ''}`}
                   value={form.truck}
-                  onChange={set('truck')}
+                  onChange={handleTruckChange}
                   disabled={isEdit}
                 >
                   <option value="">Select truck…</option>
@@ -169,29 +185,29 @@ export default function TruckMaintenanceFormPage() {
 
               <div className="col-md-3">
                 <label className="form-label">Status</label>
-                <div className="form-check mt-2">
-                  <label className="form-check-label">
-                    <input
-                      type="checkbox"
-                      className="form-check-input"
-                      checked={Boolean(form.is_done)}
-                      onChange={set('is_done')}
-                    />
-                    {' '}Done
-                  </label>
-                </div>
+                <select
+                  className="form-select"
+                  value={form.is_done ? 'true' : 'false'}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, is_done: e.target.value === 'true' }))
+                  }
+                >
+                  <option value="false">Pending</option>
+                  <option value="true">Done</option>
+                </select>
               </div>
 
               <div className="col-12">
-                <label className="form-label">Detail</label>
+                <label className="form-label">Detail <span className="text-danger">*</span></label>
                 <textarea
-                  className="form-control"
+                  className={`form-control${errors.detail ? ' is-invalid' : ''}`}
                   rows={4}
                   maxLength={500}
                   value={form.detail}
                   onChange={set('detail')}
                   placeholder="Describe the maintenance work…"
                 />
+                {errors.detail && <div className="invalid-feedback">{errors.detail}</div>}
               </div>
             </div>
           </div>
