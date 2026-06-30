@@ -342,6 +342,19 @@ const DRIVER_INVOICES = [
 
 const DRIVER_INVOICE_DETAIL = { ...DRIVER_INVOICES[0] }
 
+const ANALYSIS_ROWS = [
+  {
+    id: 1, number: 101, date: '2026-06-25', driver_name: 'John Doe',
+    dispatcher_names: 'Lilian Hernandez', carrier_name: 'JOBEE EXPRESS LLC',
+    load_count: 3, gross: 7800.0, net: 2312.91,
+    acc_90010: 7800.0, acc_90011: 0.0, acc_80030: 1790.22, acc_80084: 20.0,
+    acc_10040: 780.0, acc_10043: 0.0, acc_80081: 0.0, acc_80011: 500.0,
+    acc_80082: 0.0, acc_80080: 0.0, acc_80012: 0.0, acc_10042: 0.0,
+    acc_80013: 0.0, acc_80051: 0.0, acc_90030: 0.0, acc_80035: 0.0,
+    acc_80050: 0.0, acc_90012: 0.0, acc_80036: 0.0, acc_80056: 0.0,
+  },
+]
+
 const DISPATCHERS = [
   { id: 10, full_name: 'Lilian Hernandez', dispatcher_type: 1, color: '#00ffff' },
   { id: 11, full_name: 'Pedro Cancino', dispatcher_type: 1, color: '#1c4587' },
@@ -714,6 +727,7 @@ async function mockApi(page) {
     if (pathname.endsWith('/category-types/') && method === 'GET') return json([])
     if (pathname.endsWith('/records/') && method === 'GET') return json(RECORDS)
     if (/\/records\/\d+\/$/.test(pathname) && method === 'GET') return json(RECORD_DETAIL)
+    if (pathname.endsWith('/driver-invoices/analysis/') && method === 'GET') return json(ANALYSIS_ROWS)
     if (pathname.endsWith('/driver-invoices/options/')) return json(DRIVER_INVOICES.map((invoice) => ({
       id: invoice.id,
       number: invoice.number,
@@ -2807,4 +2821,36 @@ test('Shipper-Receiver print page: renders monthly top 10 report', async ({ page
   await expect(page.getByText('By Months (Top 10)')).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Shipper A to Receiver B' })).toBeVisible()
   await expect(page.getByRole('columnheader', { name: 'Ene' })).toBeVisible()
+})
+
+// ── Invoices Analysis ─────────────────────────────────────────────────────────
+
+test('Invoices Analysis: renders page heading and Search button', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/company-invoices')
+  await expect(page.getByText('INVOICES ANALYSIS')).toBeVisible()
+  await expect(page.getByRole('button', { name: /search/i })).toBeVisible()
+})
+
+test('Invoices Analysis: clicking Search shows a data row with driver name', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/company-invoices')
+  await page.getByRole('button', { name: /search/i }).click()
+  await expect(page.getByRole('cell', { name: 'John Doe' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Lilian Hernandez' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'JOBEE EXPRESS LLC' })).toBeVisible()
+})
+
+test('Invoices Analysis: shows I-Rate and E-Fuel column headers', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/company-invoices')
+  await expect(page.getByRole('columnheader', { name: 'I-Rate' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'E-Fuel' })).toBeVisible()
+})
+
+test('Invoices Analysis: shows Totals row after Search', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/company-invoices')
+  await page.getByRole('button', { name: /search/i }).click()
+  await expect(page.getByText('Totals')).toBeVisible()
 })

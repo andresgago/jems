@@ -839,3 +839,27 @@ body {
     margin-left: 0 !important;
   }
 }
+
+/* ── Invoice Analysis table ─────────────────────────────────────────────────── */
+.invoice-analysis-table-wrap {
+  min-height: 120px;
+}
+
+.invoice-analysis-table {
+  min-width: 2600px;
+  color: #6e6e6e;
+  border-color: #e4e9ee;
+}
+
+.invoice-analysis-table th,
+.invoice-analysis-table td {
+  border-color: #e4e9ee;
+  vertical-align: middle;
+  font-size: 0.82rem;
+}
+
+.invoice-analysis-search-band {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.35rem;
+}

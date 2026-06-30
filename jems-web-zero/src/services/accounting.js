@@ -17,40 +17,41 @@ export const OWNER_INVOICE_STATUS = {
 };
 
 export const accountsService = {
-  list:   (params) => api.get('/accounts/', { params }),
-  get:    (id)     => api.get(`/accounts/${id}/`),
-  create: (data)   => api.post('/accounts/', data),
-  update: (id, data) => api.patch(`/accounts/${id}/`, data),
+  list:   (params) => api.get('/accounting/accounts/', { params }),
+  get:    (id)     => api.get(`/accounting/accounts/${id}/`),
+  create: (data)   => api.post('/accounting/accounts/', data),
+  update: (id, data) => api.patch(`/accounting/accounts/${id}/`, data),
 };
 
 export const categoriesService = {
-  list: (params) => api.get('/categories/', { params }),
+  list: (params) => api.get('/accounting/categories/', { params }),
 };
 
 export const recordsService = {
-  list:    (params)      => api.get('/records/', { params }),
-  get:     (id)          => api.get(`/records/${id}/`),
-  create:  (data)        => api.post('/records/', data),
-  update:  (id, data)    => api.patch(`/records/${id}/`, data),
-  destroy: (id)          => api.delete(`/records/${id}/`),
+  list:    (params)      => api.get('/accounting/records/', { params }),
+  get:     (id)          => api.get(`/accounting/records/${id}/`),
+  create:  (data)        => api.post('/accounting/records/', data),
+  update:  (id, data)    => api.patch(`/accounting/records/${id}/`, data),
+  destroy: (id)          => api.delete(`/accounting/records/${id}/`),
 };
 
 export const driverInvoicesService = {
-  list:    (params)   => api.get('/driver-invoices/', { params }),
-  get:     (id)       => api.get(`/driver-invoices/${id}/`),
-  create:  (data)     => api.post('/driver-invoices/', data),
-  update:  (id, data) => api.patch(`/driver-invoices/${id}/`, data),
-  destroy: (id)       => api.delete(`/driver-invoices/${id}/`),
-  close:   (id)       => api.post(`/driver-invoices/${id}/close/`),
-  open:    (id)       => api.post(`/driver-invoices/${id}/open/`),
+  list:     (params)   => api.get('/accounting/driver-invoices/', { params }),
+  get:      (id)       => api.get(`/accounting/driver-invoices/${id}/`),
+  create:   (data)     => api.post('/accounting/driver-invoices/', data),
+  update:   (id, data) => api.patch(`/accounting/driver-invoices/${id}/`, data),
+  destroy:  (id)       => api.delete(`/accounting/driver-invoices/${id}/`),
+  close:    (id)       => api.post(`/accounting/driver-invoices/${id}/close/`),
+  open:     (id)       => api.post(`/accounting/driver-invoices/${id}/open/`),
+  analysis: (params)   => api.get('/accounting/driver-invoices/analysis/', { params }),
 };
 
 export const ownerInvoicesService = {
-  list:    (params)   => api.get('/owner-invoices/', { params }),
-  get:     (id)       => api.get(`/owner-invoices/${id}/`),
-  create:  (data)     => api.post('/owner-invoices/', data),
-  update:  (id, data) => api.patch(`/owner-invoices/${id}/`, data),
-  destroy: (id)       => api.delete(`/owner-invoices/${id}/`),
-  close:   (id)       => api.post(`/owner-invoices/${id}/close/`),
-  open:    (id)       => api.post(`/owner-invoices/${id}/open/`),
+  list:    (params)   => api.get('/accounting/owner-invoices/', { params }),
+  get:     (id)       => api.get(`/accounting/owner-invoices/${id}/`),
+  create:  (data)     => api.post('/accounting/owner-invoices/', data),
+  update:  (id, data) => api.patch(`/accounting/owner-invoices/${id}/`, data),
+  destroy: (id)       => api.delete(`/accounting/owner-invoices/${id}/`),
+  close:   (id)       => api.post(`/accounting/owner-invoices/${id}/close/`),
+  open:    (id)       => api.post(`/accounting/owner-invoices/${id}/open/`),
 };

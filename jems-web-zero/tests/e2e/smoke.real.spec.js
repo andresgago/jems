@@ -42,6 +42,7 @@ const CRITICAL_ROUTES = [
   { path: '/reports/broker-summary', heading: /broker summary/i },
   { path: '/reports/invoice', heading: /profit and loss by invoices/i },
   { path: '/reports/shipper-receiver', heading: /deliveries from shipper to receiver/i },
+  { path: '/reports/company-invoices', heading: /invoices analysis/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1678,4 +1679,29 @@ test('IFTA filter page renders and has Show Report button (real)', async ({ page
   await expect(page.getByRole('heading', { name: 'IFTA' })).toBeVisible()
   await expect(page.getByText('Filter by Dates')).toBeVisible()
   await expect(page.getByRole('button', { name: /show report/i })).toBeVisible()
+})
+
+// ── Invoices Analysis (real) ──────────────────────────────────────────────────
+
+test('driver-invoices analysis endpoint returns 200 with date params (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const today = new Date().toISOString().slice(0, 10)
+  const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
+  const res = await page.request.get(
+    `${API_BASE}/accounting/driver-invoices/analysis/?date_begin=${weekAgo}&date_end=${today}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  expect(res.ok()).toBeTruthy()
+  const data = await res.json()
+  expect(Array.isArray(data)).toBe(true)
+})
+
+test('driver-invoices analysis endpoint returns 400 when date params are missing (real)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const res = await page.request.get(`${API_BASE}/accounting/driver-invoices/analysis/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(res.status()).toBe(400)
 })
