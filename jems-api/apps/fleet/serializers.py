@@ -3,6 +3,7 @@ import re
 
 from rest_framework import serializers
 
+from . import services
 from .models import (
     Accident,
     AccidentPicture,
@@ -300,6 +301,11 @@ class TrailerMaintenanceSerializer(serializers.ModelSerializer):
 
     trailer_number = serializers.CharField(source="trailer.number", read_only=True)
     trailer_vin = serializers.CharField(source="trailer.vin", read_only=True)
+    is_last_maintenance = serializers.SerializerMethodField()
+    miles_since_maintenance = serializers.SerializerMethodField()
+    miles_alert_message = serializers.SerializerMethodField()
+    time_alert_message = serializers.SerializerMethodField()
+    time_alert_date = serializers.SerializerMethodField()
 
     class Meta:
         model = TrailerMaintenance
@@ -316,8 +322,31 @@ class TrailerMaintenanceSerializer(serializers.ModelSerializer):
             "time_month",
             "detail",
             "created_at",
+            "is_last_maintenance",
+            "miles_since_maintenance",
+            "miles_alert_message",
+            "time_alert_message",
+            "time_alert_date",
         ]
         read_only_fields = ["created_at", "trailer", "trailer_number", "trailer_vin"]
+
+    def get_is_last_maintenance(self, obj):
+        return services.is_last_trailer_maintenance(obj)
+
+    def get_miles_since_maintenance(self, obj):
+        if obj.miles_alert != 1:
+            return None
+        return services.get_trailer_miles_since_maintenance(obj.trailer, obj.date)
+
+    def get_miles_alert_message(self, obj):
+        return services.get_trailer_miles_alert_message(obj)
+
+    def get_time_alert_message(self, obj):
+        return services.get_trailer_time_alert_message(obj)
+
+    def get_time_alert_date(self, obj):
+        alert_date = services.get_trailer_time_alert_date(obj)
+        return alert_date.isoformat() if alert_date else None
 
 
 class TrailerMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
@@ -335,6 +364,33 @@ class TrailerMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
             "time_month",
             "detail",
         ]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        miles_alert = attrs.get("miles_alert", getattr(self.instance, "miles_alert", 0))
+        miles = attrs.get("miles", getattr(self.instance, "miles", 0))
+        if miles_alert == 1 and (miles in (None, "") or float(miles) <= 0):
+            raise serializers.ValidationError({"miles": "Miles cannot be blank."})
+
+        time_year = attrs.get("time_year", getattr(self.instance, "time_year", 0))
+        time_month = attrs.get("time_month", getattr(self.instance, "time_month", 0))
+        if time_year < 0 or time_year > 15:
+            raise serializers.ValidationError(
+                {"time_year": "Years must be between 0 and 15."}
+            )
+        if time_month < 0 or time_month > 11:
+            raise serializers.ValidationError(
+                {"time_month": "Months must be between 0 and 11."}
+            )
+
+        detail = attrs.get("detail", getattr(self.instance, "detail", ""))
+        if not str(detail).strip():
+            raise serializers.ValidationError({"detail": "Details cannot be blank."})
+        if len(str(detail)) > 500:
+            raise serializers.ValidationError(
+                {"detail": "Details cannot exceed 500 characters."}
+            )
+        return attrs
 
 
 class TrailerListSerializer(serializers.ModelSerializer):

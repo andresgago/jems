@@ -710,6 +710,55 @@ class TestTrailerMaintenanceList:
         assert response.status_code == status.HTTP_200_OK
         assert response.data[0]["trailer_number"] == "TRL-99"
 
+    def test_excludes_inactive_trailers_like_legacy_index(self, auth_client):
+        client, _ = auth_client
+        active = TrailerFactory(status=Trailer.Status.ACTIVE)
+        inactive = TrailerFactory(status=Trailer.Status.INACTIVE)
+        TrailerMaintenanceFactory(trailer=active)
+        inactive_record = TrailerMaintenanceFactory(trailer=inactive)
+
+        response = client.get(reverse("trailer-maint-list"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert inactive_record.pk not in [row["id"] for row in response.data]
+
+    def test_show_all_date_search_ignores_date_range(self, auth_client):
+        client, _ = auth_client
+        old = TrailerMaintenanceFactory(date=datetime.date(2023, 1, 1))
+
+        response = client.get(
+            reverse("trailer-maint-list")
+            + "?date_search=3&date_from=2024-01-01&date_to=2024-01-31"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert old.pk in [row["id"] for row in response.data]
+
+    def test_maintenance_date_search_applies_date_range(self, auth_client):
+        client, _ = auth_client
+        old = TrailerMaintenanceFactory(date=datetime.date(2023, 1, 1))
+        current = TrailerMaintenanceFactory(date=datetime.date(2024, 1, 15))
+
+        response = client.get(
+            reverse("trailer-maint-list")
+            + "?date_search=2&date_from=2024-01-01&date_to=2024-01-31"
+        )
+
+        ids = [row["id"] for row in response.data]
+        assert current.pk in ids
+        assert old.pk not in ids
+
+    def test_response_includes_legacy_alert_messages(self, auth_client):
+        client, _ = auth_client
+        record = TrailerMaintenanceFactory(miles_alert=1, miles=7500)
+
+        response = client.get(reverse("trailer-maint-list"))
+
+        row = next(item for item in response.data if item["id"] == record.pk)
+        assert row["is_last_maintenance"] is True
+        assert row["miles_alert_message"].startswith("Active alert for 7500 miles")
+        assert row["time_alert_message"] == "Not Alert"
+
     def test_unauthenticated_blocked(self, api_client):
         response = api_client.get(reverse("trailer-maint-list"))
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -742,6 +791,40 @@ class TestTrailerMaintenanceCreate:
         payload = {"trailer": trailer.pk, "date": "2024-06-20", "detail": "Dup"}
         response = client.post(reverse("trailer-maint-list"), payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_miles_alert_requires_positive_miles(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        payload = {
+            "trailer": trailer.pk,
+            "date": "2024-06-20",
+            "detail": "Inspection",
+            "miles": 0,
+            "miles_alert": 1,
+            "time_alert": 0,
+            "time_year": 0,
+            "time_month": 0,
+        }
+        response = client.post(reverse("trailer-maint-list"), payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "miles" in response.data
+
+    def test_detail_required(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        payload = {
+            "trailer": trailer.pk,
+            "date": "2024-06-20",
+            "detail": "",
+            "miles": 13000,
+            "miles_alert": 0,
+            "time_alert": 0,
+            "time_year": 0,
+            "time_month": 0,
+        }
+        response = client.post(reverse("trailer-maint-list"), payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "detail" in response.data
 
     def test_unauthenticated_blocked(self, api_client):
         response = api_client.post(reverse("trailer-maint-list"), {})
@@ -809,3 +892,5 @@ class TestTrailerMaintenanceAlertInfo:
         assert response.status_code == status.HTTP_200_OK
         assert "miles_since_maintenance" in response.data
         assert "is_last_maintenance" in response.data
+        assert "miles_alert_message" in response.data
+        assert "time_alert_message" in response.data

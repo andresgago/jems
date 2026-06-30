@@ -854,6 +854,8 @@ assert_contains "standalone trailer maint has trailer_number" "$(body "$resp")" 
 step "Fleet: standalone trailer maintenance list"
 resp="$(get "/api/v1/fleet/trailer-maintenance/")"
 assert_status "standalone trailer maint list" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "standalone trailer maint list has miles alert message" "$(body "$resp")" '"miles_alert_message"'
+assert_contains "standalone trailer maint list has time alert message" "$(body "$resp")" '"time_alert_message"'
 
 step "Fleet: standalone trailer maintenance list filter by trailer"
 resp="$(get "/api/v1/fleet/trailer-maintenance/?trailer=${TRAILER_ID}")"
@@ -874,6 +876,8 @@ resp="$(get "/api/v1/fleet/trailer-maintenance/${STANDALONE_TRAILER_MAINT_ID}/al
 assert_status "standalone trailer maint alert-info" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "trailer alert-info has miles_since_maintenance" "$(body "$resp")" '"miles_since_maintenance"'
 assert_contains "trailer alert-info has is_last_maintenance" "$(body "$resp")" '"is_last_maintenance"'
+assert_contains "trailer alert-info has miles_alert_message" "$(body "$resp")" '"miles_alert_message"'
+assert_contains "trailer alert-info has time_alert_message" "$(body "$resp")" '"time_alert_message"'
 
 step "Fleet: standalone trailer maintenance duplicate date rejected"
 resp="$(post "/api/v1/fleet/trailer-maintenance/" "{\"trailer\":${TRAILER_ID},\"date\":\"2024-04-02\",\"detail\":\"Dup\",\"miles\":0,\"miles_alert\":0,\"time_alert\":0,\"time_year\":0,\"time_month\":0}")"

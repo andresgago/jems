@@ -337,11 +337,13 @@ class TrailerViewSet(ViewSet):
         if request.method == "GET":
             records = TrailerMaintenance.objects.filter(trailer=trailer)
             return Response(TrailerMaintenanceSerializer(records, many=True).data)
-        serializer = TrailerMaintenanceSerializer(data=request.data)
+        payload = request.data.copy()
+        payload["trailer"] = trailer.pk
+        serializer = TrailerMaintenanceCreateUpdateSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
-        record = services.add_trailer_maintenance(
-            trailer=trailer, **serializer.validated_data
-        )
+        fields = dict(serializer.validated_data)
+        fields.pop("trailer", None)
+        record = services.add_trailer_maintenance(trailer=trailer, **fields)
         return Response(
             TrailerMaintenanceSerializer(record).data, status=status.HTTP_201_CREATED
         )
@@ -569,18 +571,22 @@ class TrailerMaintenanceViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request: Request) -> Response:
-        qs = TrailerMaintenance.objects.select_related("trailer").order_by(
-            "-date", "-id"
+        qs = (
+            TrailerMaintenance.objects.select_related("trailer")
+            .filter(trailer__status=Trailer.Status.ACTIVE)
+            .order_by("-date", "-id")
         )
         trailer_id = request.query_params.get("trailer")
         if trailer_id:
             qs = qs.filter(trailer_id=trailer_id)
+        date_search = request.query_params.get("date_search")
         date_from = request.query_params.get("date_from")
-        if date_from:
-            qs = qs.filter(date__gte=date_from)
         date_to = request.query_params.get("date_to")
-        if date_to:
-            qs = qs.filter(date__lte=date_to)
+        if date_search != "3":
+            if date_from:
+                qs = qs.filter(date__gte=date_from)
+            if date_to:
+                qs = qs.filter(date__lte=date_to)
         search = request.query_params.get("search", "").strip()
         if search:
             qs = qs.filter(trailer__number__icontains=search)
@@ -654,10 +660,16 @@ class TrailerMaintenanceViewSet(ViewSet):
             record.trailer, record.date
         )
         is_last = services.is_last_trailer_maintenance(record)
+        time_alert_date = services.get_trailer_time_alert_date(record)
         return Response(
             {
                 "miles_since_maintenance": miles_since,
                 "is_last_maintenance": is_last,
+                "miles_alert_message": services.get_trailer_miles_alert_message(record),
+                "time_alert_message": services.get_trailer_time_alert_message(record),
+                "time_alert_date": (
+                    time_alert_date.isoformat() if time_alert_date else None
+                ),
             }
         )
 

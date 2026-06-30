@@ -22,6 +22,9 @@ from apps.fleet.services import (
     delete_trailer_maintenance,
     delete_truck_maintenance,
     get_trailer_miles_since_maintenance,
+    get_trailer_miles_alert_message,
+    get_trailer_time_alert_date,
+    get_trailer_time_alert_message,
     get_truck_miles_since_maintenance,
     get_truck_total_miles_since_reset,
     is_last_trailer_maintenance,
@@ -533,6 +536,17 @@ class TestAddTrailerMaintenance:
         )
         assert record.pk is not None
 
+    def test_miles_alert_requires_positive_threshold(self):
+        trailer = TrailerFactory()
+        with pytest.raises(ValidationError):
+            add_trailer_maintenance(
+                trailer=trailer,
+                date=datetime.date(2024, 3, 1),
+                detail="Inspection",
+                miles_alert=1,
+                miles=0,
+            )
+
 
 @pytest.mark.django_db
 class TestUpdateTrailerMaintenance:
@@ -547,6 +561,11 @@ class TestUpdateTrailerMaintenance:
         m2 = TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 3, 15))
         with pytest.raises(ValidationError):
             update_trailer_maintenance(maintenance=m2, date=datetime.date(2024, 3, 1))
+
+    def test_turning_on_miles_alert_uses_existing_threshold(self):
+        m = TrailerMaintenanceFactory(miles=7500.0, miles_alert=0)
+        updated = update_trailer_maintenance(maintenance=m, miles_alert=1)
+        assert updated.miles_alert == 1
 
 
 @pytest.mark.django_db
@@ -579,6 +598,58 @@ class TestGetTrailerMilesSinceMaintenance:
         )
         miles = get_trailer_miles_since_maintenance(trailer, maint_date)
         assert miles == pytest.approx(440.0)
+
+
+@pytest.mark.django_db
+class TestTrailerMaintenanceAlertMessages:
+    def test_active_miles_message_matches_legacy_text(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        trailer = TrailerFactory()
+        record = TrailerMaintenanceFactory(
+            trailer=trailer,
+            date=datetime.date(2024, 3, 1),
+            miles_alert=1,
+            miles=7500,
+        )
+        LoadFactory(
+            trailer=trailer,
+            miles=7000,
+            miles_empty=500,
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 3, 2)),
+        )
+
+        assert (
+            get_trailer_miles_alert_message(record)
+            == "Active alert for 7500 miles (Miles traveled 7500 miles)"
+        )
+
+    def test_inactive_miles_message_for_older_record(self):
+        trailer = TrailerFactory()
+        old = TrailerMaintenanceFactory(
+            trailer=trailer,
+            date=datetime.date(2024, 3, 1),
+            miles_alert=1,
+            miles=7500,
+        )
+        TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 3, 2))
+
+        assert get_trailer_miles_alert_message(old) == "Inactive alert for 7500 miles"
+
+    def test_time_message_and_date(self):
+        record = TrailerMaintenanceFactory(
+            date=datetime.date(2024, 1, 15),
+            time_alert=1,
+            time_year=1,
+            time_month=2,
+        )
+
+        assert get_trailer_time_alert_date(record) == datetime.date(2025, 3, 15)
+        assert (
+            get_trailer_time_alert_message(record)
+            == "Active alert for 1 year and 2 months (at 2025-03-15)"
+        )
 
 
 @pytest.mark.django_db

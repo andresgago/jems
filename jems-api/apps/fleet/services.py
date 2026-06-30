@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 
 from django.db.models import Sum
+from dateutil.relativedelta import relativedelta
 
 from apps.users.models import User
 
@@ -198,6 +199,7 @@ def toggle_trailer_status(*, trailer: Trailer) -> Trailer:
 
 
 def add_trailer_maintenance(*, trailer: Trailer, **fields) -> TrailerMaintenance:
+    _normalize_trailer_maintenance_fields(fields)
     _validate_maintenance_date_unique(
         TrailerMaintenance, lookup={"trailer": trailer, "date": fields.get("date")}
     )
@@ -210,6 +212,11 @@ def add_trailer_maintenance(*, trailer: Trailer, **fields) -> TrailerMaintenance
 def update_trailer_maintenance(
     *, maintenance: TrailerMaintenance, **fields
 ) -> TrailerMaintenance:
+    _normalize_trailer_maintenance_fields(
+        fields,
+        existing_miles_alert=maintenance.miles_alert,
+        existing_miles=maintenance.miles,
+    )
     if "date" in fields and fields["date"] != maintenance.date:
         _validate_maintenance_date_unique(
             TrailerMaintenance,
@@ -238,6 +245,64 @@ def get_trailer_miles_since_maintenance(
     return result["total"] or 0.0
 
 
+def get_trailer_time_alert_date(
+    maintenance: TrailerMaintenance,
+) -> datetime.date | None:
+    if maintenance.time_alert != 1:
+        return None
+    if maintenance.time_year == 0 and maintenance.time_month == 0:
+        return None
+    return maintenance.date + relativedelta(
+        years=maintenance.time_year, months=maintenance.time_month
+    )
+
+
+def get_trailer_time_alert_label(maintenance: TrailerMaintenance) -> str:
+    parts: list[str] = []
+    if maintenance.time_year:
+        unit = "year" if maintenance.time_year == 1 else "years"
+        parts.append(f"{maintenance.time_year} {unit}")
+    if maintenance.time_month:
+        unit = "month" if maintenance.time_month == 1 else "months"
+        parts.append(f"{maintenance.time_month} {unit}")
+    if not parts:
+        return "Not Alert Defined"
+    if len(parts) == 2:
+        return f"{parts[0]} and {parts[1]}"
+    return parts[0]
+
+
+def get_trailer_miles_alert_message(maintenance: TrailerMaintenance) -> str:
+    if maintenance.miles_alert != 1:
+        return "Not Alert"
+    if maintenance.miles <= 0:
+        return "Not Alert Defined"
+
+    threshold = f"{maintenance.miles:g}"
+    if is_last_trailer_maintenance(maintenance):
+        traveled = get_trailer_miles_since_maintenance(
+            maintenance.trailer, maintenance.date
+        )
+        return (
+            f"Active alert for {threshold} miles "
+            f"(Miles traveled {traveled:g} miles)"
+        )
+    return f"Inactive alert for {threshold} miles"
+
+
+def get_trailer_time_alert_message(maintenance: TrailerMaintenance) -> str:
+    if maintenance.time_alert != 1:
+        return "Not Alert"
+    if maintenance.time_year == 0 and maintenance.time_month == 0:
+        return "Not Alert Defined"
+
+    label = get_trailer_time_alert_label(maintenance)
+    alert_date = get_trailer_time_alert_date(maintenance)
+    if is_last_trailer_maintenance(maintenance):
+        return f"Active alert for {label} (at {alert_date:%Y-%m-%d})"
+    return f"Inactive alert for {label}"
+
+
 def is_last_trailer_maintenance(maintenance: TrailerMaintenance) -> bool:
     last = (
         TrailerMaintenance.objects.filter(trailer=maintenance.trailer)
@@ -245,6 +310,19 @@ def is_last_trailer_maintenance(maintenance: TrailerMaintenance) -> bool:
         .first()
     )
     return last is not None and last.pk == maintenance.pk
+
+
+def _normalize_trailer_maintenance_fields(
+    fields: dict, *, existing_miles_alert: int = 0, existing_miles: float = 0
+) -> None:
+    miles_alert = fields.get("miles_alert", existing_miles_alert)
+    miles = fields.get("miles", existing_miles)
+    if miles_alert != 1:
+        return
+    if miles in (None, "") or float(miles) <= 0:
+        from rest_framework.exceptions import ValidationError
+
+        raise ValidationError({"miles": "Miles cannot be blank."})
 
 
 def _validate_maintenance_date_unique(model_class, *, lookup: dict) -> None:
