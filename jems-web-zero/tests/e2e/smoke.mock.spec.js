@@ -580,9 +580,21 @@ const REPORT_TAX_WITH_REVENUE = {
 }
 
 const REPORT_CATEGORY = {
-  rows: [{ id: 1, date: '2024-05-01', description: 'Oil change', account: 'Vehicle Maintenance', entity: 'TRUCK-01', amount: 250, quantity: 1 }],
+  rows: [
+    {
+      id: 1,
+      date: '2024-05-01',
+      truck: 'T001 - VIN001',
+      trailer: 'TR01 - VIN002',
+      category: 'Oil Filter - OF001 (Unit)',
+      position: 'Steer Axle',
+      account: '80060 Parts',
+      quantity: 2,
+      amount: 250,
+    },
+  ],
   total_amount: 250,
-  total_quantity: 1,
+  total_quantity: 2,
 }
 
 const REPORT_BROKER_SUMMARY = {
@@ -684,6 +696,7 @@ async function mockApi(page) {
     if (/\/locations\/cities\/\d+\/$/.test(pathname) && method === 'GET') return json(CITY_DETAIL)
     if (/\/locations\/cities\/\d+\/toggle-status\/$/.test(pathname) && method === 'POST') return json({ id: 1, active: false })
     if (pathname.endsWith('/users/options/') && method === 'GET') return json(USERS.map((u) => ({ id: u.id, label: u.full_name, full_name: u.full_name })))
+    if (pathname.endsWith('/users/positions/options/') && method === 'GET') return json([{ id: 1, name: 'Steer Axle' }, { id: 2, name: 'Rear Axle' }])
     if (pathname.endsWith('/users/positions/') && method === 'GET') return json([])
     if (pathname.endsWith('/users/settings/config/') && method === 'GET') return json(SYSTEM_CONFIG)
     if (pathname.endsWith('/users/settings/config/') && method === 'PATCH') return json(SYSTEM_CONFIG)
@@ -747,6 +760,7 @@ async function mockApi(page) {
       const opt = url.searchParams.get('option')
       return json(opt === '1' ? REPORT_TAX_WITH_REVENUE : REPORT_TAX)
     }
+    if (pathname.endsWith('/accounting/categories/search/') && method === 'GET') return json([{ id: 5, label: 'Oil Filter - OF001 (Unit)', name: 'Oil Filter', code: 'OF001' }])
     if (pathname.endsWith('/reports/category-tracking/') && method === 'GET') return json(REPORT_CATEGORY)
     if (pathname.endsWith('/reports/broker-summary/') && method === 'GET') return json(REPORT_BROKER_SUMMARY)
     if (pathname.endsWith('/reports/shipper-receiver/') && method === 'GET') return json(REPORT_SHIPPER_RECEIVER)
@@ -2627,13 +2641,59 @@ test('Tax Report print page: copyright footer is visible', async ({ page }) => {
   await expect(page.getByText(/Copyright © 2019/)).toBeVisible()
 })
 
-test('Category Tracking page: shows record rows after run', async ({ page }) => {
+test('Category Tracking page: renders filter controls', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/reports/category-tracking')
   await expect(page.getByRole('heading', { name: 'Category Tracking' })).toBeVisible()
-  await page.getByRole('button', { name: /run report/i }).click()
-  await expect(page.getByText('Oil change')).toBeVisible()
-  await expect(page.getByText('Vehicle Maintenance')).toBeVisible()
+  await expect(page.getByText('Filter by Dates')).toBeVisible()
+  await expect(page.getByText('Select Truck')).toBeVisible()
+  await expect(page.getByText('Select Trailer')).toBeVisible()
+  await expect(page.getByText('Select Category')).toBeVisible()
+  await expect(page.getByText('Select Position')).toBeVisible()
+  await expect(page.getByRole('button', { name: /show report/i })).toBeVisible()
+})
+
+test('Category Tracking page: Show Report button opens new tab', async ({ page, context }) => {
+  await withAdminAuth(page)
+  await page.goto('/reports/category-tracking')
+  const [newPage] = await Promise.all([
+    context.waitForEvent('page'),
+    page.getByRole('button', { name: /show report/i }).click(),
+  ])
+  await expect(newPage.url()).toContain('/print/category-tracking')
+  await newPage.close()
+})
+
+test('Category Tracking print page: renders report with correct columns', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/category-tracking?date_begin=2024-01-01&date_end=2024-12-31')
+  await expect(page.getByText('Category Tracking Report')).toBeVisible()
+  // Column headers (use role=columnheader to be precise)
+  await expect(page.getByRole('columnheader', { name: 'No.' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Truck' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Trailer' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Category' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Position' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Account' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Quantity' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Amount' })).toBeVisible()
+  // Data row values
+  await expect(page.getByText('T001 - VIN001')).toBeVisible()
+  await expect(page.getByText('TR01 - VIN002')).toBeVisible()
+  await expect(page.getByText('Oil Filter - OF001 (Unit)')).toBeVisible()
+  await expect(page.getByText('Steer Axle')).toBeVisible()
+  await expect(page.getByText('Total')).toBeVisible()
+  await expect(page.getByText(/Copyright © 2019/)).toBeVisible()
+})
+
+test('Category Tracking print page: shows filter summary', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/print/category-tracking?date_begin=2024-01-01&date_end=2024-12-31')
+  await expect(page.getByText(/Trucks, Trailers, Categories and Positions/)).toBeVisible()
+  await expect(page.getByText(/All Trucks/)).toBeVisible()
+  await expect(page.getByText(/All Trailers/)).toBeVisible()
+  await expect(page.getByText(/All Categories/)).toBeVisible()
+  await expect(page.getByText(/All Positions/)).toBeVisible()
 })
 
 test('Broker Summary page: shows broker rows after run', async ({ page }) => {
