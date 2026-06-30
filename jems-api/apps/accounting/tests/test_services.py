@@ -10,6 +10,7 @@ from apps.accounting.models import (
     Record,
 )
 from apps.accounting.services import (
+    bulk_delete_categories,
     close_driver_invoice,
     close_owner_invoice,
     create_account,
@@ -18,11 +19,13 @@ from apps.accounting.services import (
     create_load_accounting_records,
     create_owner_invoice,
     create_record,
+    delete_category,
     delete_load_accounting_records,
     delete_record,
     get_driver_invoice_analysis,
     open_driver_invoice,
     parse_load_list,
+    toggle_category_status,
     update_account,
     update_record,
 )
@@ -113,6 +116,79 @@ class TestCreateCategory:
         CategoryFactory(code="OIL001")
         with pytest.raises(ValidationError):
             create_category(code="OIL001", name="Oil Change")
+
+
+@pytest.mark.django_db
+class TestDeleteCategory:
+    def test_deletes_category_without_records(self):
+        cat = CategoryFactory()
+        pk = cat.pk
+        delete_category(category=cat)
+        from apps.accounting.models import Category
+
+        assert not Category.objects.filter(pk=pk).exists()
+
+    def test_raises_if_records_exist(self):
+        import datetime
+
+        cat = CategoryFactory()
+        from apps.accounting.tests.factories import RecordFactory
+
+        RecordFactory(category=cat, date=datetime.date.today())
+        with pytest.raises(ValueError, match="linked records"):
+            delete_category(category=cat)
+
+
+@pytest.mark.django_db
+class TestToggleCategoryStatus:
+    def test_toggles_active_to_inactive(self):
+        cat = CategoryFactory(is_active=True)
+        result = toggle_category_status(category=cat)
+        assert result.is_active is False
+
+    def test_toggles_inactive_to_active(self):
+        cat = CategoryFactory(is_active=False)
+        result = toggle_category_status(category=cat)
+        assert result.is_active is True
+
+    def test_toggle_twice_returns_original(self):
+        cat = CategoryFactory(is_active=True)
+        toggle_category_status(category=cat)
+        cat.refresh_from_db()
+        result = toggle_category_status(category=cat)
+        assert result.is_active is True
+
+
+@pytest.mark.django_db
+class TestBulkDeleteCategories:
+    def test_deletes_all_without_records(self):
+        cats = CategoryFactory.create_batch(3)
+        ids = [c.pk for c in cats]
+        result = bulk_delete_categories(ids=ids)
+        assert set(result["deleted"]) == set(ids)
+        assert result["blocked"] == []
+
+    def test_partial_success_when_some_have_records(self):
+        import datetime
+
+        from apps.accounting.tests.factories import RecordFactory
+
+        cat_ok = CategoryFactory()
+        cat_blocked = CategoryFactory()
+        RecordFactory(category=cat_blocked, date=datetime.date.today())
+        result = bulk_delete_categories(ids=[cat_ok.pk, cat_blocked.pk])
+        assert cat_ok.pk in result["deleted"]
+        assert cat_blocked.pk in result["blocked"]
+
+    def test_ignores_nonexistent_ids(self):
+        result = bulk_delete_categories(ids=[99998, 99999])
+        assert result["deleted"] == []
+        assert result["blocked"] == []
+
+    def test_empty_list(self):
+        result = bulk_delete_categories(ids=[])
+        assert result["deleted"] == []
+        assert result["blocked"] == []
 
 
 @pytest.mark.django_db

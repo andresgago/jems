@@ -318,6 +318,17 @@ CARDS = [
     (88, "507"),
 ]
 
+# From legacy `category_type` + `um` tables (production dump)
+CATEGORY_TYPES = [
+    (1, "Oils", "Gallons"),
+    (2, "Part and Pieces", "Unit"),
+    (3, "By Invoice", "Unit"),
+    (4, "Filters", "Unit"),
+    (5, "Maintenance and Repair", "Unit"),
+    (6, "Motor-Winshield", "Unit"),
+    (7, "Hoses", "Feet"),
+]
+
 
 class Command(BaseCommand):
     help = "Load base catalog data (states, trailer types, truck types, etc.)."
@@ -337,6 +348,7 @@ class Command(BaseCommand):
             self._seed_cards()
             self._seed_carriers()
             self._seed_accounts()
+            self._seed_category_types()
         self.stdout.write(self.style.SUCCESS("Seed complete."))
 
     def _seed_states(self):
@@ -519,3 +531,22 @@ class Command(BaseCommand):
             )[1]
         )
         self.stdout.write(f"  Cards: {len(CARDS)} total, {created} new")
+
+    def _seed_category_types(self):
+        from apps.accounting.models import CategoryType
+
+        created = sum(
+            1
+            for pk, name, unit_of_measure in CATEGORY_TYPES
+            if CategoryType.objects.update_or_create(
+                id=pk,
+                defaults={
+                    "name": name,
+                    "unit_of_measure": unit_of_measure,
+                    "is_active": True,
+                },
+            )[1]
+        )
+        self.stdout.write(
+            f"  CategoryTypes: {len(CATEGORY_TYPES)} total, {created} new"
+        )

@@ -22,9 +22,13 @@ category_type_list = CategoryTypeViewSet.as_view({"get": "list", "post": "create
 # Categories
 category_list = CategoryViewSet.as_view({"get": "list", "post": "create"})
 category_detail = CategoryViewSet.as_view(
-    {"get": "retrieve", "put": "update", "patch": "update"}
+    {"get": "retrieve", "put": "update", "patch": "update", "delete": "destroy"}
 )
 category_search = CategoryViewSet.as_view({"get": "search"})
+category_options = CategoryViewSet.as_view({"get": "options"})
+category_toggle_status = CategoryViewSet.as_view({"post": "toggle_status"})
+category_bulk_delete = CategoryViewSet.as_view({"post": "bulk_delete"})
+category_send = CategoryViewSet.as_view({"post": "send_category"})
 
 # Records
 record_list = RecordViewSet.as_view({"get": "list", "post": "create"})
@@ -59,8 +63,16 @@ urlpatterns = [
     path("accounts/<int:pk>/", account_detail, name="account-detail"),
     path("category-types/", category_type_list, name="category-type-list"),
     path("categories/search/", category_search, name="category-search"),
+    path("categories/options/", category_options, name="category-options"),
+    path("categories/bulk-delete/", category_bulk_delete, name="category-bulk-delete"),
+    path("categories/send-category/", category_send, name="category-send"),
     path("categories/", category_list, name="category-list"),
     path("categories/<int:pk>/", category_detail, name="category-detail"),
+    path(
+        "categories/<int:pk>/toggle-status/",
+        category_toggle_status,
+        name="category-toggle-status",
+    ),
     path("records/", record_list, name="record-list"),
     path("records/<int:pk>/", record_detail, name="record-detail"),
     path("driver-invoices/", di_list, name="driver-invoice-list"),

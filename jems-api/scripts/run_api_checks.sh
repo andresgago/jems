@@ -1742,19 +1742,68 @@ assert_status "category type create" "201" "$(code "$resp")" "$(body "$resp")"
 CAT_TYPE_ID="$(body "$resp" | json_get_num id)"
 
 step "Accounting: category create"
-resp="$(post "/api/v1/accounting/categories/" "{\"code\":\"MED\",\"name\":\"Medical Card\",\"category_type\":${CAT_TYPE_ID},\"is_active\":true}")"
+resp="$(post "/api/v1/accounting/categories/" "{\"code\":\"MED\",\"name\":\"Medical Card\",\"category_type\":${CAT_TYPE_ID},\"is_active\":true,\"is_truck_part\":false}")"
 assert_status "category create" "201" "$(code "$resp")" "$(body "$resp")"
 CAT_ID="$(body "$resp" | json_get_num id)"
+assert_contains "category unit_of_measure present" "$(body "$resp")" '"unit_of_measure"'
+
+step "Accounting: category list (all statuses)"
+resp="$(get "/api/v1/accounting/categories/")"
+assert_status "category list" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "category in list" "$(body "$resp")" "MED"
+
+step "Accounting: category options"
+resp="$(get "/api/v1/accounting/categories/options/")"
+assert_status "category options" "200" "$(code "$resp")" "$(body "$resp")"
 
 step "Accounting: category retrieve"
 resp="$(get "/api/v1/accounting/categories/${CAT_ID}/")"
 assert_status "category retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "category code" "$(body "$resp")" "MED"
+assert_contains "category has category_type_name" "$(body "$resp")" '"category_type_name"'
+assert_contains "category has unit_of_measure" "$(body "$resp")" '"unit_of_measure"'
 
 step "Accounting: category update"
 resp="$(patch "/api/v1/accounting/categories/${CAT_ID}/" '{"name":"Medical Certificate"}')"
 assert_status "category update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "category updated" "$(body "$resp")" "Medical Certificate"
+
+step "Accounting: category toggle-status (active → inactive)"
+resp="$(post "/api/v1/accounting/categories/${CAT_ID}/toggle-status/" '{}')"
+assert_status "category toggle-status" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "category is inactive" "$(body "$resp")" '"is_active":false'
+
+step "Accounting: category toggle-status (inactive → active)"
+resp="$(post "/api/v1/accounting/categories/${CAT_ID}/toggle-status/" '{}')"
+assert_status "category toggle-status 2" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "category is active again" "$(body "$resp")" '"is_active":true'
+
+step "Accounting: category bulk-delete (partial success)"
+resp="$(post "/api/v1/accounting/categories/bulk-delete/" "{\"ids\":[${CAT_ID},99999]}")"
+assert_status "category bulk-delete" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "bulk-delete deleted list" "$(body "$resp")" '"deleted"'
+assert_contains "bulk-delete blocked list" "$(body "$resp")" '"blocked"'
+
+step "Accounting: category bulk-delete (empty ids → 400)"
+resp="$(post "/api/v1/accounting/categories/bulk-delete/" '{"ids":[]}')"
+assert_status "category bulk-delete empty" "400" "$(code "$resp")" "$(body "$resp")"
+
+step "Accounting: category send-category (quick create)"
+resp="$(post "/api/v1/accounting/categories/send-category/" "{\"code\":\"QCK\",\"name\":\"Quick Create\",\"category_type\":${CAT_TYPE_ID}}")"
+assert_status "category send-category" "201" "$(code "$resp")" "$(body "$resp")"
+QCK_CAT_ID="$(body "$resp" | json_get_num id)"
+
+step "Accounting: category search"
+resp="$(get "/api/v1/accounting/categories/search/?q=Medical")"
+assert_status "category search" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Accounting: category search (min 3 chars required)"
+resp="$(get "/api/v1/accounting/categories/search/?q=M")"
+assert_status "category search short q" "400" "$(code "$resp")" "$(body "$resp")"
+
+step "Accounting: category delete (CAT_ID already bulk-deleted, delete quick-create)"
+resp="$(delete "/api/v1/accounting/categories/${QCK_CAT_ID}/")"
+assert_status "category delete" "204" "$(code "$resp")" "$(body "$resp")"
 
 step "Accounting: record create"
 set +e
@@ -2680,10 +2729,9 @@ step "Categories: search returns results for query >= 3 chars"
 resp="$(get "/api/v1/accounting/categories/search/?q=Oil")"
 assert_status "category search" "200" "$(code "$resp")" "$(body "$resp")"
 
-step "Categories: search returns empty for query < 3 chars"
+step "Categories: search returns 400 for query < 3 chars"
 resp="$(get "/api/v1/accounting/categories/search/?q=Oi")"
-assert_status "category search short query" "200" "$(code "$resp")" "$(body "$resp")"
-assert_not_contains "category search short is empty (no id key)" "$(body "$resp")" '"id"'
+assert_status "category search short query" "400" "$(code "$resp")" "$(body "$resp")"
 
 step "Reports: broker-summary returns keys"
 resp="$(get "/api/v1/reports/broker-summary/?year=${REPORT_YEAR}")"

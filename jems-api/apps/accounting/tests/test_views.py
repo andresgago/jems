@@ -71,13 +71,352 @@ class TestAccountCreate:
 
 @pytest.mark.django_db
 class TestCategoryList:
-    def test_lists_active_categories(self, auth_client):
+    def test_lists_all_categories_by_default(self, auth_client):
         client, _ = auth_client
         CategoryFactory.create_batch(2, is_active=True)
         CategoryFactory(is_active=False)
         response = client.get(reverse("category-list"))
         assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) >= 3
+
+    def test_filter_by_status_active(self, auth_client):
+        client, _ = auth_client
+        active = CategoryFactory(is_active=True)
+        CategoryFactory(is_active=False)
+        response = client.get(reverse("category-list"), {"status": "1"})
+        assert response.status_code == status.HTTP_200_OK
+        ids = [c["id"] for c in response.data]
+        assert active.pk in ids
         assert all(c["is_active"] for c in response.data)
+
+    def test_filter_by_status_inactive(self, auth_client):
+        client, _ = auth_client
+        inactive = CategoryFactory(is_active=False)
+        CategoryFactory(is_active=True)
+        response = client.get(reverse("category-list"), {"status": "0"})
+        assert response.status_code == status.HTTP_200_OK
+        ids = [c["id"] for c in response.data]
+        assert inactive.pk in ids
+        assert all(not c["is_active"] for c in response.data)
+
+    def test_filter_by_category_type(self, auth_client):
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory()
+        other_ct = CategoryTypeFactory()
+        cat = CategoryFactory(category_type=ct)
+        CategoryFactory(category_type=other_ct)
+        response = client.get(reverse("category-list"), {"category_type": ct.pk})
+        assert response.status_code == status.HTTP_200_OK
+        ids = [c["id"] for c in response.data]
+        assert cat.pk in ids
+        assert all(c["category_type"] == ct.pk for c in response.data)
+
+    def test_filter_by_is_truck_part(self, auth_client):
+        client, _ = auth_client
+        truck_part = CategoryFactory(is_truck_part=True)
+        CategoryFactory(is_truck_part=False)
+        response = client.get(reverse("category-list"), {"is_truck_part": "1"})
+        assert response.status_code == status.HTTP_200_OK
+        ids = [c["id"] for c in response.data]
+        assert truck_part.pk in ids
+        assert all(c["is_truck_part"] for c in response.data)
+
+    def test_filter_by_name(self, auth_client):
+        client, _ = auth_client
+        CategoryFactory(name="Oil Filter Special")
+        CategoryFactory(name="Brake Shoe")
+        response = client.get(reverse("category-list"), {"name": "oil"})
+        assert response.status_code == status.HTTP_200_OK
+        assert all("oil" in c["name"].lower() for c in response.data)
+
+    def test_filter_by_code(self, auth_client):
+        client, _ = auth_client
+        CategoryFactory(code="OF999")
+        CategoryFactory(code="BS001")
+        response = client.get(reverse("category-list"), {"code": "OF9"})
+        assert response.status_code == status.HTTP_200_OK
+        assert all("OF9" in c["code"] for c in response.data)
+
+    def test_response_includes_unit_of_measure(self, auth_client):
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory(unit_of_measure="Gallons")
+        CategoryFactory(category_type=ct)
+        response = client.get(reverse("category-list"))
+        assert response.status_code == status.HTTP_200_OK
+        items_with_unit = [
+            c for c in response.data if c["unit_of_measure"] == "Gallons"
+        ]
+        assert len(items_with_unit) >= 1
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.get(reverse("category-list"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_default_sort_by_code(self, auth_client):
+        client, _ = auth_client
+        CategoryFactory(code="ZZZ999")
+        CategoryFactory(code="AAA001")
+        response = client.get(reverse("category-list"))
+        assert response.status_code == status.HTTP_200_OK
+        codes = [c["code"] for c in response.data]
+        assert codes == sorted(codes)
+
+
+@pytest.mark.django_db
+class TestCategoryCreate:
+    def test_creates_category(self, auth_client):
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory()
+        payload = {"code": "NEW001", "name": "New Category", "category_type": ct.pk}
+        response = client.post(reverse("category-list"), payload)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["code"] == "NEW001"
+        assert response.data["category_type_name"] == ct.name
+
+    def test_duplicate_code_returns_400(self, auth_client):
+        client, _ = auth_client
+        CategoryFactory(code="DUP001")
+        response = client.post(
+            reverse("category-list"), {"code": "DUP001", "name": "Dup"}
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.post(reverse("category-list"), {})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestCategoryRetrieve:
+    def test_retrieves_category(self, auth_client):
+        client, _ = auth_client
+        cat = CategoryFactory()
+        response = client.get(reverse("category-detail", kwargs={"pk": cat.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == cat.pk
+        assert "unit_of_measure" in response.data
+
+    def test_404_for_missing(self, auth_client):
+        client, _ = auth_client
+        response = client.get(reverse("category-detail", kwargs={"pk": 99999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestCategoryUpdate:
+    def test_patches_name(self, auth_client):
+        client, _ = auth_client
+        cat = CategoryFactory(name="Old Name")
+        response = client.patch(
+            reverse("category-detail", kwargs={"pk": cat.pk}), {"name": "New Name"}
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["name"] == "New Name"
+
+
+@pytest.mark.django_db
+class TestCategoryDelete:
+    def test_deletes_category_without_records(self, auth_client):
+        client, _ = auth_client
+        cat = CategoryFactory()
+        response = client.delete(reverse("category-detail", kwargs={"pk": cat.pk}))
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_blocked_if_records_exist(self, auth_client):
+        import datetime
+
+        from apps.accounting.tests.factories import RecordFactory
+
+        client, _ = auth_client
+        cat = CategoryFactory()
+        RecordFactory(category=cat, date=datetime.date.today())
+        response = client.delete(reverse("category-detail", kwargs={"pk": cat.pk}))
+        assert response.status_code == status.HTTP_409_CONFLICT
+
+    def test_404_for_missing(self, auth_client):
+        client, _ = auth_client
+        response = client.delete(reverse("category-detail", kwargs={"pk": 99999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestCategoryToggleStatus:
+    url_name = "category-toggle-status"
+
+    def test_toggles_active_to_inactive(self, auth_client):
+        client, _ = auth_client
+        cat = CategoryFactory(is_active=True)
+        response = client.post(reverse(self.url_name, kwargs={"pk": cat.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["is_active"] is False
+
+    def test_toggles_inactive_to_active(self, auth_client):
+        client, _ = auth_client
+        cat = CategoryFactory(is_active=False)
+        response = client.post(reverse(self.url_name, kwargs={"pk": cat.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["is_active"] is True
+
+    def test_404_for_missing(self, auth_client):
+        client, _ = auth_client
+        response = client.post(reverse(self.url_name, kwargs={"pk": 99999}))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_unauthenticated_blocked(self, api_client):
+        cat = CategoryFactory()
+        response = api_client.post(reverse(self.url_name, kwargs={"pk": cat.pk}))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestCategoryBulkDelete:
+    url = "/api/v1/accounting/categories/bulk-delete/"
+
+    def test_deletes_all_allowed(self, auth_client):
+        client, _ = auth_client
+        cats = CategoryFactory.create_batch(3)
+        ids = [c.pk for c in cats]
+        response = client.post(self.url, {"ids": ids}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert set(response.data["deleted"]) == set(ids)
+
+    def test_partial_failure_207(self, auth_client):
+        import datetime
+
+        from apps.accounting.tests.factories import RecordFactory
+
+        client, _ = auth_client
+        cat_ok = CategoryFactory()
+        cat_blocked = CategoryFactory()
+        RecordFactory(category=cat_blocked, date=datetime.date.today())
+        response = client.post(
+            self.url, {"ids": [cat_ok.pk, cat_blocked.pk]}, format="json"
+        )
+        assert response.status_code == status.HTTP_207_MULTI_STATUS
+        assert cat_ok.pk in response.data["deleted"]
+        assert cat_blocked.pk in response.data["blocked"]
+
+    def test_empty_ids_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(self.url, {"ids": []}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_missing_ids_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(self.url, {}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.post(self.url, {"ids": [1]}, format="json")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestCategoryOptions:
+    url = "/api/v1/accounting/categories/options/"
+
+    def test_returns_active_only(self, auth_client):
+        client, _ = auth_client
+        active = CategoryFactory(is_active=True)
+        CategoryFactory(is_active=False)
+        response = client.get(self.url)
+        assert response.status_code == status.HTTP_200_OK
+        ids = [c["id"] for c in response.data]
+        assert active.pk in ids
+        assert all(c.get("id") is not None for c in response.data)
+
+    def test_response_shape(self, auth_client):
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory(unit_of_measure="Gallons")
+        CategoryFactory(category_type=ct, name="Oil Change", code="OC001")
+        response = client.get(self.url)
+        assert response.status_code == status.HTTP_200_OK
+        entry = next(c for c in response.data if c["code"] == "OC001")
+        assert "id" in entry
+        assert "name" in entry
+        assert "code" in entry
+        assert "label" in entry
+        assert "unit_of_measure" in entry
+        assert entry["unit_of_measure"] == "Gallons"
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.get(self.url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestCategorySendCategory:
+    url = "/api/v1/accounting/categories/send-category/"
+
+    def test_creates_category_with_required_fields(self, auth_client):
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory(unit_of_measure="Unit")
+        payload = {"code": "SC001", "name": "Quick Create", "category_type": ct.pk}
+        response = client.post(self.url, payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["success"] is True
+        assert response.data["code"] == "SC001"
+        assert response.data["category_type_id"] == ct.pk
+        assert response.data["category_type_um"] == "Unit"
+
+    def test_missing_code_returns_400(self, auth_client):
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory()
+        response = client.post(self.url, {"name": "X", "category_type": ct.pk})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["success"] is False
+
+    def test_missing_name_returns_400(self, auth_client):
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory()
+        response = client.post(self.url, {"code": "X001", "category_type": ct.pk})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_missing_type_returns_400(self, auth_client):
+        client, _ = auth_client
+        response = client.post(self.url, {"code": "X001", "name": "X"})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_duplicate_code_returns_400(self, auth_client):
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory()
+        CategoryFactory(code="DUP001")
+        response = client.post(
+            self.url, {"code": "DUP001", "name": "Dup", "category_type": ct.pk}
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_category_is_active_after_create(self, auth_client):
+        from apps.accounting.models import Category
+        from apps.accounting.tests.factories import CategoryTypeFactory
+
+        client, _ = auth_client
+        ct = CategoryTypeFactory()
+        client.post(
+            self.url, {"code": "ACT001", "name": "Active", "category_type": ct.pk}
+        )
+        cat = Category.objects.get(code="ACT001")
+        assert cat.is_active is True
+
+    def test_unauthenticated_blocked(self, api_client):
+        response = api_client.post(self.url, {})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 # ── Records ───────────────────────────────────────────────────────────────────
@@ -345,12 +684,11 @@ class TestCategorySearch:
         response = api_client.get(self.url, {"q": "oil"})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_short_query_returns_empty(self, auth_client):
+    def test_short_query_returns_400(self, auth_client):
         client, _ = auth_client
         CategoryFactory(name="Oil Filter", code="OF001")
         response = client.get(self.url, {"q": "oi"})
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data == []
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_matches_by_name(self, auth_client):
         client, _ = auth_client

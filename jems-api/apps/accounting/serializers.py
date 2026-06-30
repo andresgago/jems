@@ -39,6 +39,14 @@ class CategorySerializer(serializers.ModelSerializer):
     category_type_name = serializers.CharField(
         source="category_type.name", read_only=True
     )
+    unit_of_measure = serializers.CharField(
+        source="category_type.unit_of_measure", read_only=True
+    )
+    engine_type_name = serializers.CharField(source="engine_type.name", read_only=True)
+    cabin_type_name = serializers.CharField(source="cabin_type.name", read_only=True)
+    transmission_type_name = serializers.CharField(
+        source="transmission_type.name", read_only=True
+    )
 
     class Meta:
         model = Category
@@ -48,14 +56,25 @@ class CategorySerializer(serializers.ModelSerializer):
             "name",
             "category_type",
             "category_type_name",
+            "unit_of_measure",
             "is_active",
             "is_truck_part",
             "engine_type",
+            "engine_type_name",
             "cabin_type",
+            "cabin_type_name",
             "transmission_type",
+            "transmission_type_name",
             "photo",
         ]
-        read_only_fields = ["id", "category_type_name"]
+        read_only_fields = [
+            "id",
+            "category_type_name",
+            "unit_of_measure",
+            "engine_type_name",
+            "cabin_type_name",
+            "transmission_type_name",
+        ]
 
 
 class RecordSerializer(serializers.ModelSerializer):

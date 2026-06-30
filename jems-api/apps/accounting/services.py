@@ -176,6 +176,38 @@ def update_category(*, category: Category, **kwargs: Any) -> Category:
     return category
 
 
+def delete_category(*, category: Category) -> None:
+    """Delete a category. Raises ValueError if it has linked Records."""
+    if category.records.exists():
+        raise ValueError(
+            f"Category '{category.code}' cannot be deleted because it has linked records."
+        )
+    category.delete()
+
+
+def toggle_category_status(*, category: Category) -> Category:
+    category.is_active = not category.is_active
+    category.save(update_fields=["is_active"])
+    return category
+
+
+def bulk_delete_categories(*, ids: list[int]) -> dict:
+    """Delete multiple categories. Returns lists of deleted and blocked IDs."""
+    deleted: list[int] = []
+    blocked: list[int] = []
+    for pk in ids:
+        try:
+            cat = Category.objects.get(pk=pk)
+        except Category.DoesNotExist:
+            continue
+        try:
+            delete_category(category=cat)
+            deleted.append(pk)
+        except ValueError:
+            blocked.append(pk)
+    return {"deleted": deleted, "blocked": blocked}
+
+
 # ── Records ───────────────────────────────────────────────────────────────────
 
 

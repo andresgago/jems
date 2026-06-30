@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -28,6 +30,7 @@ from .serializers import (
     RecordSerializer,
 )
 from .services import (
+    bulk_delete_categories,
     close_driver_invoice,
     close_owner_invoice,
     create_account,
@@ -35,12 +38,14 @@ from .services import (
     create_driver_invoice,
     create_owner_invoice,
     create_record,
+    delete_category,
     delete_driver_invoice,
     delete_owner_invoice,
     delete_record,
     get_driver_invoice_analysis,
     open_driver_invoice,
     open_owner_invoice,
+    toggle_category_status,
     update_account,
     update_category,
     update_driver_invoice,
@@ -99,40 +104,213 @@ class CategoryTypeViewSet(ViewSet):
 class CategoryViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
-    def list(self, request):
-        qs = Category.objects.select_related("category_type").filter(is_active=True)
-        return Response(CategorySerializer(qs, many=True).data)
-
-    def create(self, request):
-        serializer = CategorySerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        category = create_category(**serializer.validated_data)
-        return Response(
-            CategorySerializer(category).data, status=status.HTTP_201_CREATED
+    def _base_qs(self):
+        return Category.objects.select_related(
+            "category_type", "engine_type", "cabin_type", "transmission_type"
         )
 
-    def retrieve(self, request, pk=None):
+    def list(self, request: "Request") -> Response:
+        qs = self._base_qs()
+        # Status filter: default returns all (active + inactive) — mirrors legacy
+        status_param = request.query_params.get("status")
+        if status_param is not None:
+            qs = qs.filter(is_active=status_param in ("1", "true", "True"))
+        # Type filter
+        category_type = request.query_params.get("category_type")
+        if category_type:
+            qs = qs.filter(category_type_id=category_type)
+        # Truck part filter
+        is_truck_part = request.query_params.get("is_truck_part")
+        if is_truck_part is not None:
+            qs = qs.filter(is_truck_part=is_truck_part in ("1", "true", "True"))
+        # Name / code LIKE filters
+        name_q = request.query_params.get("name", "").strip()
+        if name_q:
+            qs = qs.filter(name__icontains=name_q)
+        code_q = request.query_params.get("code", "").strip()
+        if code_q:
+            qs = qs.filter(code__icontains=code_q)
+        qs = qs.order_by("code")
+        return Response(CategorySerializer(qs, many=True).data)
+
+    def create(self, request: "Request") -> Response:
+        serializer = CategorySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
         try:
-            category = Category.objects.get(pk=pk)
+            category = create_category(**serializer.validated_data)
+        except DjangoValidationError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            CategorySerializer(self._base_qs().get(pk=category.pk)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def retrieve(self, request: "Request", pk: Optional[str] = None) -> Response:
+        try:
+            category = self._base_qs().get(pk=pk)
         except Category.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(CategorySerializer(category).data)
 
-    def update(self, request, pk=None):
+    def update(self, request: "Request", pk: Optional[str] = None) -> Response:
         try:
-            category = Category.objects.get(pk=pk)
+            category = self._base_qs().get(pk=pk)
         except Category.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = CategorySerializer(category, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         category = update_category(category=category, **serializer.validated_data)
-        return Response(CategorySerializer(category).data)
+        return Response(CategorySerializer(self._base_qs().get(pk=category.pk)).data)
+
+    def destroy(self, request: "Request", pk: Optional[str] = None) -> Response:
+        assert pk is not None
+        try:
+            category = Category.objects.get(pk=pk)
+        except Category.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        try:
+            delete_category(category=category)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["get"], url_path="options")
+    def options(self, request: "Request") -> Response:
+        qs = (
+            Category.objects.select_related("category_type")
+            .filter(is_active=True)
+            .order_by("name")
+        )
+        data = [
+            {
+                "id": cat.pk,
+                "name": cat.name,
+                "code": cat.code,
+                "label": f"{cat.name} - {cat.code}",
+                "category_type_name": (
+                    cat.category_type.name if cat.category_type else ""
+                ),
+                "unit_of_measure": (
+                    cat.category_type.unit_of_measure if cat.category_type else ""
+                ),
+            }
+            for cat in qs
+        ]
+        return Response(data)
+
+    @action(detail=True, methods=["post"], url_path="toggle-status")
+    def toggle_status(self, request: "Request", pk: Optional[str] = None) -> Response:
+        assert pk is not None
+        try:
+            category = Category.objects.get(pk=pk)
+        except Category.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        category = toggle_category_status(category=category)
+        return Response(CategorySerializer(self._base_qs().get(pk=category.pk)).data)
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request: "Request") -> Response:
+        ids = request.data.get("ids", [])
+        if not ids:
+            return Response(
+                {"detail": "ids list is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = bulk_delete_categories(ids=ids)
+        if result["blocked"]:
+            return Response(
+                {
+                    "detail": (
+                        "Some categories could not be deleted because they have linked records."
+                    ),
+                    "deleted": result["deleted"],
+                    "blocked": result["blocked"],
+                },
+                status=status.HTTP_207_MULTI_STATUS,
+            )
+        return Response(
+            {"deleted": result["deleted"], "blocked": []},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"], url_path="send-category")
+    def send_category(self, request: "Request") -> Response:
+        """Quick-create endpoint — mirrors legacy actionSendCategory."""
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        code = str(request.data.get("code", "")).strip()
+        name = str(request.data.get("name", "")).strip()
+        category_type_id = request.data.get("category_type")
+
+        if not code or not name or not category_type_id:
+            errors: dict = {}
+            if not code:
+                errors["code"] = ["This field is required."]
+            if not name:
+                errors["name"] = ["This field is required."]
+            if not category_type_id:
+                errors["category_type"] = ["This field is required."]
+            return Response(
+                {"success": False, **errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from .models import CategoryType
+
+            category_type = CategoryType.objects.get(pk=category_type_id)
+        except CategoryType.DoesNotExist:
+            return Response(
+                {"success": False, "category_type": ["Category type not found."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        kwargs: dict = {
+            "is_active": True,
+            "is_truck_part": bool(request.data.get("is_truck_part", False)),
+            "category_type": category_type,
+        }
+        engine_type_id = request.data.get("engine_type")
+        if engine_type_id:
+            kwargs["engine_type_id"] = int(engine_type_id)
+        cabin_type_id = request.data.get("cabin_type")
+        if cabin_type_id:
+            kwargs["cabin_type_id"] = int(cabin_type_id)
+        transmission_type_id = request.data.get("transmission_type")
+        if transmission_type_id:
+            kwargs["transmission_type_id"] = int(transmission_type_id)
+
+        try:
+            category = create_category(code=code, name=name, **kwargs)
+        except DjangoValidationError as exc:
+            return Response(
+                {"success": False, "detail": exc.message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "success": True,
+                "id": category.pk,
+                "code": category.code,
+                "name": category.name,
+                "category_type_id": category_type.pk,
+                "category_type_name": category_type.name,
+                "category_type_um": category_type.unit_of_measure,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=["get"], url_path="search")
     def search(self, request: "Request") -> Response:
         q = request.query_params.get("q", "").strip()
         if len(q) < 3:
-            return Response([])
+            return Response(
+                {"detail": "Search query must be at least 3 characters."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         qs = (
             (
                 Category.objects.select_related("category_type")
