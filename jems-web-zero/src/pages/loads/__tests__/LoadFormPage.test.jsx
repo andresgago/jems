@@ -63,6 +63,11 @@ const DISPATCHERS = [
   { id: 11, full_name: 'Bob Jones',  username: 'bob',   is_dispatcher: true },
 ]
 
+const STATES = [
+  { id: 5, name: 'California', abbreviation: 'CA' },
+  { id: 8, name: 'Colorado', abbreviation: 'CO' },
+]
+
 function renderNewForm() {
   return render(
     <MemoryRouter initialEntries={['/loads/new']}>
@@ -551,6 +556,144 @@ describe('LoadFormPage — shipper and receiver fields', () => {
 
     await waitFor(() =>
       expect(screen.getByText('This field is required.')).toBeInTheDocument()
+    )
+  })
+})
+
+// ── Pickup / Dropoff city inline create ────────────────────────────────────────
+
+describe('LoadFormPage — pickup and dropoff city inline create', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useOptions.mockImplementation((url) => {
+      if (url.includes('trailer-types')) return TRAILER_TYPES
+      if (url.includes('carriers')) return CARRIERS
+      if (url.includes('dispatchers')) return DISPATCHERS
+      if (url.includes('states')) return STATES
+      return []
+    })
+    loadGoogleMaps.mockReturnValue(new Promise(() => {}))
+    api.get.mockResolvedValue({ data: [] })
+  })
+
+  it('Pick Up City label has a "+" button', () => {
+    renderNewForm()
+    const label = screen.getByText(/pick up city/i, { selector: 'label' })
+    expect(label.querySelector('button[title="New city"]')).toBeInTheDocument()
+  })
+
+  it('Drop Off City label has a "+" button', () => {
+    renderNewForm()
+    const label = screen.getByText(/drop off city/i, { selector: 'label' })
+    expect(label.querySelector('button[title="New city"]')).toBeInTheDocument()
+  })
+
+  it('clicking "+" on Pick Up City shows the inline create form', () => {
+    renderNewForm()
+    const label = screen.getByText(/pick up city/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New city"]'))
+    expect(screen.getByPlaceholderText('City name')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Zip')).toBeInTheDocument()
+  })
+
+  it('clicking "+" on Drop Off City shows its own inline create form', () => {
+    renderNewForm()
+    const label = screen.getByText(/drop off city/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New city"]'))
+    expect(screen.getByPlaceholderText('City name')).toBeInTheDocument()
+  })
+
+  it('Cancel button hides the inline create form', () => {
+    renderNewForm()
+    const label = screen.getByText(/pick up city/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New city"]'))
+    const inlineForm = screen.getByPlaceholderText('City name').closest('.border')
+    fireEvent.click(within(inlineForm).getByRole('button', { name: /cancel/i }))
+    expect(screen.queryByPlaceholderText('City name')).not.toBeInTheDocument()
+  })
+
+  it('inline create form Save button is disabled until name, zip, and state are filled', () => {
+    renderNewForm()
+    const label = screen.getByText(/pick up city/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New city"]'))
+    const inlineForm = screen.getByPlaceholderText('City name').closest('.border')
+    const saveButton = within(inlineForm).getByRole('button', { name: /save/i })
+    expect(saveButton).toBeDisabled()
+
+    fireEvent.change(within(inlineForm).getByPlaceholderText('City name'), { target: { value: 'Denver' } })
+    expect(saveButton).toBeDisabled()
+
+    fireEvent.change(within(inlineForm).getByPlaceholderText('Zip'), { target: { value: '80202' } })
+    expect(saveButton).toBeDisabled()
+
+    fireEvent.change(within(inlineForm).getByRole('combobox'), { target: { value: '8' } })
+    expect(saveButton).not.toBeDisabled()
+  })
+
+  it('creating a city via inline form auto-selects it as Pick Up City', async () => {
+    api.post.mockResolvedValueOnce({ data: { id: 99, name: 'Denver', state_abbreviation: 'CO' } })
+
+    renderNewForm()
+    const label = screen.getByText(/pick up city/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New city"]'))
+    const inlineForm = screen.getByPlaceholderText('City name').closest('.border')
+
+    fireEvent.change(within(inlineForm).getByPlaceholderText('City name'), { target: { value: 'Denver' } })
+    fireEvent.change(within(inlineForm).getByPlaceholderText('Zip'), { target: { value: '80202' } })
+    fireEvent.change(within(inlineForm).getByRole('combobox'), { target: { value: '8' } })
+    fireEvent.click(within(inlineForm).getByRole('button', { name: /save/i }))
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/locations/cities/', {
+        name: 'Denver', zip: '80202', state: 8, active: true,
+      })
+    )
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('Denver, CO')).toBeInTheDocument()
+    )
+    expect(screen.queryByPlaceholderText('City name')).not.toBeInTheDocument()
+  })
+
+  it('creating a city via inline form auto-selects it as Drop Off City', async () => {
+    api.post.mockResolvedValueOnce({ data: { id: 100, name: 'Sacramento', state_abbreviation: 'CA' } })
+
+    renderNewForm()
+    const label = screen.getByText(/drop off city/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New city"]'))
+    const inlineForm = screen.getByPlaceholderText('City name').closest('.border')
+
+    fireEvent.change(within(inlineForm).getByPlaceholderText('City name'), { target: { value: 'Sacramento' } })
+    fireEvent.change(within(inlineForm).getByPlaceholderText('Zip'), { target: { value: '95814' } })
+    fireEvent.change(within(inlineForm).getByRole('combobox'), { target: { value: '5' } })
+    fireEvent.click(within(inlineForm).getByRole('button', { name: /save/i }))
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/locations/cities/', {
+        name: 'Sacramento', zip: '95814', state: 5, active: true,
+      })
+    )
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('Sacramento, CA')).toBeInTheDocument()
+    )
+  })
+
+  it('shows server error inside the inline form when city creation fails', async () => {
+    api.post.mockRejectedValueOnce({
+      response: { data: { zip: ['Zip code must be exactly 5 digits.'] } },
+    })
+
+    renderNewForm()
+    const label = screen.getByText(/pick up city/i, { selector: 'label' })
+    fireEvent.click(label.querySelector('button[title="New city"]'))
+    const inlineForm = screen.getByPlaceholderText('City name').closest('.border')
+
+    fireEvent.change(within(inlineForm).getByPlaceholderText('City name'), { target: { value: 'Denver' } })
+    fireEvent.change(within(inlineForm).getByPlaceholderText('Zip'), { target: { value: '1234' } })
+    fireEvent.change(within(inlineForm).getByRole('combobox'), { target: { value: '8' } })
+    fireEvent.click(within(inlineForm).getByRole('button', { name: /save/i }))
+
+    await waitFor(() =>
+      expect(screen.getByText('Zip code must be exactly 5 digits.')).toBeInTheDocument()
     )
   })
 })

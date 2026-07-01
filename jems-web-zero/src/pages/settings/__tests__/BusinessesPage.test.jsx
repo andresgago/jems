@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import BusinessesPage from '../BusinessesPage'
 
 vi.mock('../../../services/businesses', async () => {
@@ -21,8 +21,13 @@ vi.mock('../../../services/cities', () => ({
   citiesService: { list: vi.fn() },
 }))
 
+vi.mock('../../../contexts/useAuth', () => ({
+  useAuth: vi.fn(),
+}))
+
 import { businessesService } from '../../../services/businesses'
 import { citiesService } from '../../../services/cities'
+import { useAuth } from '../../../contexts/useAuth'
 
 const businesses = [
   {
@@ -51,6 +56,7 @@ const businesses = [
 
 beforeEach(() => {
   vi.clearAllMocks()
+  useAuth.mockReturnValue({ user: { roles: ['admin'] } })
   businessesService.list.mockResolvedValue({ data: { count: 2, results: businesses } })
   businessesService.get.mockResolvedValue({ data: businesses[0] })
   businessesService.create.mockResolvedValue({ data: { id: 3, name: 'New Business' } })
@@ -133,5 +139,55 @@ describe('BusinessesPage', () => {
     fireEvent.click(screen.getAllByTitle('Delete')[1])
     await waitFor(() => expect(businessesService.destroy).toHaveBeenCalledWith(2))
     vi.restoreAllMocks()
+  })
+
+  it('hides the Rating column and cells for a non-admin role', async () => {
+    useAuth.mockReturnValue({ user: { roles: ['dispatcher'] } })
+    render(<BusinessesPage />)
+    await screen.findByText('Acme Warehouse')
+    expect(screen.queryByText('Rating', { selector: 'th' })).not.toBeInTheDocument()
+    expect(screen.queryByText('(8)')).not.toBeInTheDocument()
+    expect(screen.queryByText('(Not rating yet)')).not.toBeInTheDocument()
+  })
+
+  it('shows the Rating column and cells for the admin role', async () => {
+    render(<BusinessesPage />)
+    await screen.findByText('Acme Warehouse')
+    expect(screen.getByText('Rating', { selector: 'th' })).toBeInTheDocument()
+    expect(screen.getByText('(8)')).toBeInTheDocument()
+    expect(screen.getByText('(Not rating yet)')).toBeInTheDocument()
+  })
+
+  it('shows the Rating column for the root role', async () => {
+    useAuth.mockReturnValue({ user: { roles: ['root'] } })
+    render(<BusinessesPage />)
+    await screen.findByText('Acme Warehouse')
+    expect(screen.getByText('Rating', { selector: 'th' })).toBeInTheDocument()
+  })
+
+  it('hides the Rating row in the view modal for a non-admin role', async () => {
+    useAuth.mockReturnValue({ user: { roles: ['dispatcher'] } })
+    render(<BusinessesPage />)
+    await screen.findByText('Acme Warehouse')
+    fireEvent.click(screen.getAllByTitle('View')[0])
+    expect(await screen.findByText('Business: Acme Warehouse')).toBeInTheDocument()
+    const dialog = within(screen.getByRole('dialog'))
+    expect(dialog.queryByText('Rating', { selector: 'th' })).not.toBeInTheDocument()
+  })
+
+  it('shows the Rating row in the view modal for the admin role', async () => {
+    render(<BusinessesPage />)
+    await screen.findByText('Acme Warehouse')
+    fireEvent.click(screen.getAllByTitle('View')[0])
+    expect(await screen.findByText('Business: Acme Warehouse')).toBeInTheDocument()
+    const dialog = within(screen.getByRole('dialog'))
+    expect(dialog.getByText('Rating', { selector: 'th' })).toBeInTheDocument()
+  })
+
+  it('does not crash when useAuth returns no user (unauthenticated edge case)', async () => {
+    useAuth.mockReturnValue(undefined)
+    render(<BusinessesPage />)
+    await screen.findByText('Acme Warehouse')
+    expect(screen.queryByText('Rating', { selector: 'th' })).not.toBeInTheDocument()
   })
 })

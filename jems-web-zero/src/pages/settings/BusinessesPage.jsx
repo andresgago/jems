@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { businessesService, BUSINESS_STATUS } from '../../services/businesses'
 import { citiesService } from '../../services/cities'
+import { useAuth } from '../../contexts/useAuth'
 
 const EMPTY_FORM = { name: '', address: '', city: '', status: '1' }
 
@@ -121,7 +122,7 @@ function BusinessForm({ initial, cities, saving, error, onSubmit, onCancel }) {
   )
 }
 
-function BusinessView({ business, onEdit, onClose }) {
+function BusinessView({ business, isAdmin, onEdit, onClose }) {
   return (
     <>
       <div className="modal-body">
@@ -130,7 +131,7 @@ function BusinessView({ business, onEdit, onClose }) {
             <tr><th>Name</th><td>{business.name}</td></tr>
             <tr><th>Address</th><td>{business.address || '-'}</td></tr>
             <tr><th>City</th><td>{business.city_display || '-'}</td></tr>
-            <tr><th>Rating</th><td>{ratingText(business.rating)}</td></tr>
+            {isAdmin && <tr><th>Rating</th><td>{ratingText(business.rating)}</td></tr>}
             <tr><th>Status</th><td>{statusBadge(business.status)}</td></tr>
             <tr><th>Loads</th><td>{business.load_count || 0}</td></tr>
           </tbody>
@@ -149,6 +150,10 @@ function BusinessView({ business, onEdit, onClose }) {
 }
 
 export default function BusinessesPage() {
+  const auth = useAuth() || {}
+  const user = auth.user
+  const isAdmin = Boolean(user?.roles?.includes('root') || user?.roles?.includes('admin'))
+
   const [items, setItems] = useState([])
   const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
@@ -263,7 +268,7 @@ export default function BusinessesPage() {
               <th>Name</th>
               <th>Address</th>
               <th>City</th>
-              <th>Rating</th>
+              {isAdmin && <th>Rating</th>}
               <th>Status</th>
               <th className="text-center">Actions</th>
               <th className="text-center">Status</th>
@@ -285,7 +290,7 @@ export default function BusinessesPage() {
                   ))}
                 </select>
               </th>
-              <th />
+              {isAdmin && <th />}
               <th>
                 <select className="form-select form-select-sm" value={filters.status} onChange={(event) => setFilter('status', event.target.value)}>
                   <option value="">...</option>
@@ -298,8 +303,8 @@ export default function BusinessesPage() {
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={9} className="text-center py-4"><div className="spinner-border spinner-border-sm" /></td></tr>}
-            {!loading && items.length === 0 && <tr><td colSpan={9} className="text-center text-muted py-4">No businesses found.</td></tr>}
+            {loading && <tr><td colSpan={isAdmin ? 9 : 8} className="text-center py-4"><div className="spinner-border spinner-border-sm" /></td></tr>}
+            {!loading && items.length === 0 && <tr><td colSpan={isAdmin ? 9 : 8} className="text-center text-muted py-4">No businesses found.</td></tr>}
             {!loading && items.map((business, index) => (
               <tr key={business.id} className={business.status !== 1 ? 'row-desactivada' : ''}>
                 <td><input type="checkbox" aria-label={`Select ${business.name}`} /></td>
@@ -307,7 +312,7 @@ export default function BusinessesPage() {
                 <td>{business.name}</td>
                 <td>{business.address || '-'}</td>
                 <td>{business.city_display || '-'}</td>
-                <td>{ratingText(business.rating)}</td>
+                {isAdmin && <td>{ratingText(business.rating)}</td>}
                 <td>{statusBadge(business.status)}</td>
                 <td className="text-center">
                   <button className="btn btn-link btn-sm p-0 me-2" title="View" onClick={() => openView(business)}><i className="bi bi-eye" /></button>
@@ -344,7 +349,7 @@ export default function BusinessesPage() {
 
       {modal?.mode === 'view' && (
         <Modal title={`Business: ${modal.item.name}`} onClose={closeModal}>
-          <BusinessView business={modal.item} onClose={closeModal} onEdit={() => setModal({ mode: 'edit', item: modal.item })} />
+          <BusinessView business={modal.item} isAdmin={isAdmin} onClose={closeModal} onEdit={() => setModal({ mode: 'edit', item: modal.item })} />
         </Modal>
       )}
       {(modal?.mode === 'create' || modal?.mode === 'edit') && (

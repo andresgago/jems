@@ -211,6 +211,6 @@ describe('AccidentDetailPage', () => {
     renderDetail()
     fireEvent.click(screen.getByRole('button', { name: /Delete/i }))
     await waitFor(() => expect(accidentsService.destroy).toHaveBeenCalledWith('7'))
-    expect(screen.getByText('Accidents List')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Accidents List')).toBeInTheDocument())
   })
 })

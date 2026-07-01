@@ -55,6 +55,78 @@ function BusinessCreateRow({ onSave, onCancel }) {
   );
 }
 
+function CityCreateRow({ states, onSave, onCancel }) {
+  const [name, setName] = useState('');
+  const [zip, setZip] = useState('');
+  const [state, setState] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const canSave = name.trim() && zip.trim() && state;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    setError('');
+    try {
+      const { data } = await api.post('/locations/cities/', {
+        name: name.trim(),
+        zip: zip.trim(),
+        state: Number(state),
+        active: true,
+      });
+      onSave(data);
+    } catch (e) {
+      const data = e.response?.data;
+      const message = data?.name?.[0] || data?.zip?.[0] || data?.state?.[0]
+        || data?.non_field_errors?.[0] || 'Could not create city.';
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border rounded p-2 mt-1 bg-light">
+      <div className="row g-1">
+        <div className="col-5">
+          <input
+            autoFocus
+            className="form-control form-control-sm"
+            placeholder="City name"
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+        </div>
+        <div className="col-3">
+          <input
+            className="form-control form-control-sm"
+            placeholder="Zip"
+            maxLength={5}
+            value={zip}
+            onChange={e => setZip(e.target.value)}
+          />
+        </div>
+        <div className="col-4">
+          <select className="form-select form-select-sm" value={state} onChange={e => setState(e.target.value)}>
+            <option value="">State…</option>
+            {states.map(s => (
+              <option key={s.id} value={s.id}>{s.abbreviation}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="d-flex gap-1 mt-1">
+        <button className="btn btn-primary btn-sm" type="button" onClick={handleSave} disabled={saving || !canSave}>
+          {saving ? '…' : 'Save'}
+        </button>
+        <button className="btn btn-outline-secondary btn-sm" type="button" onClick={onCancel}>Cancel</button>
+      </div>
+      {error && <div className="text-danger small mt-1">{error}</div>}
+    </div>
+  );
+}
+
 function AsyncSearch({ label, placeholder = 'Type to search...', value, displayValue, onSearch, onSelect, onClear, required = false, isInvalid = false, labelAddon = null }) {
   const [query, setQuery] = useState(displayValue || '');
   const [results, setResults] = useState([]);
@@ -319,11 +391,14 @@ export default function LoadFormPage() {
   const [loadingData, setLoadingData] = useState(isEdit);
   const [showNewShipper, setShowNewShipper] = useState(false);
   const [showNewReceiver, setShowNewReceiver] = useState(false);
+  const [showNewPickupCity, setShowNewPickupCity] = useState(false);
+  const [showNewDropoffCity, setShowNewDropoffCity] = useState(false);
   const [files, setFiles] = useState(EMPTY_FILES);
 
   const trailerTypes = useOptions('/fleet/trailer-types/');
   const carriers = useOptions('/carriers/');
   const dispatchers = useOptions('/users/options/?dispatchers=1');
+  const states = useOptions('/locations/states/');
 
   const pickupAddressRef = useRef(null);
   const dropoffAddressRef = useRef(null);
@@ -642,7 +717,24 @@ export default function LoadFormPage() {
               onSearch={searchCities}
               onSelect={item => { set('pickup_city', item.id); setDisp('pickup_city', item.label); }}
               onClear={() => { set('pickup_city', null); setDisp('pickup_city', ''); }}
+              labelAddon={
+                <button type="button" className="btn btn-default btn-xs border py-0 px-1"
+                  title="New city" onClick={() => setShowNewPickupCity(v => !v)}>
+                  <i className="bi bi-plus" />
+                </button>
+              }
             />
+            {showNewPickupCity && (
+              <CityCreateRow
+                states={states}
+                onSave={city => {
+                  set('pickup_city', city.id);
+                  setDisp('pickup_city', `${city.name}, ${city.state_abbreviation}`);
+                  setShowNewPickupCity(false);
+                }}
+                onCancel={() => setShowNewPickupCity(false)}
+              />
+            )}
             {err('pickup_city')}
           </div>
           <div className="col-md-6">
@@ -654,7 +746,24 @@ export default function LoadFormPage() {
               onSearch={searchCities}
               onSelect={item => { set('dropoff_city', item.id); setDisp('dropoff_city', item.label); }}
               onClear={() => { set('dropoff_city', null); setDisp('dropoff_city', ''); }}
+              labelAddon={
+                <button type="button" className="btn btn-default btn-xs border py-0 px-1"
+                  title="New city" onClick={() => setShowNewDropoffCity(v => !v)}>
+                  <i className="bi bi-plus" />
+                </button>
+              }
             />
+            {showNewDropoffCity && (
+              <CityCreateRow
+                states={states}
+                onSave={city => {
+                  set('dropoff_city', city.id);
+                  setDisp('dropoff_city', `${city.name}, ${city.state_abbreviation}`);
+                  setShowNewDropoffCity(false);
+                }}
+                onCancel={() => setShowNewDropoffCity(false)}
+              />
+            )}
             {err('dropoff_city')}
           </div>
         </div>
