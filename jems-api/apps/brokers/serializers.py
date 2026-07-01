@@ -4,11 +4,17 @@ from .models import Broker, BrokerContact, Business
 
 
 class BrokerContactSerializer(serializers.ModelSerializer):
+    broker = serializers.PrimaryKeyRelatedField(
+        queryset=Broker.objects.all(), required=False
+    )
+    broker_name = serializers.CharField(source="broker.name", read_only=True)
+
     class Meta:
         model = BrokerContact
         fields = [
             "id",
             "broker",
+            "broker_name",
             "name",
             "email",
             "phone",
@@ -19,7 +25,7 @@ class BrokerContactSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "broker", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
 
 class BrokerListSerializer(serializers.ModelSerializer):
@@ -171,11 +177,40 @@ class BrokerStatusCreateSerializer(serializers.Serializer):
 
 class BusinessSerializer(serializers.ModelSerializer):
     city_display = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+    load_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Business
-        fields = ["id", "name", "address", "city", "city_display", "status", "rating"]
-        read_only_fields = ["id", "rating", "city_display"]
+        fields = [
+            "id",
+            "name",
+            "address",
+            "city",
+            "city_display",
+            "status",
+            "rating",
+            "lat",
+            "lon",
+            "can_delete",
+            "load_count",
+        ]
+        read_only_fields = ["id", "rating", "city_display", "can_delete", "load_count"]
 
     def get_city_display(self, obj: Business) -> str:
-        return str(obj.city) if obj.city else ""
+        if not obj.city:
+            return ""
+        state = obj.city.state.abbreviation if obj.city.state else ""
+        zip_code = obj.city.zip or ""
+        suffix = " ".join(part for part in [state, zip_code] if part)
+        return f"{obj.city.name}, {suffix}" if suffix else obj.city.name
+
+    def get_load_count(self, obj: Business) -> int:
+        shipper_count = getattr(obj, "shipper_load_count", None)
+        receiver_count = getattr(obj, "receiver_load_count", None)
+        if shipper_count is not None or receiver_count is not None:
+            return int(shipper_count or 0) + int(receiver_count or 0)
+        return obj.shipper_loads.count() + obj.receiver_loads.count()
+
+    def get_can_delete(self, obj: Business) -> bool:
+        return self.get_load_count(obj) == 0

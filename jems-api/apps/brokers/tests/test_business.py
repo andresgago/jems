@@ -4,6 +4,8 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.brokers.models import Business
+from apps.loads.tests.factories import LoadFactory
+from apps.locations.tests.factories import CityFactory
 from apps.users.tests.factories import UserFactory
 
 
@@ -25,6 +27,42 @@ def make_business(name, status_val=Business.Status.ACTIVE):
 
 @pytest.mark.django_db
 class TestBusinessSearch:
+    def test_list_is_paginated_by_legacy_page_size(self, auth_client):
+        client, _ = auth_client
+        for i in range(21):
+            make_business(f"Business {i:02d}")
+        response = client.get(reverse("business-list"))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["count"] == 21
+        assert len(response.data["results"]) == 20
+
+    def test_list_filters_by_name_address_city_and_status(self, auth_client):
+        client, _ = auth_client
+        city = CityFactory()
+        keep = Business.objects.create(
+            name="Acme Warehouse",
+            address="123 Dock St",
+            city=city,
+            status=Business.Status.ACTIVE,
+        )
+        Business.objects.create(
+            name="Acme Warehouse",
+            address="Other",
+            city=city,
+            status=Business.Status.INACTIVE,
+        )
+        response = client.get(
+            reverse("business-list"),
+            {
+                "name": "Acme",
+                "address": "Dock",
+                "city": city.pk,
+                "status": Business.Status.ACTIVE,
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in response.data["results"]] == [keep.id]
+
     def test_returns_matching_businesses(self, auth_client):
         client, _ = auth_client
         make_business("Acme Warehouse")
@@ -78,6 +116,17 @@ class TestBusinessCreate:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "name" in response.data
 
+    def test_duplicate_name_address_city_rejected_like_legacy(self, auth_client):
+        client, _ = auth_client
+        city = CityFactory()
+        Business.objects.create(name="Same", address="123 Main", city=city)
+        response = client.post(
+            reverse("business-list"),
+            {"name": "Same", "address": "123 Main", "city": city.pk},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "This business exist!" in response.data["error"]
+
     def test_unauthenticated_blocked(self, api_client):
         response = api_client.post(reverse("business-list"), {"name": "X"})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -96,6 +145,15 @@ class TestBusinessRetrieve:
         client, _ = auth_client
         response = client.get(reverse("business-detail", kwargs={"pk": 99999}))
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_retrieve_exposes_delete_guard(self, auth_client):
+        client, _ = auth_client
+        business = make_business("Used Business")
+        LoadFactory(shipper=business)
+        response = client.get(reverse("business-detail", kwargs={"pk": business.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["can_delete"] is False
+        assert response.data["load_count"] == 1
 
 
 @pytest.mark.django_db
@@ -118,3 +176,42 @@ class TestBusinessUpdate:
             reverse("business-detail", kwargs={"pk": 99999}), {"name": "X"}
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestBusinessToggleStatus:
+    def test_toggles_active_to_inactive(self, auth_client):
+        client, _ = auth_client
+        business = make_business("Toggle Me", Business.Status.ACTIVE)
+        response = client.post(
+            reverse("business-toggle-status", kwargs={"pk": business.pk})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == Business.Status.INACTIVE
+
+    def test_toggles_inactive_to_active(self, auth_client):
+        client, _ = auth_client
+        business = make_business("Toggle Me", Business.Status.INACTIVE)
+        response = client.post(
+            reverse("business-toggle-status", kwargs={"pk": business.pk})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == Business.Status.ACTIVE
+
+
+@pytest.mark.django_db
+class TestBusinessDelete:
+    def test_deletes_unused_business(self, auth_client):
+        client, _ = auth_client
+        business = make_business("Unused")
+        response = client.delete(reverse("business-detail", kwargs={"pk": business.pk}))
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Business.objects.filter(pk=business.pk).exists()
+
+    def test_blocks_delete_when_business_is_used_by_load(self, auth_client):
+        client, _ = auth_client
+        business = make_business("Used")
+        LoadFactory(receiver=business)
+        response = client.delete(reverse("business-detail", kwargs={"pk": business.pk}))
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Business.objects.filter(pk=business.pk).exists()

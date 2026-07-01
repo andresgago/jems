@@ -137,6 +137,23 @@ def delete_broker_contact(*, contact: BrokerContact) -> None:
     contact.delete()
 
 
+def _business_duplicate_exists(*, business: Business) -> bool:
+    return (
+        Business.objects.filter(
+            name=business.name,
+            address=business.address,
+            city=business.city,
+        )
+        .exclude(pk=business.pk)
+        .exists()
+    )
+
+
+def _validate_business_unique(*, business: Business) -> None:
+    if _business_duplicate_exists(business=business):
+        raise ValidationError("This business exist!")
+
+
 def _last_load_data(broker: Broker) -> dict[str, Any] | None:
     from apps.loads.models import Load
 
@@ -352,6 +369,7 @@ def create_broker_from_status_result(
 
 def create_business(*, name: str, **kwargs: Any) -> Business:
     business = Business(name=name, **kwargs)
+    _validate_business_unique(business=business)
     business.full_clean()
     business.save()
     return business
@@ -360,6 +378,23 @@ def create_business(*, name: str, **kwargs: Any) -> Business:
 def update_business(*, business: Business, **kwargs: Any) -> Business:
     for field, value in kwargs.items():
         setattr(business, field, value)
+    _validate_business_unique(business=business)
     business.full_clean()
     business.save()
     return business
+
+
+def toggle_business_status(*, business: Business) -> Business:
+    business.status = (
+        Business.Status.INACTIVE
+        if business.status == Business.Status.ACTIVE
+        else Business.Status.ACTIVE
+    )
+    business.save(update_fields=["status"])
+    return business
+
+
+def delete_business(*, business: Business) -> None:
+    if business.shipper_loads.exists() or business.receiver_loads.exists():
+        raise ValidationError("Business cannot be deleted because it is used by loads.")
+    business.delete()

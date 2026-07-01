@@ -1460,11 +1460,26 @@ step "Business: retrieve"
 resp="$(get "/api/v1/brokers/business/${SHIPPER_ID}/")"
 assert_status "business retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "business name" "$(body "$resp")" "Acme Warehouse"
+assert_contains "business delete guard shape" "$(body "$resp")" "can_delete"
+
+step "Business: list grid"
+resp="$(get "/api/v1/brokers/business/?name=Acme&page_size=20")"
+assert_status "business list" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "business list has results" "$(body "$resp")" "results"
+assert_contains "business list includes shipper" "$(body "$resp")" "Acme Warehouse"
 
 step "Business: update"
 resp="$(put "/api/v1/brokers/business/${SHIPPER_ID}/" '{"name":"Acme Warehouse LLC"}')"
 assert_status "business update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "business updated" "$(body "$resp")" "LLC"
+
+step "Business: toggle status"
+resp="$(post "/api/v1/brokers/business/${SHIPPER_ID}/toggle-status/")"
+assert_status "business toggle" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "business toggled inactive" "$(body "$resp")" '"status":0'
+resp="$(post "/api/v1/brokers/business/${SHIPPER_ID}/toggle-status/")"
+assert_status "business toggle back" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "business toggled active" "$(body "$resp")" '"status":1'
 
 step "Business: search by name"
 resp="$(get "/api/v1/brokers/business/search/?q=Acme")"
@@ -1480,17 +1495,47 @@ step "Business: name required on create"
 resp="$(post "/api/v1/brokers/business/" '{}')"
 assert_status "business no name" "400" "$(code "$resp")"
 
+step "Business: duplicate name address city rejected"
+resp="$(post "/api/v1/brokers/business/" '{"name":"Acme Warehouse LLC"}')"
+assert_status "business duplicate" "400" "$(code "$resp")"
+
+step "Business: delete unused business"
+resp="$(post "/api/v1/brokers/business/" '{"name":"Unused Smoke Business"}')"
+assert_status "business create unused" "201" "$(code "$resp")" "$(body "$resp")"
+UNUSED_BUSINESS_ID="$(body "$resp" | json_get_num id)"
+resp="$(delete "/api/v1/brokers/business/${UNUSED_BUSINESS_ID}/")"
+assert_status "business delete unused" "204" "$(code "$resp")"
+
 # ── Loads ─────────────────────────────────────────────────────────────────────
 step "Loads: broker contact fixture"
 resp="$(post "/api/v1/brokers/${BROKER_ID}/contacts/" '{"name":"Load Broker Contact","email":"load-contact@echo.com","phone":"8005550002"}')"
 assert_status "load broker contact create" "201" "$(code "$resp")" "$(body "$resp")"
 LOAD_BROKER_CONTACT_ID="$(body "$resp" | json_get_num id)"
 
+step "Broker contacts: global list grid"
+resp="$(get "/api/v1/brokers/contacts/?name=Load&page_size=20")"
+assert_status "broker contacts global list" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "broker contacts global includes broker name" "$(body "$resp")" "broker_name"
+assert_contains "broker contacts global includes contact" "$(body "$resp")" "Load Broker Contact"
+
+step "Broker contacts: global retrieve"
+resp="$(get "/api/v1/brokers/contacts/${LOAD_BROKER_CONTACT_ID}/")"
+assert_status "broker contacts global retrieve" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Broker contacts: global update"
+resp="$(patch "/api/v1/brokers/contacts/${LOAD_BROKER_CONTACT_ID}/" '{"phone":"8005550003"}')"
+assert_status "broker contacts global update" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "broker contacts global phone updated" "$(body "$resp")" "8005550003"
+
 step "Loads: create"
 resp="$(post "/api/v1/loads/" "{\"number\":\"L-0001\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"pickup_address\":\"123 Warehouse Rd\",\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"dropoff_address\":\"456 Dock St\",\"payment\":\"2500.00\",\"miles\":800,\"miles_empty\":50,\"broker\":${BROKER_ID},\"broker_contacts\":\"${LOAD_BROKER_CONTACT_ID}\",\"dispatcher\":${DISPATCHER_USER_ID},\"truck\":${TRUCK_ID},\"trailer\":${TRAILER_ID},\"driver\":${DRIVER_ID},\"carrier\":${CARRIER_ID},\"shipper\":${SHIPPER_ID},\"receiver\":${RECEIVER_ID},\"status\":1}")"
 assert_status "load create" "201" "$(code "$resp")" "$(body "$resp")"
 LOAD_ID="$(body "$resp" | json_get_num id)"
 LOAD_NUMBER="$(body "$resp" | json_get_num number)"
+
+step "Business: delete used business blocked"
+resp="$(delete "/api/v1/brokers/business/${SHIPPER_ID}/")"
+assert_status "business delete used blocked" "400" "$(code "$resp")"
 
 step "Loads: create without shipper rejected"
 resp="$(post "/api/v1/loads/" "{\"number\":\"L-NOSHP\",\"pickup_date\":\"2024-08-01\",\"pickup_city\":${CITY_ID},\"dropoff_date\":\"2024-08-02\",\"dropoff_city\":${CITY_ID},\"payment\":\"1000.00\",\"broker\":${BROKER_ID},\"carrier\":${CARRIER_ID},\"receiver\":${RECEIVER_ID}}")"

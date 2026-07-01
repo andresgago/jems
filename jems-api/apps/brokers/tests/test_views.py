@@ -164,6 +164,86 @@ class TestBrokerContacts:
 
 
 @pytest.mark.django_db
+class TestBrokerContactsGlobal:
+    def test_list_contacts_is_paginated_like_legacy_grid(self, auth_client):
+        client, _ = auth_client
+        BrokerContactFactory.create_batch(21)
+        response = client.get(reverse("broker-contact-global-list"))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["count"] == 21
+        assert len(response.data["results"]) == 20
+        assert "broker_name" in response.data["results"][0]
+
+    def test_list_filters_by_name_email_phone_and_broker(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory(name="Echo Global")
+        keep = BrokerContactFactory(
+            broker=broker,
+            name="Alice Johnson",
+            email="alice@example.com",
+            phone="555-0101",
+        )
+        BrokerContactFactory(name="Alice Other", email="other@example.com")
+        response = client.get(
+            reverse("broker-contact-global-list"),
+            {
+                "name": "Alice",
+                "email": "example",
+                "phone": "0101",
+                "broker": broker.pk,
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in response.data["results"]] == [keep.id]
+
+    def test_create_requires_broker(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("broker-contact-global-list"),
+            {"name": "No Broker", "email": "no-broker@example.com"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "broker" in response.data
+
+    def test_create_update_and_delete_global_contact(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory()
+        response = client.post(
+            reverse("broker-contact-global-list"),
+            {
+                "broker": broker.pk,
+                "name": "Global Contact",
+                "email": "global@example.com",
+                "phone": "555",
+            },
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        contact_id = response.data["id"]
+
+        detail_url = reverse("broker-contact-global-detail", kwargs={"pk": contact_id})
+        response = client.patch(detail_url, {"phone": "777"})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["phone"] == "777"
+
+        response = client.delete(detail_url)
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_duplicate_email_rejected(self, auth_client):
+        client, _ = auth_client
+        broker = BrokerFactory()
+        BrokerContactFactory(email="dup-global@example.com")
+        response = client.post(
+            reverse("broker-contact-global-list"),
+            {
+                "broker": broker.pk,
+                "name": "Dup",
+                "email": "dup-global@example.com",
+            },
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
 class TestBrokerRetrieveNewFields:
     def test_retrieve_includes_address_fields(self, auth_client):
         client, _ = auth_client
