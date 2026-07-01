@@ -34,7 +34,7 @@ class TrailerTypeFactory(DjangoModelFactory):
         model = TrailerType
 
     name = factory.Sequence(lambda n: f"Trailer Type {n}")
-    short_name = factory.Sequence(lambda n: f"T{n}")
+    short_name = factory.Sequence(lambda n: f"T{n % 100:02d}")
     is_active = True
 
 

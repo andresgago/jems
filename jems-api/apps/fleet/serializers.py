@@ -497,8 +497,15 @@ class AccidentPictureSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "accident", "created_at"]
 
 
-class AccidentSerializer(serializers.ModelSerializer):
-    pictures = AccidentPictureSerializer(many=True, read_only=True)
+class AccidentListSerializer(serializers.ModelSerializer):
+    """Lean serializer for the list endpoint — includes resolved FK names."""
+
+    driver_name = serializers.SerializerMethodField()
+    truck_number = serializers.SerializerMethodField()
+    trailer_number = serializers.SerializerMethodField()
+    city_name = serializers.SerializerMethodField()
+    state_name = serializers.SerializerMethodField()
+    picture_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Accident
@@ -506,11 +513,72 @@ class AccidentSerializer(serializers.ModelSerializer):
             "id",
             "date",
             "driver",
+            "driver_name",
             "truck",
+            "truck_number",
             "trailer",
+            "trailer_number",
             "city",
-            "address",
+            "city_name",
             "state",
+            "state_name",
+            "address",
+            "crash_number",
+            "tow_aways",
+            "death_count",
+            "fatal_injuries",
+            "picture_count",
+            "police_report_file",
+            "post_accident_file",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def get_driver_name(self, obj: Accident) -> str | None:
+        if obj.driver:
+            return f"{obj.driver.first_name} {obj.driver.last_name}".strip()
+        return None
+
+    def get_truck_number(self, obj: Accident) -> str | None:
+        return obj.truck.number if obj.truck else None
+
+    def get_trailer_number(self, obj: Accident) -> str | None:
+        return obj.trailer.number if obj.trailer else None
+
+    def get_city_name(self, obj: Accident) -> str | None:
+        if not obj.city:
+            return None
+        abbr = obj.state.abbreviation if obj.state else ""
+        return f"{obj.city.name} ({abbr})" if abbr else obj.city.name
+
+    def get_state_name(self, obj: Accident) -> str | None:
+        return obj.state.name if obj.state else None
+
+
+class AccidentSerializer(serializers.ModelSerializer):
+    pictures = AccidentPictureSerializer(many=True, read_only=True)
+    driver_name = serializers.SerializerMethodField()
+    truck_number = serializers.SerializerMethodField()
+    trailer_number = serializers.SerializerMethodField()
+    city_name = serializers.SerializerMethodField()
+    state_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Accident
+        fields = [
+            "id",
+            "date",
+            "driver",
+            "driver_name",
+            "truck",
+            "truck_number",
+            "trailer",
+            "trailer_number",
+            "city",
+            "city_name",
+            "state",
+            "state_name",
+            "address",
             "police_report_file",
             "post_accident_file",
             "crash_number",
@@ -522,6 +590,26 @@ class AccidentSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_driver_name(self, obj: Accident) -> str | None:
+        if obj.driver:
+            return f"{obj.driver.first_name} {obj.driver.last_name}".strip()
+        return None
+
+    def get_truck_number(self, obj: Accident) -> str | None:
+        return obj.truck.number if obj.truck else None
+
+    def get_trailer_number(self, obj: Accident) -> str | None:
+        return obj.trailer.number if obj.trailer else None
+
+    def get_city_name(self, obj: Accident) -> str | None:
+        if not obj.city:
+            return None
+        abbr = obj.state.abbreviation if obj.state else ""
+        return f"{obj.city.name} ({abbr})" if abbr else obj.city.name
+
+    def get_state_name(self, obj: Accident) -> str | None:
+        return obj.state.name if obj.state else None
 
 
 class AccidentCreateUpdateSerializer(serializers.ModelSerializer):
@@ -535,8 +623,6 @@ class AccidentCreateUpdateSerializer(serializers.ModelSerializer):
             "city",
             "address",
             "state",
-            "police_report_file",
-            "post_accident_file",
             "crash_number",
             "tow_aways",
             "death_count",

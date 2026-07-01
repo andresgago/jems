@@ -900,11 +900,35 @@ ACCIDENT_ID="$(body "$resp" | json_get_num id)"
 step "Fleet: accident list"
 resp="$(get "/api/v1/fleet/accidents/")"
 assert_status "accident list" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "accident list has picture_count" "$(body "$resp")" "picture_count"
+assert_contains "accident list has driver_name" "$(body "$resp")" "driver_name"
+assert_contains "accident list has truck_number" "$(body "$resp")" "truck_number"
+
+step "Fleet: accident list date_from filter"
+resp="$(get "/api/v1/fleet/accidents/?date_type=1&date_from=2024-01-01&date_to=2024-12-31")"
+assert_status "accident list date filter" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "accident list date filter has result" "$(body "$resp")" "TX-2024-001"
+
+step "Fleet: accident list show-all date type"
+resp="$(get "/api/v1/fleet/accidents/?date_type=3&date_from=1999-01-01&date_to=1999-12-31")"
+assert_status "accident list show all date type" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "accident show all ignores date range" "$(body "$resp")" "TX-2024-001"
+
+step "Fleet: accident list search filter"
+resp="$(get "/api/v1/fleet/accidents/?search=TX-2024")"
+assert_status "accident list search filter" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "accident search found" "$(body "$resp")" "TX-2024-001"
+
+step "Fleet: accident list truck filter"
+resp="$(get "/api/v1/fleet/accidents/?truck=${TRUCK_ID}")"
+assert_status "accident list truck filter" "200" "$(code "$resp")" "$(body "$resp")"
 
 step "Fleet: accident retrieve"
 resp="$(get "/api/v1/fleet/accidents/${ACCIDENT_ID}/")"
 assert_status "accident retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "accident crash number" "$(body "$resp")" "TX-2024-001"
+assert_contains "accident retrieve has driver_name" "$(body "$resp")" "driver_name"
+assert_contains "accident retrieve has truck_number" "$(body "$resp")" "truck_number"
 
 step "Fleet: accident picture upload"
 _TMP_IMG="$(mktemp /tmp/jems_test_img.XXXXXX.png)"
@@ -939,10 +963,59 @@ step "Fleet: accident picture delete"
 resp="$(delete "/api/v1/fleet/accidents/${ACCIDENT_ID}/pictures/${ACCIDENT_PICTURE_ID}/")"
 assert_status "accident picture delete" "204" "$(code "$resp")"
 
+step "Fleet: accident file upload (police_report)"
+_TMP_PDF="$(mktemp /tmp/jems_test_pdf.XXXXXX.pdf)"
+printf '%%PDF-1.4 fake' > "${_TMP_PDF}"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "file=@${_TMP_PDF};type=application/pdf" \
+  "${API_URL}/api/v1/fleet/accidents/${ACCIDENT_ID}/files/police_report/")"
+rm -f "${_TMP_PDF}"
+assert_status "accident file upload police_report" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "accident file upload has police_report_file" "$(body "$resp")" "police_report_file"
+
+step "Fleet: accident file upload (post_accident)"
+_TMP_PDF2="$(mktemp /tmp/jems_test_pdf2.XXXXXX.pdf)"
+printf '%%PDF-1.4 fake' > "${_TMP_PDF2}"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "file=@${_TMP_PDF2};type=application/pdf" \
+  "${API_URL}/api/v1/fleet/accidents/${ACCIDENT_ID}/files/post_accident/")"
+rm -f "${_TMP_PDF2}"
+assert_status "accident file upload post_accident" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Fleet: accident file unknown slot → 400"
+resp="$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "file=@/dev/null;type=application/pdf" \
+  "${API_URL}/api/v1/fleet/accidents/${ACCIDENT_ID}/files/invalid_slot/")"
+assert_status "accident unknown slot 400" "400" "$(code "$resp")"
+
+step "Fleet: accident file clear (police_report)"
+resp="$(delete "/api/v1/fleet/accidents/${ACCIDENT_ID}/files/police_report/")"
+assert_status "accident file clear police_report" "204" "$(code "$resp")"
+
+step "Fleet: accident file clear (post_accident)"
+resp="$(delete "/api/v1/fleet/accidents/${ACCIDENT_ID}/files/post_accident/")"
+assert_status "accident file clear post_accident" "204" "$(code "$resp")"
+
 step "Fleet: accident update"
 resp="$(patch "/api/v1/fleet/accidents/${ACCIDENT_ID}/" '{"address":"I-10 Mile 221 (updated)"}')"
 assert_status "accident update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "accident updated address" "$(body "$resp")" "updated"
+
+step "Fleet: accident create second for bulk-delete"
+resp="$(post "/api/v1/fleet/accidents/" "{\"date\":\"2024-06-02T10:00:00Z\",\"truck\":${TRUCK_ID},\"address\":\"I-10 Mile 222\",\"state\":${STATE_ID},\"crash_number\":\"TX-2024-BULK\",\"tow_aways\":false,\"death_count\":0,\"fatal_injuries\":0}")"
+assert_status "accident create second bulk-delete" "201" "$(code "$resp")" "$(body "$resp")"
+ACCIDENT_BULK_ID="$(body "$resp" | json_get_num id)"
+
+step "Fleet: accident bulk-delete"
+resp="$(post "/api/v1/fleet/accidents/bulk-delete/" "{\"ids\":[${ACCIDENT_BULK_ID}]}")"
+assert_status "accident bulk-delete" "204" "$(code "$resp")"
+
+step "Fleet: accident bulk-delete empty → 400"
+resp="$(post "/api/v1/fleet/accidents/bulk-delete/" '{"ids":[]}')"
+assert_status "accident bulk-delete empty" "400" "$(code "$resp")"
 
 step "Fleet: accident delete"
 resp="$(delete "/api/v1/fleet/accidents/${ACCIDENT_ID}/")"

@@ -383,8 +383,175 @@ class TestAccidentList:
         assert response.status_code == status.HTTP_200_OK
         assert all(a["truck"] == truck.pk for a in response.data)
 
+    def test_filter_by_driver(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory, DriverFactory
+
+        client, _ = auth_client
+        driver = DriverFactory()
+        AccidentFactory(driver=driver)
+        AccidentFactory()
+        response = client.get(reverse("accident-list") + f"?driver={driver.pk}")
+        assert response.status_code == status.HTTP_200_OK
+        assert all(a["driver"] == driver.pk for a in response.data)
+
+    def test_filter_by_trailer(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory, TrailerFactory
+
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        AccidentFactory(trailer=trailer)
+        AccidentFactory()
+        response = client.get(reverse("accident-list") + f"?trailer={trailer.pk}")
+        assert response.status_code == status.HTTP_200_OK
+        assert all(a["trailer"] == trailer.pk for a in response.data)
+
+    def test_filter_by_date_range(self, auth_client):
+        import datetime
+        from apps.fleet.tests.factories import AccidentFactory
+
+        client, _ = auth_client
+        AccidentFactory(
+            date=datetime.datetime(2024, 1, 15, tzinfo=datetime.timezone.utc)
+        )
+        AccidentFactory(
+            date=datetime.datetime(2024, 6, 1, tzinfo=datetime.timezone.utc)
+        )
+        AccidentFactory(
+            date=datetime.datetime(2024, 12, 31, tzinfo=datetime.timezone.utc)
+        )
+
+        response = client.get(
+            reverse("accident-list")
+            + "?date_type=1&date_from=2024-01-01&date_to=2024-06-30"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        dates = [a["date"][:10] for a in response.data]
+        assert all(d <= "2024-06-30" for d in dates)
+
+    def test_date_type_show_all_ignores_date_range(self, auth_client):
+        import datetime
+        from apps.fleet.tests.factories import AccidentFactory
+
+        client, _ = auth_client
+        old = AccidentFactory(
+            date=datetime.datetime(2023, 1, 15, tzinfo=datetime.timezone.utc)
+        )
+        current = AccidentFactory(
+            date=datetime.datetime(2024, 6, 1, tzinfo=datetime.timezone.utc)
+        )
+        response = client.get(
+            reverse("accident-list")
+            + "?date_type=3&date_from=2024-01-01&date_to=2024-12-31"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        ids = {row["id"] for row in response.data}
+        assert old.pk in ids
+        assert current.pk in ids
+
+    def test_filter_by_search_crash_number(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory
+
+        client, _ = auth_client
+        AccidentFactory(crash_number="FMCSA-SPECIAL-999")
+        AccidentFactory(crash_number="OTHER-001")
+        response = client.get(reverse("accident-list") + "?search=SPECIAL")
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert response.data[0]["crash_number"] == "FMCSA-SPECIAL-999"
+
+    def test_filter_by_search_address(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory
+
+        client, _ = auth_client
+        AccidentFactory(address="Interstate 95 MM 42")
+        AccidentFactory(address="Route 66")
+        response = client.get(reverse("accident-list") + "?search=interstate")
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert "Interstate" in response.data[0]["address"]
+
+    def test_response_includes_driver_name(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory, DriverFactory
+
+        client, _ = auth_client
+        driver = DriverFactory(first_name="John", last_name="Doe")
+        AccidentFactory(driver=driver)
+        response = client.get(reverse("accident-list"))
+        assert response.status_code == status.HTTP_200_OK
+        row = next(a for a in response.data if a["driver"] == driver.pk)
+        assert row["driver_name"] == "John Doe"
+
+    def test_response_includes_truck_number(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory, TruckFactory
+
+        client, _ = auth_client
+        truck = TruckFactory(number="4279")
+        AccidentFactory(truck=truck)
+        response = client.get(reverse("accident-list"))
+        assert response.status_code == status.HTTP_200_OK
+        row = next(a for a in response.data if a["truck"] == truck.pk)
+        assert row["truck_number"] == "4279"
+
+    def test_response_includes_picture_count(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory
+        from apps.fleet.models import AccidentPicture
+        from django.core.files.base import ContentFile
+
+        client, _ = auth_client
+        accident = AccidentFactory()
+        img = ContentFile(
+            b"GIF87a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;",
+            name="t.gif",
+        )
+        AccidentPicture.objects.create(accident=accident, file=img, rank=0)
+
+        response = client.get(reverse("accident-list"))
+        assert response.status_code == status.HTTP_200_OK
+        row = next(a for a in response.data if a["id"] == accident.pk)
+        assert row["picture_count"] == 1
+
     def test_unauthenticated_blocked(self, api_client):
         response = api_client.get(reverse("accident-list"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestAccidentBulkDelete:
+    def test_bulk_delete_removes_selected_accidents(self, auth_client):
+        from apps.fleet.models import Accident
+        from apps.fleet.tests.factories import AccidentFactory
+
+        client, _ = auth_client
+        first = AccidentFactory()
+        second = AccidentFactory()
+        response = client.post(
+            reverse("accident-bulk-delete"),
+            {"ids": [first.pk, second.pk]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Accident.objects.filter(pk__in=[first.pk, second.pk]).exists()
+
+    def test_bulk_delete_empty_ids_rejected(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("accident-bulk-delete"), {"ids": []}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_bulk_delete_requires_list(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("accident-bulk-delete"),
+            {"ids": "1,2"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_bulk_delete_unauthenticated_blocked(self, api_client):
+        response = api_client.post(
+            reverse("accident-bulk-delete"), {"ids": [1]}, format="json"
+        )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -448,6 +615,103 @@ class TestAccidentDetail:
         accident = AccidentFactory()
         response = client.delete(reverse("accident-detail", kwargs={"pk": accident.pk}))
         assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_detail_includes_resolved_names(self, auth_client):
+        from apps.fleet.tests.factories import (
+            AccidentFactory,
+            TruckFactory,
+            DriverFactory,
+        )
+
+        client, _ = auth_client
+        truck = TruckFactory(number="8888")
+        driver = DriverFactory(first_name="Maria", last_name="Lopez")
+        accident = AccidentFactory(truck=truck, driver=driver)
+        response = client.get(reverse("accident-detail", kwargs={"pk": accident.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["truck_number"] == "8888"
+        assert response.data["driver_name"] == "Maria Lopez"
+
+
+@pytest.mark.django_db
+class TestAccidentFileSlots:
+    def test_upload_police_report(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory
+        from django.core.files.base import ContentFile
+
+        client, _ = auth_client
+        accident = AccidentFactory()
+        img = ContentFile(b"%PDF-1.4 test", name="report.pdf")
+        response = client.post(
+            reverse(
+                "accident-file", kwargs={"pk": accident.pk, "slot": "police_report"}
+            ),
+            {"file": img},
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["police_report_file"] is not None
+
+    def test_upload_post_accident(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory
+        from django.core.files.base import ContentFile
+
+        client, _ = auth_client
+        accident = AccidentFactory()
+        f = ContentFile(b"%PDF-1.4 test", name="post.pdf")
+        response = client.post(
+            reverse(
+                "accident-file", kwargs={"pk": accident.pk, "slot": "post_accident"}
+            ),
+            {"file": f},
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["post_accident_file"] is not None
+
+    def test_clear_police_report(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory
+        from django.core.files.base import ContentFile
+
+        client, _ = auth_client
+        accident = AccidentFactory()
+        accident.police_report_file.save("r.pdf", ContentFile(b"%PDF"), save=True)
+
+        response = client.delete(
+            reverse(
+                "accident-file", kwargs={"pk": accident.pk, "slot": "police_report"}
+            )
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        accident.refresh_from_db()
+        assert not accident.police_report_file
+
+    def test_unknown_slot_returns_400(self, auth_client):
+        from apps.fleet.tests.factories import AccidentFactory
+        from django.core.files.base import ContentFile
+
+        client, _ = auth_client
+        accident = AccidentFactory()
+        f = ContentFile(b"data", name="x.pdf")
+        response = client.post(
+            reverse(
+                "accident-file", kwargs={"pk": accident.pk, "slot": "invalid_slot"}
+            ),
+            {"file": f},
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unauthenticated_blocked(self, api_client):
+        from apps.fleet.tests.factories import AccidentFactory
+
+        accident = AccidentFactory()
+        response = api_client.post(
+            reverse(
+                "accident-file", kwargs={"pk": accident.pk, "slot": "police_report"}
+            )
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 # ── Standalone TruckMaintenance Views ─────────────────────────────────────────

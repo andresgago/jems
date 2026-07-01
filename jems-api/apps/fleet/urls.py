@@ -70,11 +70,15 @@ loss_payee_detail = LossPayeeViewSet.as_view({"patch": "partial_update"})
 
 # Accidents
 accident_list = AccidentViewSet.as_view({"get": "list", "post": "create"})
+accident_bulk_delete = AccidentViewSet.as_view({"post": "bulk_delete"})
 accident_detail = AccidentViewSet.as_view(
     {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
 )
 accident_pictures = AccidentViewSet.as_view({"post": "add_picture"})
 accident_picture_detail = AccidentViewSet.as_view({"delete": "delete_picture"})
+accident_file = AccidentViewSet.as_view(
+    {"post": "manage_file", "delete": "manage_file"}
+)
 
 # Miles reset
 miles_reset_list = TruckMilesResetViewSet.as_view({"get": "list", "post": "create"})
@@ -155,6 +159,7 @@ urlpatterns = [
     path("loss-payees/", loss_payees, name="loss-payee-list"),
     path("loss-payees/<int:pk>/", loss_payee_detail, name="loss-payee-detail"),
     # Accidents
+    path("accidents/bulk-delete/", accident_bulk_delete, name="accident-bulk-delete"),
     path("accidents/", accident_list, name="accident-list"),
     path("accidents/<int:pk>/", accident_detail, name="accident-detail"),
     path("accidents/<int:pk>/pictures/", accident_pictures, name="accident-pictures"),
@@ -163,6 +168,7 @@ urlpatterns = [
         accident_picture_detail,
         name="accident-picture-detail",
     ),
+    path("accidents/<int:pk>/files/<str:slot>/", accident_file, name="accident-file"),
     # Miles reset
     path(
         "miles-resets/bulk-delete/",

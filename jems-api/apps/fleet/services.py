@@ -421,3 +421,29 @@ def add_accident_picture(*, accident: Accident, **fields) -> AccidentPicture:
 def delete_accident_picture(*, picture: AccidentPicture) -> None:
     picture.file.delete(save=False)
     picture.delete()
+
+
+ACCIDENT_FILE_SLOTS: dict[str, str] = {
+    "police_report": "police_report_file",
+    "post_accident": "post_accident_file",
+}
+
+
+def set_accident_file(*, accident: Accident, slot: str, file: object) -> Accident:
+    field = ACCIDENT_FILE_SLOTS[slot]
+    existing = getattr(accident, field)
+    if existing:
+        existing.delete(save=False)
+    setattr(accident, field, file)
+    accident.save(update_fields=[field, "updated_at"])
+    return accident
+
+
+def clear_accident_file(*, accident: Accident, slot: str) -> Accident:
+    field = ACCIDENT_FILE_SLOTS[slot]
+    existing = getattr(accident, field)
+    if existing:
+        existing.delete(save=False)
+        setattr(accident, field, None)
+        accident.save(update_fields=[field, "updated_at"])
+    return accident

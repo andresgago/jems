@@ -663,3 +663,52 @@ class TestIsLastTrailerMaintenance:
         m1 = TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 1, 1))
         TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 2, 1))
         assert is_last_trailer_maintenance(m1) is False
+
+
+@pytest.mark.django_db
+class TestAccidentFileServices:
+    def test_set_accident_file_assigns_slot(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        from apps.fleet.tests.factories import AccidentFactory
+        from apps.fleet.services import set_accident_file
+
+        accident = AccidentFactory()
+        updated = set_accident_file(
+            accident=accident, slot="police_report", file=make_pdf_file()
+        )
+        assert updated.police_report_file
+
+    def test_set_post_accident_file(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        from apps.fleet.tests.factories import AccidentFactory
+        from apps.fleet.services import set_accident_file
+
+        accident = AccidentFactory()
+        updated = set_accident_file(
+            accident=accident, slot="post_accident", file=make_pdf_file()
+        )
+        assert updated.post_accident_file
+
+    def test_clear_accident_file_removes_slot(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        from apps.fleet.tests.factories import AccidentFactory
+        from apps.fleet.services import set_accident_file, clear_accident_file
+
+        accident = AccidentFactory()
+        set_accident_file(accident=accident, slot="police_report", file=make_pdf_file())
+        updated = clear_accident_file(accident=accident, slot="police_report")
+        assert not updated.police_report_file
+
+    def test_set_replaces_existing_file(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        from apps.fleet.tests.factories import AccidentFactory
+        from apps.fleet.services import set_accident_file
+
+        accident = AccidentFactory()
+        set_accident_file(
+            accident=accident, slot="police_report", file=make_pdf_file("first.pdf")
+        )
+        updated = set_accident_file(
+            accident=accident, slot="police_report", file=make_pdf_file("second.pdf")
+        )
+        assert "second" in updated.police_report_file.name

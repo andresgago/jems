@@ -1,6 +1,6 @@
 from typing import Any, ClassVar
 
-from django.db.models import Max
+from django.db.models import Count, Max
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -30,6 +30,7 @@ from .models import (
 )
 from .serializers import (
     AccidentCreateUpdateSerializer,
+    AccidentListSerializer,
     AccidentPictureSerializer,
     AccidentSerializer,
     CardSerializer,
@@ -389,14 +390,35 @@ class AccidentViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request: Request) -> Response:
-        qs = Accident.objects.select_related("driver", "truck", "trailer").all()
+        qs = Accident.objects.select_related(
+            "driver", "truck", "trailer", "city", "state"
+        ).annotate(picture_count=Count("pictures"))
+
         driver_id = request.query_params.get("driver")
         if driver_id:
             qs = qs.filter(driver_id=driver_id)
         truck_id = request.query_params.get("truck")
         if truck_id:
             qs = qs.filter(truck_id=truck_id)
-        return Response(AccidentSerializer(qs, many=True).data)
+        trailer_id = request.query_params.get("trailer")
+        if trailer_id:
+            qs = qs.filter(trailer_id=trailer_id)
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        date_type = request.query_params.get("date_type", "3")
+        if date_type == "1":
+            if date_from:
+                qs = qs.filter(date__date__gte=date_from)
+            if date_to:
+                qs = qs.filter(date__date__lte=date_to)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            from django.db.models import Q
+
+            qs = qs.filter(
+                Q(crash_number__icontains=search) | Q(address__icontains=search)
+            )
+        return Response(AccidentListSerializer(qs, many=True).data)
 
     def create(self, request: Request) -> Response:
         serializer = AccidentCreateUpdateSerializer(data=request.data)
@@ -410,7 +432,13 @@ class AccidentViewSet(ViewSet):
 
     def retrieve(self, request: Request, pk: int) -> Response:
         try:
-            accident = Accident.objects.prefetch_related("pictures").get(pk=pk)
+            accident = (
+                Accident.objects.select_related(
+                    "driver", "truck", "trailer", "city", "state"
+                )
+                .prefetch_related("pictures")
+                .get(pk=pk)
+            )
         except Accident.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(AccidentSerializer(accident).data)
@@ -459,6 +487,47 @@ class AccidentViewSet(ViewSet):
         except AccidentPicture.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         services.delete_accident_picture(picture=picture)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(
+        detail=True,
+        methods=["post", "delete"],
+        url_path=r"files/(?P<slot>[^/.]+)",
+    )
+    def manage_file(self, request: Request, pk: int, slot: str) -> Response:
+        if slot not in services.ACCIDENT_FILE_SLOTS:
+            return Response(
+                {"detail": f"Unknown file slot '{slot}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            accident = Accident.objects.get(pk=pk)
+        except Accident.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        if request.method == "DELETE":
+            services.clear_accident_file(accident=accident, slot=slot)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response(
+                {"detail": "No file provided."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        accident = services.set_accident_file(accident=accident, slot=slot, file=file)
+        return Response(AccidentSerializer(accident).data)
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request: Request) -> Response:
+        ids = request.data.get("ids", [])
+        if not isinstance(ids, list) or not ids:
+            return Response(
+                {"detail": "ids must be a non-empty list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        accidents = Accident.objects.filter(pk__in=ids)
+        for accident in accidents:
+            services.delete_accident(accident=accident)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
