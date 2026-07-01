@@ -230,17 +230,42 @@ const TRUCK_TYPES = [
   { id: 2, name: 'Day Cab', is_active: true },
 ]
 
+const TRUCK_OWNERS = [
+  {
+    id: 1,
+    first_name: 'Express',
+    last_name: 'Fleet LLC',
+    full_name: 'Express Fleet LLC',
+    email: 'owner@example.com',
+    phone: '555-1111',
+    status: 1,
+    owner_type: 2,
+    percent: 0,
+    insurance: 0,
+    truck_amount: 0,
+    driver_amount: 0,
+  },
+]
+
 const TRUCKS = [
   {
     id: 1, number: 'T-100', truck_type: 1, truck_type_name: 'Sleeper',
     plate: 'ABC123', vin: '1FUJ', year: 2022, status: 1,
+    transponder: 'XP-100', carrier: 1, carrier_name: 'Jobee Express LLC',
+    owner: 1, owner_name: 'Express Fleet LLC',
+    photo: null, avi_file: '/media/trucks/avi/t100.pdf',
+    registration_file: '/media/trucks/registration/t100.pdf',
     avi_expiration: '2030-01-01', registration_expiration: '2030-01-01',
   },
 ]
 
 const TRUCK_DETAIL = {
-  ...TRUCKS[0], transponder: '', make: null, gross_weight: 35000,
-  is_leased: false, purchase_cost: 0, maintenance_records: [],
+  ...TRUCKS[0], make: null, gross_weight: 35000,
+  is_leased: false, purchase_cost: 0, owner: null, loss_payee: null,
+  odometer_start: 12345, odometer_current: 23456,
+  eld_id: 'ELD-100', factoring_account_id: 'FAC-100',
+  maintenance_records: [],
+  stored_files: [{ id: 1, type: 1, type_label: 'AVI', file: '/media/trucks/avi/old.pdf', date: '2029-01-01' }],
 }
 
 const TRAILERS = [
@@ -446,7 +471,8 @@ const SYSTEM_CONFIG = {
 }
 
 const DISPLAY_OPTIONS = {
-  id: 1, truck: 'number,VIN', trailer: 'number,year',
+  id: 1, truck: 'number,VIN,plate,transponder',
+  trailer: 'number,year',
   driver: 'name,lastname,phone,birth,licensenumber,licensestate',
 }
 
@@ -924,7 +950,10 @@ async function mockApi(page) {
     if (pathname.endsWith('/fleet/trailer-types/')) return json(TRAILER_TYPES)
     if (pathname.endsWith('/fleet/truck-types/')) return json(TRUCK_TYPES)
     if (pathname.endsWith('/fleet/cards/')) return json([])
-    if (/\/fleet\/(makes|engine-types|cabin-types|transmission-types|tire-sizes|owners|loss-payees)\/$/.test(pathname)) return json([])
+    if (pathname.endsWith('/fleet/owners/') && method === 'GET') return json(TRUCK_OWNERS)
+    if (pathname.endsWith('/fleet/owners/') && method === 'POST') return json({ ...TRUCK_OWNERS[0], id: 2 }, 201)
+    if (/\/fleet\/owners\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
+    if (/\/fleet\/(makes|engine-types|cabin-types|transmission-types|tire-sizes|loss-payees)\/$/.test(pathname)) return json([])
     if (pathname.endsWith('/fleet/trucks/options/')) return json(TRUCKS)
     if (pathname.endsWith('/fleet/trucks/') && method === 'GET') return json(TRUCKS)
     if (/\/fleet\/trucks\/\d+\/$/.test(pathname) && method === 'GET') return json(TRUCK_DETAIL)
@@ -1630,6 +1659,69 @@ test('trucks list renders a truck returned by the API', async ({ page }) => {
   await withAuth(page)
   await page.goto('/fleet/trucks')
   await expect(page.getByRole('link', { name: 'T-100' })).toBeVisible()
+  await expect(page.getByText('XP-100')).toBeVisible()
+  await expect(page.locator('tbody').getByText('Jobee Express LLC')).toBeVisible()
+  await expect(page.locator('tbody').getByText('Express Fleet LLC')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'New AVI' })).toBeVisible()
+  await expect(page.getByText('Showing 1-1 of 1 items.')).toBeVisible()
+})
+
+test('trucks report requires selection and opens selected trucks print page', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trucks')
+  const dialogPromise = page.waitForEvent('dialog')
+  const blockedClick = page.getByRole('button', { name: /Trucks Report/i }).click()
+  const dialog = await dialogPromise
+  expect(dialog.message()).toBe('Please select some trucks to show')
+  await dialog.accept()
+  await blockedClick
+
+  await page.getByLabel('Select truck T-100').check()
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: /Trucks Report/i }).click()
+  const popup = await popupPromise
+  await withAuth(popup)
+  await popup.goto('/print/trucks?ids=1')
+  await popup.waitForLoadState('networkidle')
+  await expect(popup.getByRole('heading', { name: 'Trucks List Report' })).toBeVisible()
+  await expect(popup.getByText('Truck #T-100 (Sleeper)')).toBeVisible()
+  await expect(popup.getByText('Vin number')).toBeVisible()
+  await popup.close()
+})
+
+test('trucks export requires selection and opens selected trucks grid', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trucks')
+  const dialogPromise = page.waitForEvent('dialog')
+  const blockedClick = page.getByTitle('Trucks Export').click()
+  const dialog = await dialogPromise
+  expect(dialog.message()).toBe('Please select some trucks to show')
+  await dialog.accept()
+  await blockedClick
+
+  await page.getByLabel('Select truck T-100').check()
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByTitle('Trucks Export').click()
+  const popup = await popupPromise
+  await withAuth(popup)
+  await popup.goto('/print/trucks/export?ids=1')
+  await popup.waitForLoadState('networkidle')
+  await expect(popup.getByRole('heading', { name: 'Trucks List Report' })).toBeVisible()
+  await expect(popup.getByText('Showing 1-1 of 1 items.')).toBeVisible()
+  await expect(popup.getByRole('columnheader', { name: /Vin number/ })).toBeVisible()
+  await expect(popup.getByText('1FUJ')).toBeVisible()
+  await popup.close()
+})
+
+test('trucks report settings saves selected fields', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trucks')
+  await page.getByTitle('Setting Fields For Reports').click()
+  await expect(page.getByText('Truck Fields Check For Reports')).toBeVisible()
+  await expect(page.getByLabel('Report field Number')).toBeChecked()
+  await page.getByLabel('Report field Transponder').uncheck()
+  await page.getByRole('button', { name: /^Save$/ }).click()
+  await expect(page.getByText('Truck Fields Check For Reports')).toHaveCount(0)
 })
 
 test('truck detail renders header and resolves type name', async ({ page }) => {
@@ -1643,7 +1735,7 @@ test('truck detail shows the Files section with the legacy-parity leased slot', 
   await withAuth(page)
   await page.goto('/fleet/trucks/1')
   await expect(page.getByRole('cell', { name: 'Leased Agreement' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'AVI' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'AVI' }).first()).toBeVisible()
 })
 
 test('new truck form: Number label shows required asterisk', async ({ page }) => {
@@ -1651,12 +1743,18 @@ test('new truck form: Number label shows required asterisk', async ({ page }) =>
   await page.goto('/fleet/trucks/create')
   // anchor to avoid also matching "Serial Number"
   await expect(page.locator('label').filter({ hasText: /^Number/ })).toContainText('*')
+  await expect(page.getByRole('button', { name: 'General' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Purchase' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Registration' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Owner' })).toBeVisible()
+  await page.getByRole('button', { name: 'Owner' }).click()
+  await expect(page.locator('option', { hasText: 'Express Fleet LLC' })).toHaveCount(1)
 })
 
-test('new truck form: submit button reads "Create Truck"', async ({ page }) => {
+test('new truck form: submit button reads "Save"', async ({ page }) => {
   await withAuth(page)
   await page.goto('/fleet/trucks/create')
-  await expect(page.getByRole('button', { name: /create truck/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Save$/ })).toBeVisible()
 })
 
 // ── Trailers ─────────────────────────────────────────────────────────────────
@@ -1917,6 +2015,14 @@ test('new city form: state options render in the select', async ({ page }) => {
   await expect(page.locator('option', { hasText: 'Alabama (AL)' })).toHaveCount(1)
 })
 
+test('truck owners settings page feeds the truck owner catalog', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/truck-owners')
+  await expect(page.getByRole('heading', { name: /Truck Owners/i })).toBeVisible()
+  await expect(page.getByText('Express Fleet LLC')).toBeVisible()
+  await expect(page.getByRole('button', { name: /New Owner/i })).toBeVisible()
+})
+
 // ── Settings: Users / System ─────────────────────────────────────────────────
 
 test('users list renders a user returned by the API', async ({ page }) => {
@@ -1950,7 +2056,7 @@ test('system settings page renders invoice counters and display options', async 
   await withAuth(page)
   await page.goto('/settings/system')
   await expect(page.getByRole('heading', { name: /System Settings/i })).toBeVisible()
-  await expect(page.locator('input[value="number,VIN"]')).toBeVisible()
+  await expect(page.locator('input[value="number,VIN,plate,transponder"]')).toBeVisible()
 })
 
 // ── RTL / ELD ─────────────────────────────────────────────────────────────────

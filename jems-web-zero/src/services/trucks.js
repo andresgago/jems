@@ -10,7 +10,7 @@ export const trucksService = {
   get:          (id)     => api.get(`/fleet/trucks/${id}/`),
   options:      ()       => api.get('/fleet/trucks/options/'),
   create:       (data)   => api.post('/fleet/trucks/', data),
-  update:       (id, data) => api.put(`/fleet/trucks/${id}/`, data),
+  update:       (id, data) => api.patch(`/fleet/trucks/${id}/`, data),
   destroy:      (id)     => api.delete(`/fleet/trucks/${id}/`),
   toggleStatus: (id)     => api.post(`/fleet/trucks/${id}/toggle-status/`),
 
@@ -23,6 +23,8 @@ export const trucksService = {
     });
   },
   deleteFile: (id, slot) => api.delete(`/fleet/trucks/${id}/files/${slot}/`),
+  storeFile: (id, slot) => api.post(`/fleet/trucks/${id}/files/${slot}/store/`),
+  deleteStoredFile: (id, fileId) => api.delete(`/fleet/trucks/${id}/stored-files/${fileId}/`),
 };
 
 // Document slots (the photo is handled separately as an image).

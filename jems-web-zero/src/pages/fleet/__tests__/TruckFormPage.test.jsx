@@ -7,6 +7,7 @@ vi.mock('../../../hooks/useOptions', () => ({
   useOptions: vi.fn((url) => {
     if (url === '/fleet/truck-types/') return [{ id: 1, name: 'Sleeper' }]
     if (url === '/carriers/') return [{ id: 3, name: 'Jobee Express' }]
+    if (url === '/fleet/owners/') return [{ id: 8, full_name: 'Express Fleet' }]
     return []
   }),
 }))
@@ -39,7 +40,7 @@ beforeEach(() => vi.clearAllMocks())
 describe('TruckFormPage (create)', () => {
   it('requires the truck number before submitting', async () => {
     renderForm()
-    fireEvent.click(screen.getByRole('button', { name: /Create Truck/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }))
     await waitFor(() => expect(getInput('Number')).toHaveClass('is-invalid'))
     expect(trucksService.create).not.toHaveBeenCalled()
   })
@@ -51,10 +52,14 @@ describe('TruckFormPage (create)', () => {
     fireEvent.change(getInput('Number'), { target: { value: 'T-500' } })
     fireEvent.change(getInput('Type'), { target: { value: '1' } })
     fireEvent.change(getInput('Carrier'), { target: { value: '3' } })
-    fireEvent.change(getInput('Gross Weight'), { target: { value: '35000' } })
-    fireEvent.change(getInput('Interest Rate'), { target: { value: '4.5%' } })
+    fireEvent.change(getInput('Gross weight'), { target: { value: '35000' } })
+    fireEvent.change(getInput('Odometer'), { target: { value: '125000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Owner' }))
+    fireEvent.change(getInput('Owner'), { target: { value: '8' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Purchase' }))
+    fireEvent.change(getInput('Interest rate (%)'), { target: { value: '4.5%' } })
 
-    fireEvent.click(screen.getByRole('button', { name: /Create Truck/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }))
 
     await waitFor(() => expect(trucksService.create).toHaveBeenCalledTimes(1))
     const payload = trucksService.create.mock.calls[0][0]
@@ -63,11 +68,21 @@ describe('TruckFormPage (create)', () => {
       truck_type: '1',
       carrier: '3',
       gross_weight: 35000,
+      odometer_current: 125000,
+      owner: '8',
       interest_rate: '4.5%', // CharField in the model — must stay a string
       status: 1,
     })
     expect(payload.make).toBeNull()
     expect(payload.avi_expiration).toBeNull()
+  })
+
+  it('requires owner when the truck is leased', async () => {
+    renderForm()
+    fireEvent.change(getInput('Number'), { target: { value: 'T-LEASED' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }))
+    expect(await screen.findByText('Owner cannot be blank.')).toBeInTheDocument()
+    expect(trucksService.create).not.toHaveBeenCalled()
   })
 })
 
@@ -78,6 +93,6 @@ describe('TruckFormPage (edit)', () => {
     })
     renderForm('/fleet/trucks/5/edit')
     await waitFor(() => expect(getInput('Number')).toHaveValue('T-900'))
-    expect(getInput('VIN')).toHaveValue('ZZZ')
+    expect(getInput('Vin number')).toHaveValue('ZZZ')
   })
 })

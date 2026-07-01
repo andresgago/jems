@@ -44,6 +44,7 @@ const CRITICAL_ROUTES = [
   { path: '/settings/users', heading: /users/i },
   { path: '/settings/users/create', heading: /create user/i },
   { path: '/settings/system', heading: /system settings/i },
+  { path: '/settings/truck-owners', heading: /truck owners/i },
   { path: '/rtl', heading: /rtl/i },
   { path: '/rtl/ifta', heading: /ifta/i },
   { path: '/tools/send-packet', heading: /send carrier packet/i },
@@ -536,10 +537,20 @@ test('can create and delete a truck via API (real)', async ({ page }) => {
   const created = await apiPost(page, token, '/fleet/trucks/', {
     number,
     status: 1,
+    odometer_start: 12345,
+    eld_id: 'E2E-ELD',
+    factoring_account_id: 'E2E-FACT',
   })
 
   expect(created.id).toBeTruthy()
   expect(created.number).toBe(number)
+  expect(created.odometer_start).toBe(12345)
+  expect(created.eld_id).toBe('E2E-ELD')
+  expect(created.factoring_account_id).toBe('E2E-FACT')
+
+  const detail = await apiGet(page, token, `/fleet/trucks/${created.id}/`)
+  expect(detail.stored_files).toEqual([])
+  expect(detail.maintenance_records.some((record) => record.detail === 'Automatic Maintenance')).toBeTruthy()
 
   // DELETE is a soft delete (status → inactive); endpoint returns 204
   await apiDelete(page, token, `/fleet/trucks/${created.id}/`)
@@ -912,6 +923,49 @@ test('can upload and clear a truck document file via API (real)', async ({ page 
   expect(clearRes.ok()).toBeTruthy()
 
   await apiDelete(page, token, `/fleet/trucks/${created.id}/`)
+})
+
+test('can store and delete a truck AVI file via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const number = `E2E-TA-${Date.now()}`
+  const created = await apiPost(page, token, '/fleet/trucks/', {
+    number,
+    status: 1,
+    avi_expiration: '2030-01-01',
+  })
+
+  try {
+    const uploadRes = await page.request.post(
+      `${API_BASE}/fleet/trucks/${created.id}/files/avi/`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        multipart: {
+          file: { name: 'avi.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake') },
+        },
+      }
+    )
+    expect(uploadRes.ok()).toBeTruthy()
+
+    const storeRes = await page.request.post(
+      `${API_BASE}/fleet/trucks/${created.id}/files/avi/store/`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    expect(storeRes.ok()).toBeTruthy()
+    const stored = await storeRes.json()
+    expect(stored.type).toBe(1)
+    expect(stored.file).toBeTruthy()
+
+    const afterStore = await apiGet(page, token, `/fleet/trucks/${created.id}/`)
+    expect(afterStore.avi_file).toBeFalsy()
+    expect(afterStore.stored_files.some((file) => file.id === stored.id)).toBeTruthy()
+
+    await apiDelete(page, token, `/fleet/trucks/${created.id}/stored-files/${stored.id}/`)
+  } finally {
+    await apiDelete(page, token, `/fleet/trucks/${created.id}/`)
+  }
 })
 
 test('can sync and retrieve an RTL driver via API (real)', async ({ page }) => {
@@ -1751,10 +1805,10 @@ test('can create, update, and delete a truck maintenance record via API (real)',
   const truck = await apiPost(page, token, '/fleet/trucks/', { number: `E2E-TMTRK-${Date.now()}`, status: 1 })
 
   // Create maintenance record
-  const today = new Date().toISOString().split('T')[0]
+  const maintenanceDate = '2024-01-02'
   const created = await apiPost(page, token, '/fleet/truck-maintenance/', {
     truck: truck.id,
-    date: today,
+    date: maintenanceDate,
     miles_alert: 0,
     maintenance_miles: 0,
     time_alert: 0,
@@ -1791,17 +1845,17 @@ test('duplicate date rejected for truck maintenance (real)', async ({ page }) =>
   const token = await getAccessToken(page)
 
   const truck = await apiPost(page, token, '/fleet/trucks/', { number: `E2E-TMDP-${Date.now()}`, status: 1 })
-  const today = new Date().toISOString().split('T')[0]
+  const maintenanceDate = '2024-01-03'
 
   await apiPost(page, token, '/fleet/truck-maintenance/', {
-    truck: truck.id, date: today, miles_alert: 0, maintenance_miles: 0,
+    truck: truck.id, date: maintenanceDate, miles_alert: 0, maintenance_miles: 0,
     time_alert: 0, time_year: 0, time_month: 0, detail: 'First record',
   })
 
   // Second record on the same date should return 400
   const dupRes = await page.request.post(`${API_BASE}/fleet/truck-maintenance/`, {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    data: JSON.stringify({ truck: truck.id, date: today, miles_alert: 0, maintenance_miles: 0, time_alert: 0, time_year: 0, time_month: 0, detail: 'Duplicate' }),
+    data: JSON.stringify({ truck: truck.id, date: maintenanceDate, miles_alert: 0, maintenance_miles: 0, time_alert: 0, time_year: 0, time_month: 0, detail: 'Duplicate' }),
   })
   expect(dupRes.status()).toBe(400)
 

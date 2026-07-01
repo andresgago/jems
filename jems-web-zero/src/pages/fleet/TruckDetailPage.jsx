@@ -92,6 +92,7 @@ export default function TruckDetailPage() {
         <Field label="Transmission">{nameById(transmissionTypes, truck.transmission_type)}</Field>
         <Field label="Tire Size">{nameById(tireSizes, truck.tire_size)}</Field>
         <Field label="Gross Weight">{truck.gross_weight ? `${Number(truck.gross_weight).toLocaleString()} lb` : '—'}</Field>
+        <Field label="Odometer Start">{truck.odometer_start ? Number(truck.odometer_start).toLocaleString() : '—'}</Field>
         <Field label="Odometer">{truck.odometer_current ? Number(truck.odometer_current).toLocaleString() : '—'}</Field>
       </SectionCard>
 
@@ -119,12 +120,15 @@ export default function TruckDetailPage() {
         <Field label="Carrier">{nameById(carriers, truck.carrier)}</Field>
         <Field label="Carrier Start">{truck.carrier_start_date}</Field>
         <Field label="Carrier End">{truck.carrier_end_date}</Field>
+        <Field label="Carrier End Reason">{truck.carrier_end_reason}</Field>
       </SectionCard>
 
       <SectionCard title="ELD" icon="bi-broadcast">
         <Field label="MAC Address">{truck.mac_address}</Field>
         <Field label="Serial Number">{truck.serial_number}</Field>
         <Field label="ELD Company">{truck.eld_company}</Field>
+        <Field label="ELD Id">{truck.eld_id}</Field>
+        <Field label="Factoring Account Id">{truck.factoring_account_id}</Field>
       </SectionCard>
 
       <TruckFiles truckId={truck.id} truck={truck} onChange={refresh} />

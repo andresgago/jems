@@ -4,14 +4,22 @@ import TruckFiles from '../TruckFiles'
 
 vi.mock('../../../services/trucks', async () => {
   const actual = await vi.importActual('../../../services/trucks')
-  return { ...actual, trucksService: { uploadFile: vi.fn(), deleteFile: vi.fn() } }
+  return {
+    ...actual,
+    trucksService: {
+      uploadFile: vi.fn(),
+      deleteFile: vi.fn(),
+      storeFile: vi.fn(),
+      deleteStoredFile: vi.fn(),
+    },
+  }
 })
 
 import { trucksService } from '../../../services/trucks'
 
 const emptyTruck = {
   avi_file: null, registration_file: null, agreement_file: null,
-  leased_file: null, photo: null,
+  leased_file: null, photo: null, stored_files: [],
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -72,6 +80,44 @@ describe('TruckFiles', () => {
     )
     fireEvent.click(screen.getByTitle('Remove AVI'))
     await waitFor(() => expect(trucksService.deleteFile).toHaveBeenCalledWith(7, 'avi'))
+    expect(onChange).toHaveBeenCalled()
+  })
+
+  it('stores AVI after legacy confirmation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    trucksService.storeFile.mockResolvedValue({ data: {} })
+    const onChange = vi.fn()
+    render(
+      <TruckFiles
+        truckId={7}
+        truck={{ ...emptyTruck, avi_file: '/media/trucks/avi/x.pdf' }}
+        onChange={onChange}
+      />
+    )
+    fireEvent.click(screen.getByTitle('Send AVI to Store'))
+    await waitFor(() => expect(trucksService.storeFile).toHaveBeenCalledWith(7, 'avi'))
+    expect(window.confirm).toHaveBeenCalledWith('Are you sure store the Annual Vehicle Inspection?')
+    expect(onChange).toHaveBeenCalled()
+  })
+
+  it('renders and deletes stored files', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    trucksService.deleteStoredFile.mockResolvedValue({ data: {} })
+    const onChange = vi.fn()
+    render(
+      <TruckFiles
+        truckId={7}
+        truck={{
+          ...emptyTruck,
+          stored_files: [{ id: 3, type_label: 'AVI', file: '/media/trucks/avi/old.pdf', date: '2024-01-01' }],
+        }}
+        onChange={onChange}
+      />
+    )
+    expect(screen.getByText('Store')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /2024-01-01/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByTitle('Delete'))
+    await waitFor(() => expect(trucksService.deleteStoredFile).toHaveBeenCalledWith(7, 3))
     expect(onChange).toHaveBeenCalled()
   })
 })

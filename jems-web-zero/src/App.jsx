@@ -48,6 +48,7 @@ import UsersPage from './pages/settings/UsersPage';
 import UserDetailPage from './pages/settings/UserDetailPage';
 import UserFormPage from './pages/settings/UserFormPage';
 import SystemSettingsPage from './pages/settings/SystemSettingsPage';
+import TruckOwnersPage from './pages/settings/TruckOwnersPage';
 import RtlPage from './pages/integrations/RtlPage';
 import RtlDriverDetailPage from './pages/integrations/RtlDriverDetailPage';
 import RtlTruckDetailPage from './pages/integrations/RtlTruckDetailPage';
@@ -85,6 +86,8 @@ import CategoryDetailPage from './pages/accounting/CategoryDetailPage';
 import CategoryFormPage from './pages/accounting/CategoryFormPage';
 import TruckPartsReportPage from './pages/fleet/TruckPartsReportPage';
 import TruckPartsReportPrintPage from './pages/fleet/TruckPartsReportPrintPage';
+import TruckListReportPrintPage from './pages/fleet/TruckListReportPrintPage';
+import TruckExportPrintPage from './pages/fleet/TruckExportPrintPage';
 
 export function RequireAnyPermission({ permissions, children }) {
   const { haveAnyPermission } = useAuth();
@@ -107,6 +110,8 @@ function AppRoutes() {
       <Route path="/print/fleet/truck-parts" element={<ProtectedRoute><TruckPartsReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/drivers" element={<ProtectedRoute><DriverListReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/drivers/export" element={<ProtectedRoute><DriverExportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/trucks" element={<ProtectedRoute><TruckListReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/trucks/export" element={<ProtectedRoute><TruckExportPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={
@@ -215,7 +220,7 @@ function AppRoutes() {
                 {/* Settings */}
                 <Route path="settings/carriers" element={<div><h5>Carriers</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/eld" element={<div><h5>ELD</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="settings/truck-owners" element={<div><h5>Truck Owners</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/truck-owners" element={<TruckOwnersPage />} />
                 <Route path="settings/loss-payees" element={<div><h5>Loss Payees</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/driver-types" element={<div><h5>Driver Types</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/trailer-types" element={<div><h5>Trailer Types</h5><p className="text-muted">Coming soon.</p></div>} />

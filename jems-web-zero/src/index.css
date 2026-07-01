@@ -174,19 +174,62 @@ body {
   min-width: 1450px;
 }
 
+.trucks-grid-table {
+  min-width: 1720px;
+}
+
 .drivers-grid-table th,
-.drivers-grid-table td {
+.drivers-grid-table td,
+.trucks-grid-table th,
+.trucks-grid-table td {
   height: 48px;
 }
 
-.drivers-grid-table .driver-photo-col {
+.drivers-grid-table .driver-photo-col,
+.trucks-grid-table .driver-photo-col {
   width: 54px;
 }
 
-.drivers-grid-table .load-driver-photo {
+.drivers-grid-table .load-driver-photo,
+.trucks-grid-table .load-driver-photo {
   width: 34px;
   height: 34px;
   border-radius: 3px;
+}
+
+.trucks-grid-table .document-col,
+.trucks-grid-table .print-col {
+  width: 48px;
+}
+
+.trucks-grid-table .avi-action-col {
+  width: 74px;
+}
+
+.legacy-document-link {
+  text-decoration: none;
+}
+
+.legacy-new-avi-btn {
+  --bs-btn-padding-y: 0.08rem;
+  --bs-btn-padding-x: 0.35rem;
+  --bs-btn-font-size: 0.72rem;
+  min-width: 56px;
+  border-color: #58b957;
+  color: #1c9a36;
+  font-weight: 700;
+}
+
+.truck-owners-grid-table {
+  min-width: 1180px;
+}
+
+.legacy-owner-input {
+  max-width: 180px;
+}
+
+.legacy-owner-type {
+  max-width: 150px;
 }
 
 .legacy-grid-footer {
@@ -207,10 +250,21 @@ body {
   --bs-btn-font-size: 0.72rem;
 }
 
+.legacy-grid-pagination,
 .legacy-pagination {
   display: flex;
   gap: 0.15rem;
-  padding: 0.65rem 0;
+  padding: 0.65rem;
+  background-color: #fff;
+  border: 1px solid #e5e5e5;
+  border-top: 0;
+}
+
+.legacy-grid-pagination .btn-xs {
+  --bs-btn-padding-y: 0.12rem;
+  --bs-btn-padding-x: 0.45rem;
+  --bs-btn-font-size: 0.75rem;
+  border-radius: 0;
 }
 
 .detail-table th {
@@ -1158,6 +1212,17 @@ body {
   min-width: 68px;
   min-height: 34px;
   font-weight: 700;
+}
+
+.legacy-truck-document-rows {
+  padding: 0 0.15rem;
+}
+
+.legacy-truck-document-row {
+  margin: 0 0 0.35rem;
+  padding: 0.45rem 0.15rem 0.75rem;
+  border: 1px solid #bcd3f2;
+  background: #f3f8ff;
 }
 
 /* ── Drivers report settings and print ─────────────────────────────────────── */
