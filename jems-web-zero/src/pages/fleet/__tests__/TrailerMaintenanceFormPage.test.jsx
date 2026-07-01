@@ -85,7 +85,7 @@ describe('TrailerMaintenanceFormPage - Create', () => {
     await screen.findByText('TRL-001')
     const trailerSelect = screen.getByText('...').closest('select')
     fireEvent.change(trailerSelect, { target: { value: '20' } })
-    const dateInput = screen.getByDisplayValue(new Date().toISOString().split('T')[0])
+    const dateInput = screen.getByLabelText('Date')
     fireEvent.change(dateInput, { target: { value: '2024-05-10' } })
     fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Inspection done' } })
     fireEvent.click(screen.getByText('Create'))

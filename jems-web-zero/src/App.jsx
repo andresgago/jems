@@ -79,6 +79,8 @@ import AccidentFormPage from './pages/fleet/AccidentFormPage';
 import CategoriesPage from './pages/accounting/CategoriesPage';
 import CategoryDetailPage from './pages/accounting/CategoryDetailPage';
 import CategoryFormPage from './pages/accounting/CategoryFormPage';
+import TruckPartsReportPage from './pages/fleet/TruckPartsReportPage';
+import TruckPartsReportPrintPage from './pages/fleet/TruckPartsReportPrintPage';
 
 export function RequireAnyPermission({ permissions, children }) {
   const { haveAnyPermission } = useAuth();
@@ -98,6 +100,7 @@ function AppRoutes() {
       <Route path="/print/category-tracking" element={<ProtectedRoute><CategoryTrackingReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/broker-summary" element={<ProtectedRoute><BrokerSummaryReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/shipper-receiver" element={<ProtectedRoute><ShipperReceiverReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/fleet/truck-parts" element={<ProtectedRoute><TruckPartsReportPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={
@@ -135,7 +138,7 @@ function AppRoutes() {
                 <Route path="fleet/trailer-maintenance" element={<TrailerMaintenancesPage />} />
                 <Route path="fleet/trailer-maintenance/create" element={<TrailerMaintenanceFormPage />} />
                 <Route path="fleet/trailer-maintenance/:id/edit" element={<TrailerMaintenanceFormPage />} />
-                <Route path="fleet/reports/truck-parts" element={<div><h5>Parts and Pieces Used By Trucks</h5><p className="text-muted">Coming soon — requires category tracking data.</p></div>} />
+                <Route path="fleet/reports/truck-parts" element={<TruckPartsReportPage />} />
                 <Route path="fleet/accidents" element={<AccidentsPage />} />
                 <Route path="fleet/accidents/create" element={<AccidentFormPage />} />
                 <Route path="fleet/accidents/:id" element={<AccidentDetailPage />} />

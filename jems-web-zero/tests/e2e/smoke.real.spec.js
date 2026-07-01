@@ -52,6 +52,7 @@ const CRITICAL_ROUTES = [
   { path: '/reports/invoice', heading: /profit and loss by invoices/i },
   { path: '/reports/shipper-receiver', heading: /deliveries from shipper to receiver/i },
   { path: '/reports/company-invoices', heading: /invoices analysis/i },
+  { path: '/fleet/reports/truck-parts', heading: /parts and pieces used by trucks/i },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1986,4 +1987,63 @@ test('can create and delete a category via API (real)', async ({ page }) => {
   expect(Array.isArray(options)).toBe(true)
 
   await apiDelete(page, token, `/accounting/categories/${created.id}/`)
+})
+
+// ── Truck Parts Report (Real) ──────────────────────────────────────────────────
+
+test('Truck Parts report API: returns 200 with correct structure (date filter)', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const data = await apiGet(
+    page, token,
+    '/reports/truck-parts/?date_begin=2024-01-01&date_end=2024-12-31&date_option=1&report=1',
+  )
+  expect(Array.isArray(data.sections)).toBe(true)
+  expect(typeof data.grand_total_quantity).toBe('number')
+  expect(typeof data.grand_total_spent).toBe('number')
+  expect(data.date_begin).toBe('2024-01-01')
+  expect(data.date_end).toBe('2024-12-31')
+  expect(data.date_option).toBe(1)
+  expect(data.report).toBe(1)
+})
+
+test('Truck Parts report API: show all ignores dates and returns sections', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const data = await apiGet(page, token, '/reports/truck-parts/?date_option=3&report=1')
+  expect(Array.isArray(data.sections)).toBe(true)
+  expect(data.date_option).toBe(3)
+})
+
+test('Truck Parts report API: listing mode returns rows with date field', async ({ page }) => {
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+  const data = await apiGet(
+    page, token,
+    '/reports/truck-parts/?date_begin=2024-01-01&date_end=2024-12-31&date_option=1&report=2',
+  )
+  expect(Array.isArray(data.sections)).toBe(true)
+  expect(data.report).toBe(2)
+  if (data.sections.length > 0 && data.sections[0].rows.length > 0) {
+    const row = data.sections[0].rows[0]
+    expect(typeof row.date).toBe('string')
+    expect(typeof row.amount).toBe('number')
+  }
+})
+
+test('Truck Parts report API: missing dates with date_option=1 returns 400', async ({ page }) => {
+  await loginAsAdmin(page)
+  const res = await page.request.get(`${API_BASE}/reports/truck-parts/`, {
+    headers: { Authorization: `Bearer ${await getAccessToken(page)}` },
+  })
+  expect(res.status()).toBe(400)
+})
+
+test('Truck Parts report API: invalid report type returns 400', async ({ page }) => {
+  await loginAsAdmin(page)
+  const res = await page.request.get(
+    `${API_BASE}/reports/truck-parts/?date_begin=2024-01-01&date_end=2024-12-31&report=9`,
+    { headers: { Authorization: `Bearer ${await getAccessToken(page)}` } },
+  )
+  expect(res.status()).toBe(400)
 })

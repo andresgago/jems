@@ -9,4 +9,5 @@ export const reportsService = {
   categoryTracking: (params) => api.get('/reports/category-tracking/', { params }),
   brokerSummary: (params) => api.get('/reports/broker-summary/', { params }),
   shipperReceiver: (params) => api.get('/reports/shipper-receiver/', { params }),
+  truckParts: (params) => api.get('/reports/truck-parts/', { params }),
 };
