@@ -271,8 +271,12 @@ const TRUCK_DETAIL = {
 const TRAILERS = [
   {
     id: 1, number: 'TRL-100', trailer_type: 1, trailer_type_name: '53ft Dry Van',
-    vin: 'VIN001', year: 2021, status: 1, plate_number: 'TX-001',
-    annual_inspection_expiration: '2030-06-01', is_rented: false,
+    vin: 'VIN001', year: 2021, status: 1, width: 102, height: 13.5,
+    plate_number: 'TX-001', plate_state_name: 'Texas',
+    annual_inspection_expiration: '2030-06-01',
+    annual_inspection_file: '/media/trailers/inspections/trl100.pdf',
+    registration_file: null, is_rented: false,
+    drop_label: 'In Yard', drop_status: { code: 2, is_drop: false },
   },
 ]
 
@@ -795,11 +799,14 @@ const RTL_IFTA = [
 const TRAILER_DETAIL = {
   ...TRAILERS[0],
   width: 8.5, height: 13.5, plate_state: 9, plate_state_name: 'Texas',
-  annual_inspection_file: null, registration_file: null, agreement_file: null,
+  annual_inspection_file: '/media/trailers/inspections/trl100.pdf',
+  registration_file: null, agreement_file: null,
   purchase_date: null, purchase_cost: 0, loss_payee: '',
   owner: null, owner_name: null, carrier: 1, carrier_name: 'Jobee Express LLC',
+  created_by: 1, created_by_name: 'Admin User',
   carrier_start_date: '2023-01-01', carrier_end_date: null, carrier_end_reason: '',
   maintenance_records: [],
+  stored_files: [{ id: 1, file: '/media/trailers/stored/old.pdf', date: '2029-01-01' }],
 }
 
 const TRUCK_MAINTENANCES = [
@@ -815,6 +822,17 @@ const TRUCK_MAINTENANCES = [
 const TRUCK_MAINTENANCE_DETAIL = {
   ...TRUCK_MAINTENANCES[0],
 }
+
+const TRAILERS_IN_DROP = [
+  {
+    trailer_id: 1, trailer_number: 'TRL-100', trailer_vin: 'VIN001',
+    drop_label: 'Drop in Pick Up', drop_detail: 'In pick up until 2025-06-10',
+    load_status: 'Started', load_number: 'LD-00099',
+    pickup_date: '2025-06-01T00:00:00Z', dropoff_date: '2025-06-12T00:00:00Z',
+    drop_place: 'In pick up', dispatcher: 'Jane Doe', driver: 'John Smith',
+    truck_number: 'T-100', truck_vin: '1FUJ',
+  },
+]
 
 const TRAILER_MAINTENANCES = [
   {
@@ -979,7 +997,15 @@ async function mockApi(page) {
     if (/\/brokers\/\d+\/$/.test(pathname) && method === 'GET') return json(BROKER_DETAIL)
     if (pathname.endsWith('/brokers/') && method === 'GET') return json(BROKERS)
     if (pathname.endsWith('/fleet/trailers/options/')) return json(TRAILERS)
+    if (pathname.endsWith('/fleet/trailers/in-drop/')) return json(TRAILERS_IN_DROP)
     if (pathname.endsWith('/fleet/trailers/') && method === 'GET') return json(TRAILERS)
+    if (/\/fleet\/trailers\/\d+\/avi-pdf\/$/.test(pathname) && method === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/pdf', body: Buffer.from('%PDF-1.4 fake') })
+    }
+    if (/\/fleet\/trailers\/\d+\/files\/[^/]+\/store\/$/.test(pathname) && method === 'POST') {
+      return json({ id: 2, trailer: 1, file: '/media/trailers/stored/new.pdf', date: '2030-06-01', created_at: '2025-01-01T00:00:00Z' }, 201)
+    }
+    if (/\/fleet\/trailers\/\d+\/stored-files\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     if (/\/fleet\/trailers\/\d+\/$/.test(pathname) && method === 'GET') return json(TRAILER_DETAIL)
     if (/\/carriers\/\d+\/available-files\/$/.test(pathname) && method === 'GET') return json(CARRIER_AVAILABLE_FILES)
     if (/\/carriers\/\d+\/send-packet\/$/.test(pathname) && method === 'POST') return json({ detail: 'Packet sent successfully.' })
@@ -1763,6 +1789,81 @@ test('trailers list renders a trailer returned by the API', async ({ page }) => 
   await withAuth(page)
   await page.goto('/fleet/trailers')
   await expect(page.getByRole('link', { name: 'TRL-100' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'New AVI' })).toBeVisible()
+  await expect(page.getByText('In Yard')).toBeVisible()
+  await expect(page.getByText('Showing 1-1 of 1 items.')).toBeVisible()
+})
+
+test('trailers report requires selection and opens selected trailers print page', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trailers')
+  const dialogPromise = page.waitForEvent('dialog')
+  const blockedClick = page.getByRole('button', { name: /Trailers Report/i }).click()
+  const dialog = await dialogPromise
+  expect(dialog.message()).toBe('Please select some trailers to show')
+  await dialog.accept()
+  await blockedClick
+
+  await page.getByLabel('Select trailer TRL-100').check()
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: /Trailers Report/i }).click()
+  const popup = await popupPromise
+  await withAuth(popup)
+  await popup.goto('/print/trailers?ids=1')
+  await popup.waitForLoadState('networkidle')
+  await expect(popup.getByRole('heading', { name: 'Trailers List Report' })).toBeVisible()
+  await expect(popup.getByText('TRL-100 - VIN001')).toBeVisible()
+  await popup.close()
+})
+
+test('trailers export requires selection and opens selected trailers grid', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trailers')
+  const dialogPromise = page.waitForEvent('dialog')
+  const blockedClick = page.getByTitle('Trailers Export').click()
+  const dialog = await dialogPromise
+  expect(dialog.message()).toBe('Please select some trailers to show')
+  await dialog.accept()
+  await blockedClick
+
+  await page.getByLabel('Select trailer TRL-100').check()
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByTitle('Trailers Export').click()
+  const popup = await popupPromise
+  await withAuth(popup)
+  await popup.goto('/print/trailers/export?ids=1')
+  await popup.waitForLoadState('networkidle')
+  await expect(popup.getByRole('heading', { name: 'Trailers List Report' })).toBeVisible()
+  await expect(popup.getByText('Showing 1-1 of 1 items.')).toBeVisible()
+  await expect(popup.getByRole('columnheader', { name: 'Year' })).toBeVisible()
+  await expect(popup.getByText('2021')).toBeVisible()
+  await popup.close()
+})
+
+test('trailers report settings saves selected fields', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trailers')
+  await page.getByTitle('Setting Fields For Reports').click()
+  await expect(page.getByText('Trailer Fields Check For Reports')).toBeVisible()
+  await expect(page.getByLabel('Report field Number')).toBeChecked()
+  await page.getByLabel('Report field Year').check()
+  await page.getByRole('button', { name: /^Save$/ }).click()
+  await expect(page.getByText('Trailer Fields Check For Reports')).toHaveCount(0)
+})
+
+test('Trailers in Drop opens unconditionally and lists in-drop trailers', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/fleet/trailers')
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: /Trailers in Drop/i }).click()
+  const popup = await popupPromise
+  await withAuth(popup)
+  await popup.goto('/print/trailers/in-drop')
+  await popup.waitForLoadState('networkidle')
+  await expect(popup.getByRole('heading', { name: 'Trailers in Drop Report' })).toBeVisible()
+  await expect(popup.getByText('TRL-100 - VIN001')).toBeVisible()
+  await expect(popup.getByText('Drop in Pick Up')).toBeVisible()
+  await popup.close()
 })
 
 test('trailer detail renders header and resolves type name', async ({ page }) => {
@@ -1772,24 +1873,30 @@ test('trailer detail renders header and resolves type name', async ({ page }) =>
   await expect(page.getByText('53ft Dry Van')).toBeVisible()
 })
 
-test('trailer detail shows Files section with 3 document slots (no Photo)', async ({ page }) => {
+test('trailer detail shows Files section with 3 document slots (no Photo) and stored-files history', async ({ page }) => {
   await withAuth(page)
   await page.goto('/fleet/trailers/1')
-  await expect(page.getByRole('cell', { name: 'Annual Inspection' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Annual Inspection' }).first()).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Registration' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Agreement' })).toBeVisible()
+  await expect(page.getByTitle('Send Annual Inspection to Store')).toBeVisible()
+  await expect(page.getByText('2029-01-01')).toBeVisible()
 })
 
-test('new trailer form: Number label shows required asterisk', async ({ page }) => {
+test('new trailer form: Number label shows required asterisk and legacy field order', async ({ page }) => {
   await withAuth(page)
   await page.goto('/fleet/trailers/create')
   await expect(page.locator('label').filter({ hasText: /^Number/ })).toContainText('*')
+  await expect(page.getByText('Create new Trailer')).toBeVisible()
+  await expect(page.getByLabel('Agreement')).toBeVisible()
+  await expect(page.getByLabel('Annual Inspection')).toBeVisible()
 })
 
-test('new trailer form: submit button reads "Create Trailer"', async ({ page }) => {
+test('new trailer form: submit button reads "Save" and Rent defaults to NOT', async ({ page }) => {
   await withAuth(page)
   await page.goto('/fleet/trailers/create')
-  await expect(page.getByRole('button', { name: /create trailer/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Save$/ })).toBeVisible()
+  await expect(page.locator('select').filter({ has: page.locator('option', { hasText: 'NOT' }) })).toHaveValue('0')
 })
 
 // ── Brokers ──────────────────────────────────────────────────────────────────

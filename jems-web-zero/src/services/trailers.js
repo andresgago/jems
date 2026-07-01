@@ -22,7 +22,17 @@ export const trailersService = {
     });
   },
   deleteFile: (id, slot) => api.delete(`/fleet/trailers/${id}/files/${slot}/`),
+  storeFile: (id, slot) => api.post(`/fleet/trailers/${id}/files/${slot}/store/`),
+  deleteStoredFile: (id, fileId) => api.delete(`/fleet/trailers/${id}/stored-files/${fileId}/`),
+  getDropStatuses: () => api.get('/fleet/trailers/in-drop/'),
+  // JWT auth is header-based (see services/api.js), so the PDF can't be
+  // opened as a plain URL — fetch it as a blob and let the caller open/save it.
+  getAviPdf: (id) => api.get(`/fleet/trailers/${id}/avi-pdf/`, { responseType: 'blob' }),
 };
+
+// Slots that support archiving to history (only annual_inspection has an
+// expiration date to archive, matching legacy's Store button availability).
+export const TRAILER_STORABLE_FILE_SLOTS = ['annual_inspection'];
 
 // The 3 file slots for trailers (no photo, no leased — unlike trucks).
 export const TRAILER_FILE_SLOTS = [

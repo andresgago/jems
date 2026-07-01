@@ -88,6 +88,9 @@ import TruckPartsReportPage from './pages/fleet/TruckPartsReportPage';
 import TruckPartsReportPrintPage from './pages/fleet/TruckPartsReportPrintPage';
 import TruckListReportPrintPage from './pages/fleet/TruckListReportPrintPage';
 import TruckExportPrintPage from './pages/fleet/TruckExportPrintPage';
+import TrailerListReportPrintPage from './pages/fleet/TrailerListReportPrintPage';
+import TrailerExportPrintPage from './pages/fleet/TrailerExportPrintPage';
+import TrailersInDropPrintPage from './pages/fleet/TrailersInDropPrintPage';
 
 export function RequireAnyPermission({ permissions, children }) {
   const { haveAnyPermission } = useAuth();
@@ -112,6 +115,9 @@ function AppRoutes() {
       <Route path="/print/drivers/export" element={<ProtectedRoute><DriverExportPrintPage /></ProtectedRoute>} />
       <Route path="/print/trucks" element={<ProtectedRoute><TruckListReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/trucks/export" element={<ProtectedRoute><TruckExportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/trailers" element={<ProtectedRoute><TrailerListReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/trailers/export" element={<ProtectedRoute><TrailerExportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/trailers/in-drop" element={<ProtectedRoute><TrailersInDropPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={

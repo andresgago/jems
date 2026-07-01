@@ -572,8 +572,77 @@ test('can create and delete a trailer via API (real)', async ({ page }) => {
   expect(created.id).toBeTruthy()
   expect(created.number).toBe(number)
 
+  const detail = await apiGet(page, token, `/fleet/trailers/${created.id}/`)
+  expect(detail.stored_files).toEqual([])
+  expect(detail.maintenance_records.some((record) => record.detail === 'Automatic Maintenance' && record.miles === 10000)).toBeTruthy()
+
   // DELETE is a soft delete (status → inactive); endpoint returns 204
   await apiDelete(page, token, `/fleet/trailers/${created.id}/`)
+})
+
+test('can store and delete a trailer AI file via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const number = `E2E-TRLA-${Date.now()}`
+  const created = await apiPost(page, token, '/fleet/trailers/', {
+    number,
+    status: 1,
+    annual_inspection_expiration: '2030-01-01',
+  })
+
+  try {
+    const uploadRes = await page.request.post(
+      `${API_BASE}/fleet/trailers/${created.id}/files/annual_inspection/`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        multipart: {
+          file: { name: 'ai.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake') },
+        },
+      }
+    )
+    expect(uploadRes.ok()).toBeTruthy()
+
+    const storeRes = await page.request.post(
+      `${API_BASE}/fleet/trailers/${created.id}/files/annual_inspection/store/`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    expect(storeRes.ok()).toBeTruthy()
+    const stored = await storeRes.json()
+    expect(stored.file).toBeTruthy()
+
+    const afterStore = await apiGet(page, token, `/fleet/trailers/${created.id}/`)
+    expect(afterStore.annual_inspection_file).toBeFalsy()
+    expect(afterStore.stored_files.some((file) => file.id === stored.id)).toBeTruthy()
+
+    await apiDelete(page, token, `/fleet/trailers/${created.id}/stored-files/${stored.id}/`)
+  } finally {
+    await apiDelete(page, token, `/fleet/trailers/${created.id}/`)
+  }
+})
+
+test('trailer in-drop and avi-pdf endpoints respond (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const number = `E2E-TRLD-${Date.now()}`
+  const created = await apiPost(page, token, '/fleet/trailers/', { number, status: 1 })
+
+  try {
+    const inDrop = await apiGet(page, token, '/fleet/trailers/in-drop/')
+    expect(Array.isArray(inDrop)).toBeTruthy()
+
+    const pdfRes = await page.request.get(
+      `${API_BASE}/fleet/trailers/${created.id}/avi-pdf/`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    expect(pdfRes.ok()).toBeTruthy()
+    expect(pdfRes.headers()['content-type']).toBe('application/pdf')
+  } finally {
+    await apiDelete(page, token, `/fleet/trailers/${created.id}/`)
+  }
 })
 
 test('can upload and clear a trailer document file via API (real)', async ({ page }) => {
@@ -847,12 +916,15 @@ test('system settings endpoints can be read and patched (real)', async ({ page }
   expect(config).toHaveProperty('driver_invoice')
   const displayOptions = await apiGet(page, token, '/users/settings/display-options/')
   expect(displayOptions).toHaveProperty('truck')
+  expect(displayOptions).toHaveProperty('trailer')
 
   try {
     const body = await apiPatch(page, token, '/users/settings/display-options/', {
       driver: 'name,phone',
+      trailer: 'number,VIN,year',
     })
     expect(body.driver).toBe('name,phone')
+    expect(body.trailer).toBe('number,VIN,year')
   } finally {
     await apiPatch(page, token, '/users/settings/display-options/', {
       truck: displayOptions.truck,
@@ -1870,11 +1942,14 @@ test('can create, update, and delete a trailer maintenance record via API (real)
   const token = await getAccessToken(page)
 
   const trailer = await apiPost(page, token, '/fleet/trailers/', { number: `E2E-TLTRL-${Date.now()}`, status: 1 })
-  const today = new Date().toISOString().split('T')[0]
+  // Trailer creation auto-seeds an "Automatic Maintenance" record dated
+  // today (mirrors legacy actionCreate) — use a distinct past date here to
+  // avoid the one-record-per-vehicle-per-date uniqueness constraint.
+  const maintenanceDate = '2024-01-02'
 
   const created = await apiPost(page, token, '/fleet/trailer-maintenance/', {
     trailer: trailer.id,
-    date: today,
+    date: maintenanceDate,
     miles: 50000,
     miles_alert: 0,
     time_alert: 1,

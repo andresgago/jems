@@ -4,7 +4,15 @@ import TrailerFiles from '../TrailerFiles'
 
 vi.mock('../../../services/trailers', async () => {
   const actual = await vi.importActual('../../../services/trailers')
-  return { ...actual, trailersService: { uploadFile: vi.fn(), deleteFile: vi.fn() } }
+  return {
+    ...actual,
+    trailersService: {
+      uploadFile: vi.fn(),
+      deleteFile: vi.fn(),
+      storeFile: vi.fn(),
+      deleteStoredFile: vi.fn(),
+    },
+  }
 })
 
 import { trailersService } from '../../../services/trailers'
@@ -70,6 +78,62 @@ describe('TrailerFiles', () => {
     )
     fireEvent.click(screen.getByTitle('Remove Agreement'))
     await waitFor(() => expect(trailersService.deleteFile).toHaveBeenCalledWith(5, 'agreement'))
+    expect(onChange).toHaveBeenCalled()
+  })
+
+  it('shows a Store button only for the annual_inspection slot', () => {
+    render(
+      <TrailerFiles
+        trailerId={5}
+        trailer={{
+          ...emptyTrailer,
+          annual_inspection_file: '/media/trailers/inspections/a.pdf',
+          registration_file: '/media/trailers/registration/b.pdf',
+        }}
+        onChange={vi.fn()}
+      />
+    )
+    expect(screen.getByTitle('Send Annual Inspection to Store')).toBeInTheDocument()
+    expect(screen.queryByTitle('Send Registration to Store')).not.toBeInTheDocument()
+  })
+
+  it('stores the annual inspection file with the legacy confirm text', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    trailersService.storeFile.mockResolvedValue({ data: {} })
+    const onChange = vi.fn()
+    render(
+      <TrailerFiles
+        trailerId={5}
+        trailer={{ ...emptyTrailer, annual_inspection_file: '/media/trailers/inspections/a.pdf' }}
+        onChange={onChange}
+      />
+    )
+    fireEvent.click(screen.getByTitle('Send Annual Inspection to Store'))
+    expect(window.confirm).toHaveBeenCalledWith('Are you sure store the Annual Inspection?')
+    await waitFor(() => expect(trailersService.storeFile).toHaveBeenCalledWith(5, 'annual_inspection'))
+    expect(onChange).toHaveBeenCalled()
+  })
+
+  it('renders the stored-files history and deletes with the legacy confirm text', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    trailersService.deleteStoredFile.mockResolvedValue({ data: {} })
+    const onChange = vi.fn()
+    render(
+      <TrailerFiles
+        trailerId={5}
+        trailer={{
+          ...emptyTrailer,
+          stored_files: [{ id: 9, file: '/media/trailers/stored/old.pdf', date: '2025-01-01' }],
+        }}
+        onChange={onChange}
+      />
+    )
+    expect(screen.getAllByText('Annual Inspection')).toHaveLength(2)
+    expect(screen.getByText('2025-01-01')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTitle('Delete'))
+    expect(window.confirm).toHaveBeenCalledWith('Are you sure delete the file?')
+    await waitFor(() => expect(trailersService.deleteStoredFile).toHaveBeenCalledWith(5, 9))
     expect(onChange).toHaveBeenCalled()
   })
 })

@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
-import { trailersService, TRAILER_FILE_SLOTS } from '../../services/trailers';
+import { trailersService, TRAILER_FILE_SLOTS, TRAILER_STORABLE_FILE_SLOTS } from '../../services/trailers';
 import { mediaUrl } from '../../utils/media';
 
-function SlotRow({ slot, label, value, busy, onUpload, onClear }) {
+function SlotRow({ slot, label, value, busy, onUpload, onClear, onStore }) {
   const fileRef = useRef(null);
+  const canStore = TRAILER_STORABLE_FILE_SLOTS.includes(slot) && value;
 
   return (
     <tr>
@@ -37,6 +38,17 @@ function SlotRow({ slot, label, value, busy, onUpload, onClear }) {
         >
           <i className="bi bi-upload me-1" />{value ? 'Replace' : 'Upload'}
         </button>
+        {canStore && (
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary me-1"
+            title={`Send ${label} to Store`}
+            disabled={busy}
+            onClick={() => onStore(slot)}
+          >
+            <i className="bi bi-box-arrow-down" />
+          </button>
+        )}
         {value && (
           <button
             type="button"
@@ -77,6 +89,30 @@ export default function TrailerFiles({ trailerId, trailer, onChange }) {
     }
   };
 
+  const store = async () => {
+    if (!window.confirm('Are you sure store the Annual Inspection?')) return;
+    setBusy(true);
+    try {
+      await trailersService.storeFile(trailerId, 'annual_inspection');
+      onChange();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteStored = async (fileId) => {
+    if (!window.confirm('Are you sure delete the file?')) return;
+    setBusy(true);
+    try {
+      await trailersService.deleteStoredFile(trailerId, fileId);
+      onChange();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const storedFiles = Array.isArray(trailer.stored_files) ? trailer.stored_files : [];
+
   return (
     <div className="card mb-3">
       <div className="card-header py-2 bg-light">
@@ -98,11 +134,42 @@ export default function TrailerFiles({ trailerId, trailer, onChange }) {
                   busy={busy}
                   onUpload={upload}
                   onClear={clear}
+                  onStore={store}
                 />
               ))}
             </tbody>
           </table>
         </div>
+        {storedFiles.length > 0 && (
+          <div className="p-3 pt-0">
+            <div className="small fw-semibold mb-1 mt-3">Store</div>
+            <table className="table table-sm table-bordered mb-0">
+              <tbody>
+                {storedFiles.map((file) => (
+                  <tr key={file.id}>
+                    <td>Annual Inspection</td>
+                    <td>
+                      <a href={mediaUrl(file.file)} target="_blank" rel="noreferrer" className="text-decoration-none">
+                        <i className="bi bi-file-earmark-arrow-down me-1" />{file.date}
+                      </a>
+                    </td>
+                    <td className="text-end">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        title="Delete"
+                        disabled={busy}
+                        onClick={() => deleteStored(file.id)}
+                      >
+                        <i className="bi bi-trash" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
