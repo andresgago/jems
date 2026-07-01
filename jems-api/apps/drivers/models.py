@@ -1,3 +1,6 @@
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -17,6 +20,15 @@ class Driver(models.Model):
         INACTIVE = 0, "Inactive"
         ACTIVE = 1, "Active"
         TERMINATED = -1, "Terminated"
+
+    class Contract(models.IntegerChoices):
+        BY_PERCENT = 0, "By percent"
+        BY_MILES = 1, "By miles"
+        BY_PERCENT_NO_EXPENSES = 2, "By percent no expenses"
+
+    class PayVacation(models.IntegerChoices):
+        YES = 0, "Yes"
+        NO = 1, "Not"
 
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
@@ -74,10 +86,15 @@ class Driver(models.Model):
     photo = models.ImageField(upload_to="drivers/photos/", null=True, blank=True)
 
     # Compensation
-    contract = models.BooleanField(default=False)
+    contract = models.IntegerField(
+        choices=Contract.choices, default=Contract.BY_PERCENT
+    )
     miles_empty = models.FloatField(default=0)
     miles_full = models.FloatField(default=0)
     percent = models.FloatField(default=0)
+    weekly_rate = models.DecimalField(
+        max_digits=7, decimal_places=3, default=Decimal("0.000")
+    )
 
     # Deductions
     insurance = models.FloatField(default=0)
@@ -85,6 +102,9 @@ class Driver(models.Model):
     worker_comp = models.FloatField(default=0)
     factor = models.FloatField(default=0)
     factor_fee = models.FloatField(default=0)
+    pay_vacation = models.IntegerField(
+        choices=PayVacation.choices, default=PayVacation.YES
+    )
 
     # Assignments
     fuel_card = models.ForeignKey(
@@ -101,6 +121,13 @@ class Driver(models.Model):
         on_delete=models.SET_NULL,
         related_name="team_partners",
     )
+    owner = models.ForeignKey(
+        "fleet.TruckOwner",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="drivers",
+    )
     carrier = models.ForeignKey(
         "carriers.Carrier",
         null=True,
@@ -111,6 +138,8 @@ class Driver(models.Model):
     carrier_start_date = models.DateField(null=True, blank=True)
     carrier_end_date = models.DateField(null=True, blank=True)
     carrier_end_reason = models.TextField(blank=True, default="")
+    eld_id = models.CharField(max_length=100, blank=True, default="")
+    factoring_account_id = models.CharField(max_length=100, blank=True, default="")
 
     # CDL endorsements and restrictions (bitmask in legacy)
     endorsements = models.IntegerField(default=0)
@@ -133,6 +162,64 @@ class Driver(models.Model):
     @property
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
+
+    @property
+    def is_team_driver_type(self) -> bool:
+        if self.driver_type_id == 5:
+            return True
+        name = (
+            self.driver_type.name if self.driver_type_id and self.driver_type else ""
+        ).lower()
+        return "team" in name
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+
+        if (
+            self.termination_date
+            and self.hire_date
+            and self.termination_date <= self.hire_date
+        ):
+            errors["termination_date"] = "Termination must be greater than hire date."
+
+        non_negative_fields = [
+            "factor",
+            "miles_empty",
+            "miles_full",
+            "factor_fee",
+            "insurance",
+            "eld",
+            "worker_comp",
+        ]
+        for field in non_negative_fields:
+            if getattr(self, field) < 0:
+                errors[field] = "Value must be greater than or equal to 0."
+
+        if self.percent < 0 or self.percent > 100:
+            errors["percent"] = "Percent must be between 0 and 100."
+
+        if self.team_driver_id and self.pk and self.team_driver_id == self.pk:
+            errors["team_driver"] = "A driver cannot be their own team driver."
+
+        if self.is_team_driver_type and self.team_driver_id is None:
+            errors["team_driver"] = "Team driver cannot be blank."
+
+        if self.status == self.Status.ACTIVE and not self.is_team_driver_type:
+            if self.fuel_card_id is None:
+                errors["fuel_card"] = "Card fuel cannot be blank."
+            else:
+                duplicate = Driver.objects.filter(
+                    status=self.Status.ACTIVE,
+                    fuel_card_id=self.fuel_card_id,
+                )
+                if self.pk:
+                    duplicate = duplicate.exclude(pk=self.pk)
+                if duplicate.exists():
+                    errors["fuel_card"] = "Card fuel has already been taken."
+
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self) -> str:
         return self.full_name

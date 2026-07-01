@@ -1041,7 +1041,7 @@ assert_status "driver type list" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "driver type listed" "$(body "$resp")" "Company Driver"
 
 step "Drivers: create"
-resp="$(post "/api/v1/drivers/" "{\"first_name\":\"Juan\",\"last_name\":\"Perez\",\"driver_type\":4,\"status\":1,\"phone\":\"5559876543\",\"email\":\"juan@example.com\",\"factor\":25,\"license_number\":\"TX123456\"}")"
+resp="$(post "/api/v1/drivers/" "{\"first_name\":\"Juan\",\"last_name\":\"Perez\",\"driver_type\":4,\"status\":1,\"phone\":\"5559876543\",\"email\":\"juan@example.com\",\"factor\":25,\"license_number\":\"TX123456\",\"license_expiration\":\"2030-01-01\",\"fuel_card\":${CARD_ID},\"contract\":2,\"pay_vacation\":1,\"owner\":${TRUCK_OWNER_ID}}")"
 assert_status "driver create" "201" "$(code "$resp")" "$(body "$resp")"
 DRIVER_ID="$(body "$resp" | json_get_num id)"
 
@@ -1049,9 +1049,12 @@ step "Drivers: retrieve"
 resp="$(get "/api/v1/drivers/${DRIVER_ID}/")"
 assert_status "driver retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "driver name" "$(body "$resp")" "Juan"
+assert_contains "driver contract parity" "$(body "$resp")" "By percent no expenses"
+assert_contains "driver fuel card parity" "$(body "$resp")" "PILOT-001"
+assert_contains "driver owner parity" "$(body "$resp")" "Carlos"
 
 step "Drivers: update"
-resp="$(put "/api/v1/drivers/${DRIVER_ID}/" '{"first_name":"Juan","last_name":"Perez Updated","license_number":"TX123456"}')"
+resp="$(patch "/api/v1/drivers/${DRIVER_ID}/" '{"first_name":"Juan","last_name":"Perez Updated","license_number":"TX123456"}')"
 assert_status "driver update" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "driver updated" "$(body "$resp")" "Perez Updated"
 

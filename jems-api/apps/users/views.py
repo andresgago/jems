@@ -174,7 +174,10 @@ class SystemConfigViewSet(ViewSet):
 
 
 class DisplayOptionsViewSet(ViewSet):
-    permission_classes = [IsAdminUser]
+    def get_permissions(self):
+        if self.action == "retrieve":
+            return [IsAuthenticated()]
+        return [IsAdminUser()]
 
     def retrieve(self, request: Request) -> Response:
         return Response(DisplayOptionsSerializer(services.get_display_options()).data)

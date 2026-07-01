@@ -216,6 +216,21 @@ class TestDisplayOptionsEndpoint:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["driver"] == "name,phone"
 
+    def test_authenticated_user_can_read_display_options(self, auth_client):
+        client, _ = auth_client
+
+        response = client.get(reverse("display-options"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "driver" in response.data
+
+    def test_regular_user_cannot_update_display_options(self, auth_client):
+        client, _ = auth_client
+
+        response = client.patch(reverse("display-options"), {"driver": "name"})
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
 
 # ── Position options ───────────────────────────────────────────────────────────
 

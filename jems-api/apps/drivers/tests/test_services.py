@@ -1,4 +1,5 @@
 import pytest
+from django.core.exceptions import ValidationError
 
 from apps.drivers.models import Driver
 from apps.drivers.models import DriverDocument
@@ -11,7 +12,7 @@ from apps.drivers.services import (
     update_driver,
     upload_document,
 )
-from apps.drivers.tests.factories import DriverFactory, DriverTypeFactory
+from apps.drivers.tests.factories import CardFactory, DriverFactory, DriverTypeFactory
 from apps.drivers.tests.test_views import make_image_file, make_pdf_file
 from apps.users.tests.factories import UserFactory
 
@@ -25,6 +26,13 @@ class TestCreateDriver:
             first_name="John",
             last_name="Smith",
             driver_type=driver_type,
+            phone="555-1000",
+            email="john@example.com",
+            birth_date="1980-01-01",
+            hire_date="2024-01-01",
+            license_number="TX123",
+            license_expiration="2030-01-01",
+            fuel_card=CardFactory(),
             created_by=user,
         )
         assert driver.pk is not None
@@ -32,8 +40,35 @@ class TestCreateDriver:
         assert driver.status == Driver.Status.ACTIVE
 
     def test_driver_is_active_by_default(self):
-        driver = create_driver(first_name="Jane", last_name="Doe")
+        driver = create_driver(
+            first_name="Jane",
+            last_name="Doe",
+            driver_type=DriverTypeFactory(),
+            phone="555-1001",
+            email="jane@example.com",
+            birth_date="1980-01-01",
+            hire_date="2024-01-01",
+            license_number="TX124",
+            license_expiration="2030-01-01",
+            fuel_card=CardFactory(),
+        )
         assert driver.status == Driver.Status.ACTIVE
+
+    def test_contract_supports_legacy_no_expenses_state(self):
+        driver = create_driver(
+            first_name="Jane",
+            last_name="Miles",
+            driver_type=DriverTypeFactory(),
+            phone="555-1002",
+            email="miles@example.com",
+            birth_date="1980-01-01",
+            hire_date="2024-01-01",
+            license_number="TX125",
+            license_expiration="2030-01-01",
+            fuel_card=CardFactory(),
+            contract=Driver.Contract.BY_PERCENT_NO_EXPENSES,
+        )
+        assert driver.contract == Driver.Contract.BY_PERCENT_NO_EXPENSES
 
 
 @pytest.mark.django_db
@@ -64,6 +99,44 @@ class TestUpdateDriver:
         updated = update_driver(driver=driver, percent=85.5, miles_full=0.45)
         assert updated.percent == 85.5
         assert updated.miles_full == 0.45
+
+    def test_rejects_termination_before_hire(self):
+        driver = DriverFactory(hire_date="2024-02-01")
+        with pytest.raises(ValidationError):
+            update_driver(driver=driver, termination_date="2024-01-31")
+
+    def test_rejects_duplicate_active_fuel_card(self):
+        card = CardFactory()
+        DriverFactory(fuel_card=card, status=Driver.Status.ACTIVE)
+        driver = DriverFactory(status=Driver.Status.ACTIVE)
+        with pytest.raises(ValidationError):
+            update_driver(driver=driver, fuel_card=card)
+
+    def test_carrier_change_requires_end_reason(self):
+        driver = DriverFactory()
+        new_carrier = DriverFactory().carrier
+        with pytest.raises(ValidationError):
+            update_driver(driver=driver, carrier=new_carrier, carrier_end_reason="")
+
+    def test_carrier_change_closes_old_driver_and_returns_clone(self):
+        driver = DriverFactory()
+        old_id = driver.pk
+        old_carrier = driver.carrier
+        new_carrier = DriverFactory().carrier
+        cloned = update_driver(
+            driver=driver,
+            carrier=new_carrier,
+            carrier_end_reason="Moved to sister carrier",
+        )
+        driver.refresh_from_db()
+        assert driver.pk == old_id
+        assert driver.carrier == old_carrier
+        assert driver.status == Driver.Status.INACTIVE
+        assert driver.carrier_end_reason == "Moved to sister carrier"
+        assert cloned.pk != old_id
+        assert cloned.carrier == new_carrier
+        assert cloned.status == Driver.Status.ACTIVE
+        assert cloned.fuel_card is None
 
 
 @pytest.mark.django_db

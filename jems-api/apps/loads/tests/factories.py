@@ -37,8 +37,8 @@ class CarrierFactory(DjangoModelFactory):
     class Meta:
         model = Carrier
 
-    mc = factory.Sequence(lambda n: f"MC{n:06d}")
-    dot_number = factory.Sequence(lambda n: f"DOT{n:06d}")
+    mc = factory.Sequence(lambda n: f"LMC{n:06d}")
+    dot_number = factory.Sequence(lambda n: f"LDOT{n:06d}")
     name = factory.Sequence(lambda n: f"Carrier {n}")
     active = True
 

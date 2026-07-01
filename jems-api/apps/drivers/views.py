@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -17,6 +18,12 @@ from .serializers import (
     DriverVacationSerializer,
     PhotoUploadSerializer,
 )
+
+
+def validation_error_response(exc: DjangoValidationError) -> Response:
+    if hasattr(exc, "message_dict"):
+        return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"detail": exc.messages}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class DriverTypeViewSet(ViewSet):
@@ -40,7 +47,8 @@ class DriverViewSet(ViewSet):
     def list(self, request: Request) -> Response:
         drivers = (
             Driver.objects.exclude(status=Driver.Status.TERMINATED)
-            .select_related("driver_type", "carrier")
+            .select_related("driver_type", "fuel_card", "carrier")
+            .prefetch_related("documents")
             .order_by("first_name", "last_name")
         )
         return Response(DriverListSerializer(drivers, many=True).data)
@@ -48,7 +56,12 @@ class DriverViewSet(ViewSet):
     def retrieve(self, request: Request, pk: int) -> Response:
         driver = (
             Driver.objects.select_related(
-                "driver_type", "license_state", "fuel_card", "team_driver", "carrier"
+                "driver_type",
+                "license_state",
+                "fuel_card",
+                "team_driver",
+                "owner",
+                "carrier",
             )
             .prefetch_related("documents")
             .get(pk=pk)
@@ -58,9 +71,12 @@ class DriverViewSet(ViewSet):
     def create(self, request: Request) -> Response:
         serializer = DriverCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        driver = services.create_driver(
-            created_by=request.user, **serializer.validated_data
-        )
+        try:
+            driver = services.create_driver(
+                created_by=request.user, **serializer.validated_data
+            )
+        except DjangoValidationError as exc:
+            return validation_error_response(exc)
         return Response(DriverSerializer(driver).data, status=status.HTTP_201_CREATED)
 
     def update(self, request: Request, pk: int) -> Response:
@@ -69,7 +85,10 @@ class DriverViewSet(ViewSet):
             driver, data=request.data, partial=True
         )
         serializer.is_valid(raise_exception=True)
-        driver = services.update_driver(driver=driver, **serializer.validated_data)
+        try:
+            driver = services.update_driver(driver=driver, **serializer.validated_data)
+        except DjangoValidationError as exc:
+            return validation_error_response(exc)
         return Response(DriverSerializer(driver).data)
 
     def destroy(self, request: Request, pk: int) -> Response:

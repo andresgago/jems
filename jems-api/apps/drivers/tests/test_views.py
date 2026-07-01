@@ -8,7 +8,12 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.drivers.models import Driver
-from apps.drivers.tests.factories import DriverFactory, DriverTypeFactory
+from apps.drivers.tests.factories import (
+    CardFactory,
+    DriverFactory,
+    DriverTypeFactory,
+    TruckOwnerFactory,
+)
 from apps.users.tests.factories import AdminUserFactory, UserFactory
 
 
@@ -71,15 +76,62 @@ class TestDriverCreate:
             "driver_type": driver_type.pk,
             "phone": "555-1234",
             "email": "carlos@example.com",
+            "birth_date": "1980-01-01",
+            "hire_date": "2024-01-01",
+            "license_number": "TX123456",
+            "license_expiration": "2030-01-01",
+            "fuel_card": CardFactory().pk,
         }
         response = client.post(reverse("driver-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["full_name"] == "Carlos Lopez"
+        assert response.data["contract"] == Driver.Contract.BY_PERCENT
+
+    def test_create_driver_with_legacy_contract_state(self, auth_client):
+        client, _ = auth_client
+        driver_type = DriverTypeFactory()
+        owner = TruckOwnerFactory()
+        payload = {
+            "first_name": "Carlos",
+            "last_name": "No Expenses",
+            "driver_type": driver_type.pk,
+            "phone": "555-1234",
+            "email": "no-expenses@example.com",
+            "birth_date": "1980-01-01",
+            "hire_date": "2024-01-01",
+            "license_number": "TX123456",
+            "license_expiration": "2030-01-01",
+            "fuel_card": CardFactory().pk,
+            "contract": Driver.Contract.BY_PERCENT_NO_EXPENSES,
+            "pay_vacation": Driver.PayVacation.NO,
+            "owner": owner.pk,
+        }
+        response = client.post(reverse("driver-list"), payload)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["contract"] == Driver.Contract.BY_PERCENT_NO_EXPENSES
+        assert response.data["pay_vacation"] == Driver.PayVacation.NO
+        assert response.data["owner"] == owner.pk
+        assert response.data["owner_name"] == owner.full_name
 
     def test_create_fails_without_name(self, auth_client):
         client, _ = auth_client
         response = client.post(reverse("driver-list"), {})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_create_rejects_missing_fuel_card_for_active_solo_driver(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("driver-list"),
+            {
+                "first_name": "No",
+                "last_name": "Card",
+                "driver_type": DriverTypeFactory().pk,
+                "phone": "555-1234",
+                "email": "nocard@example.com",
+            },
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "fuel_card" in response.data
 
 
 @pytest.mark.django_db
@@ -91,6 +143,8 @@ class TestDriverRetrieve:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == driver.pk
         assert "documents" in response.data
+        assert "contract_display" in response.data
+        assert "fuel_card_number" in response.data
 
 
 @pytest.mark.django_db
@@ -103,6 +157,44 @@ class TestDriverToggleStatus:
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == Driver.Status.INACTIVE
+
+
+@pytest.mark.django_db
+class TestDriverUpdate:
+    def test_patch_updates_driver(self, auth_client):
+        client, _ = auth_client
+        driver = DriverFactory(phone="111")
+        response = client.patch(
+            reverse("driver-detail", kwargs={"pk": driver.pk}),
+            {"phone": "222"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["phone"] == "222"
+
+    def test_carrier_change_requires_end_reason(self, auth_client):
+        client, _ = auth_client
+        driver = DriverFactory()
+        new_carrier = DriverFactory().carrier
+        response = client.patch(
+            reverse("driver-detail", kwargs={"pk": driver.pk}),
+            {"carrier": new_carrier.pk, "carrier_end_reason": ""},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "carrier_end_reason" in response.data
+
+    def test_carrier_change_returns_new_active_driver(self, auth_client):
+        client, _ = auth_client
+        driver = DriverFactory()
+        new_carrier = DriverFactory().carrier
+        response = client.patch(
+            reverse("driver-detail", kwargs={"pk": driver.pk}),
+            {"carrier": new_carrier.pk, "carrier_end_reason": "Moved carrier"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] != driver.pk
+        assert response.data["carrier"] == new_carrier.pk
+        driver.refresh_from_db()
+        assert driver.status == Driver.Status.INACTIVE
 
 
 @pytest.mark.django_db

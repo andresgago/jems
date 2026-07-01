@@ -9,7 +9,7 @@ from .views import (
 
 driver_list = DriverViewSet.as_view({"get": "list", "post": "create"})
 driver_detail = DriverViewSet.as_view(
-    {"get": "retrieve", "put": "update", "delete": "destroy"}
+    {"get": "retrieve", "put": "update", "patch": "update", "delete": "destroy"}
 )
 driver_toggle_status = DriverViewSet.as_view({"post": "toggle_status"})
 driver_photo = DriverViewSet.as_view({"post": "upload_photo", "delete": "delete_photo"})
