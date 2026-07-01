@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useDriver } from '../../hooks/useDriver';
 import { useOptions } from '../../hooks/useOptions';
-import { driversService, DRIVER_STATUS } from '../../services/drivers';
+import { driversService, DRIVER_CONTRACT, DRIVER_PAY_VACATION, DRIVER_STATUS } from '../../services/drivers';
 import { SectionCard, Field, YesNo, Money } from '../../components/DetailSection';
 import DriverDocuments from './DriverDocuments';
 import DriverPhoto from './DriverPhoto';
@@ -82,7 +82,8 @@ export default function DriverDetailPage() {
       <SectionCard title="Employment" icon="bi-briefcase">
         <Field label="Hire Date">{driver.hire_date}</Field>
         <Field label="Termination Date">{driver.termination_date}</Field>
-        <Field label="Contract"><YesNo value={driver.contract} /></Field>
+        <Field label="Contract">{driver.contract_display || DRIVER_CONTRACT[driver.contract]}</Field>
+        <Field label="Pay Vacation">{driver.pay_vacation_display || DRIVER_PAY_VACATION[driver.pay_vacation]}</Field>
         <Field label="On Vacation"><YesNo value={driver.on_vacation} /></Field>
       </SectionCard>
 
@@ -105,6 +106,7 @@ export default function DriverDetailPage() {
         <Field label="Miles (Empty)">{driver.miles_empty}</Field>
         <Field label="Miles (Full)">{driver.miles_full}</Field>
         <Field label="Percent">{driver.percent ? `${driver.percent}%` : '0%'}</Field>
+        <Field label="Weekly Rate"><Money value={driver.weekly_rate} /></Field>
       </SectionCard>
 
       <SectionCard title="Deductions" icon="bi-dash-circle">
@@ -120,6 +122,8 @@ export default function DriverDetailPage() {
         <Field label="Team Driver">{driver.team_driver ? `Driver #${driver.team_driver}` : null}</Field>
         <Field label="Endorsements">{driver.endorsements || '0'}</Field>
         <Field label="Restrictions">{driver.restrictions || '0'}</Field>
+        <Field label="ELD ID">{driver.eld_id}</Field>
+        <Field label="Factoring Account ID">{driver.factoring_account_id}</Field>
       </SectionCard>
 
       <DriverDocuments driverId={driver.id} documents={driver.documents} onChange={refresh} />

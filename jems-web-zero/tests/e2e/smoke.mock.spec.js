@@ -204,13 +204,18 @@ const DRIVERS = [
     driver_type: 1, driver_type_name: 'Company Driver', status: 1,
     phone: '5551234', email: 'john@example.com',
     license_expiration: '2030-01-01', medical_card_expiration: '2030-01-01',
-    on_vacation: false, carrier: 1, carrier_name: 'Best Wheels Transport LLC',
+    mvr_expiration: '2030-01-01', on_vacation: false, pay_vacation: 0,
+    fuel_card: 1, fuel_card_number: '589355322232420123',
+    carrier: 1, carrier_name: 'Jobee Express LLC',
+    has_license_document: true, photo: null,
   },
 ]
 
 const DRIVER_DETAIL = {
   ...DRIVERS[0], address: '1 Main St', license_state: 9, license_number: 'D123',
-  contract: true, percent: 25, insurance: 50, documents: [], photo: null,
+  contract: 2, contract_display: 'By percent no expenses',
+  pay_vacation_display: 'Yes', percent: 25, insurance: 50, weekly_rate: 0,
+  documents: [], photo: null,
 }
 
 const DRIVER_LAST_VEHICLE = {
@@ -441,7 +446,8 @@ const SYSTEM_CONFIG = {
 }
 
 const DISPLAY_OPTIONS = {
-  id: 1, truck: 'number,VIN', trailer: 'number,year', driver: 'name,phone',
+  id: 1, truck: 'number,VIN', trailer: 'number,year',
+  driver: 'name,lastname,phone,birth,licensenumber,licensestate',
 }
 
 const RTL_DRIVERS = [
@@ -1531,6 +1537,64 @@ test('drivers list renders a driver returned by the API', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'John Doe' })).toBeVisible()
 })
 
+test('drivers report requires selection and opens selected drivers print page', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/drivers')
+  const dialogPromise = page.waitForEvent('dialog')
+  const blockedClick = page.getByRole('button', { name: /Drivers Report/i }).click()
+  const dialog = await dialogPromise
+  expect(dialog.message()).toBe('Please select some drivers to show')
+  await dialog.accept()
+  await blockedClick
+
+  await page.getByLabel('Select John Doe').check()
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: /Drivers Report/i }).click()
+  const popup = await popupPromise
+  await withAuth(popup)
+  await popup.goto('/print/drivers?ids=1')
+  await popup.waitForLoadState('networkidle')
+  await expect(popup.getByRole('heading', { name: 'Driver List Report' })).toBeVisible()
+  await expect(popup.getByText('John Doe')).toBeVisible()
+  await expect(popup.getByText('License number')).toBeVisible()
+  await popup.close()
+})
+
+test('drivers report settings saves selected fields', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/drivers')
+  await page.getByTitle('Setting Fields For Reports').click()
+  await expect(page.getByText('Driver Fields Check For Reports')).toBeVisible()
+  await expect(page.getByLabel('Report field First Name')).toBeChecked()
+  await page.getByLabel('Report field License number').uncheck()
+  await page.getByRole('button', { name: /^Save$/ }).click()
+  await expect(page.getByText('Driver Fields Check For Reports')).toHaveCount(0)
+})
+
+test('drivers export requires selection and opens selected drivers grid', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/drivers')
+  const dialogPromise = page.waitForEvent('dialog')
+  const blockedClick = page.getByTitle('Drivers Export').click()
+  const dialog = await dialogPromise
+  expect(dialog.message()).toBe('Please select some drivers to show')
+  await dialog.accept()
+  await blockedClick
+
+  await page.getByLabel('Select John Doe').check()
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByTitle('Drivers Export').click()
+  const popup = await popupPromise
+  await withAuth(popup)
+  await popup.goto('/print/drivers/export?ids=1')
+  await popup.waitForLoadState('networkidle')
+  await expect(popup.getByRole('heading', { name: 'Driver List Report' })).toBeVisible()
+  await expect(popup.getByText('Showing 1-1 of 1 items.')).toBeVisible()
+  await expect(popup.getByText('John')).toBeVisible()
+  await expect(popup.getByText('License number')).toBeVisible()
+  await popup.close()
+})
+
 test('driver detail renders sections and resolves carrier/state names', async ({ page }) => {
   await withAuth(page)
   await page.goto('/drivers/1')
@@ -1549,14 +1613,15 @@ test('new driver form: First Name label shows required asterisk', async ({ page 
 test('new driver form: driver types render in the type select', async ({ page }) => {
   await withAuth(page)
   await page.goto('/drivers/create')
+  await page.getByRole('button', { name: 'Work contract' }).click()
   await expect(page.locator('option', { hasText: 'Company Driver' })).toHaveCount(1)
   await expect(page.locator('option', { hasText: 'Owner Operator' })).toHaveCount(1)
 })
 
-test('new driver form: submit button reads "Create Driver"', async ({ page }) => {
+test('new driver form: submit button reads "Save"', async ({ page }) => {
   await withAuth(page)
   await page.goto('/drivers/create')
-  await expect(page.getByRole('button', { name: /create driver/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^save$/i })).toBeVisible()
 })
 
 // ── Trucks ──────────────────────────────────────────────────────────────────

@@ -6,11 +6,22 @@ export const DRIVER_STATUS = {
   '-1': { label: 'Terminated', cls: 'danger' },
 };
 
+export const DRIVER_CONTRACT = {
+  0: 'By percent',
+  1: 'By miles',
+  2: 'By percent no expenses',
+};
+
+export const DRIVER_PAY_VACATION = {
+  0: 'Yes',
+  1: 'Not',
+};
+
 export const driversService = {
   list:         (params) => api.get('/drivers/', { params }),
   get:          (id)     => api.get(`/drivers/${id}/`),
   create:       (data)   => api.post('/drivers/', data),
-  update:       (id, data) => api.put(`/drivers/${id}/`, data),
+  update:       (id, data) => api.patch(`/drivers/${id}/`, data),
   destroy:      (id)     => api.delete(`/drivers/${id}/`),
   toggleStatus: (id)     => api.post(`/drivers/${id}/toggle-status/`),
   types:        ()       => api.get('/drivers/types/'),

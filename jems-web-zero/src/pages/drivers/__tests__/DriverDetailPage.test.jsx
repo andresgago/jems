@@ -22,7 +22,9 @@ const driver = {
   id: 7, first_name: 'John', last_name: 'Doe', full_name: 'John Doe',
   driver_type_name: 'Company', status: 1, phone: '555', email: 'j@x.com',
   address: '1 St', carrier: 3, license_state: 9, license_number: 'D123',
-  contract: true, on_vacation: false, insurance: 50, percent: 25,
+  contract: 2, contract_display: 'By percent no expenses',
+  pay_vacation: 0, pay_vacation_display: 'Yes',
+  on_vacation: false, insurance: 50, percent: 25, weekly_rate: 0,
   documents: [],
 }
 
@@ -49,6 +51,7 @@ describe('DriverDetailPage', () => {
     expect(await screen.findByText('John Doe')).toBeInTheDocument()
     expect(screen.getByText('Jobee Express')).toBeInTheDocument()
     expect(screen.getByText('Texas (TX)')).toBeInTheDocument()
+    expect(screen.getByText('By percent no expenses')).toBeInTheDocument()
   })
 
   it('toggles status', async () => {

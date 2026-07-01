@@ -158,6 +158,13 @@ async function apiDelete(page, token, path) {
   expect(res.ok()).toBeTruthy()
 }
 
+async function createFuelCard(page, token) {
+  return apiPost(page, token, '/fleet/cards/', {
+    number: uniqueE2EId('E2E-CARD'),
+    is_active: true,
+  })
+}
+
 function fieldByLabel(page, label, selector = 'input, select, textarea') {
   return page.locator('label').filter({ hasText: label }).locator('xpath=..').locator(selector).first()
 }
@@ -496,11 +503,19 @@ test('can create and delete a driver via API (real)', async ({ page }) => {
   test.setTimeout(60_000)
   await loginAsAdmin(page)
   const token = await getAccessToken(page)
+  const card = await createFuelCard(page, token)
 
   const created = await apiPost(page, token, '/drivers/', {
     first_name: 'E2E',
     last_name: `Driver ${Date.now()}`,
     status: 1,
+    phone: '5550000001',
+    email: `driver-${Date.now()}@example.com`,
+    license_number: 'E2E001',
+    license_expiration: '2030-01-01',
+    fuel_card: card.id,
+    contract: 2,
+    pay_vacation: 1,
   })
 
   expect(created.id).toBeTruthy()
@@ -951,11 +966,17 @@ test('driver last-vehicle returns correct shape with no prior loads (real)', asy
   test.setTimeout(60_000)
   await loginAsAdmin(page)
   const token = await getAccessToken(page)
+  const card = await createFuelCard(page, token)
 
   const created = await apiPost(page, token, '/drivers/', {
     first_name: 'E2E',
     last_name: `LastVehicle ${Date.now()}`,
     status: 1,
+    phone: '5550000002',
+    email: `last-vehicle-${Date.now()}@example.com`,
+    license_number: 'E2E002',
+    license_expiration: '2030-01-01',
+    fuel_card: card.id,
   })
 
   try {
@@ -1607,12 +1628,13 @@ test('drivers bulk-delete terminates listed drivers (real)', async ({ page }) =>
   await loginAsAdmin(page)
   const token = await getAccessToken(page)
   const headers = { Authorization: `Bearer ${token}` }
+  const card = await createFuelCard(page, token)
 
-  // Create a driver to terminate (driver_type is nullable — omit to avoid seeded-ID dependency)
   const created = await apiPost(page, token, '/drivers/', {
     first_name: 'Bulk', last_name: 'TestDriver',
     status: 1, phone: '5550000001', email: 'bulk@test.com',
-    license_number: 'BULK001', factor: 25,
+    license_number: 'BULK001', license_expiration: '2030-01-01',
+    factor: 25, fuel_card: card.id,
   })
   const driverId = created.id
 

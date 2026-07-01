@@ -15,6 +15,8 @@ import HistoryPage from './pages/loads/HistoryPage';
 import DriversPage from './pages/drivers/DriversPage';
 import DriverFormPage from './pages/drivers/DriverFormPage';
 import DriverDetailPage from './pages/drivers/DriverDetailPage';
+import DriverListReportPrintPage from './pages/drivers/DriverListReportPrintPage';
+import DriverExportPrintPage from './pages/drivers/DriverExportPrintPage';
 import TrucksPage from './pages/fleet/TrucksPage';
 import TruckFormPage from './pages/fleet/TruckFormPage';
 import TruckDetailPage from './pages/fleet/TruckDetailPage';
@@ -103,6 +105,8 @@ function AppRoutes() {
       <Route path="/print/broker-summary" element={<ProtectedRoute><BrokerSummaryReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/shipper-receiver" element={<ProtectedRoute><ShipperReceiverReportPrintPage /></ProtectedRoute>} />
       <Route path="/print/fleet/truck-parts" element={<ProtectedRoute><TruckPartsReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/drivers" element={<ProtectedRoute><DriverListReportPrintPage /></ProtectedRoute>} />
+      <Route path="/print/drivers/export" element={<ProtectedRoute><DriverExportPrintPage /></ProtectedRoute>} />
       <Route
         path="/*"
         element={

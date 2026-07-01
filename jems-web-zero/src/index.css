@@ -170,6 +170,25 @@ body {
   text-decoration: none;
 }
 
+.drivers-grid-table {
+  min-width: 1450px;
+}
+
+.drivers-grid-table th,
+.drivers-grid-table td {
+  height: 48px;
+}
+
+.drivers-grid-table .driver-photo-col {
+  width: 54px;
+}
+
+.drivers-grid-table .load-driver-photo {
+  width: 34px;
+  height: 34px;
+  border-radius: 3px;
+}
+
 .legacy-grid-footer {
   display: flex;
   align-items: center;
@@ -990,4 +1009,444 @@ body {
   display: flex;
   align-items: flex-end;
   gap: 1.35rem;
+}
+
+/* ── Drivers legacy form ───────────────────────────────────────────────────── */
+.legacy-driver-form {
+  min-height: calc(100vh - 120px);
+  padding: 0.65rem 0.35rem 0;
+  color: #666;
+  background: #fff;
+}
+
+.legacy-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 0 0.25rem 0.85rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.legacy-form-header h4 {
+  margin: 0;
+  color: #111;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.legacy-form-close {
+  color: #bdbdbd;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.legacy-driver-tabs {
+  margin: 2.1rem 2.2rem 1.15rem;
+  padding-left: 0;
+}
+
+.legacy-driver-tabs .nav-link {
+  height: 40px;
+  padding: 0.62rem 1.18rem;
+  border-radius: 0;
+  color: #2d78bd;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.legacy-driver-tabs .nav-link.active {
+  color: #555;
+  background: #fff;
+  border-color: #ddd #ddd #fff;
+}
+
+.legacy-driver-tab-body {
+  min-height: 300px;
+  padding: 0.15rem 0.3rem 2rem;
+}
+
+.legacy-driver-form .control-label {
+  margin-bottom: 0.35rem;
+  color: #6d6d6d;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.legacy-driver-form .form-control-sm,
+.legacy-driver-form .form-select-sm {
+  min-height: 32px;
+  border-color: #cfcfcf;
+  border-radius: 4px;
+  color: #555;
+  font-size: 0.92rem;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.06);
+}
+
+.legacy-driver-form textarea.form-control-sm {
+  min-height: 58px;
+}
+
+.legacy-field-error {
+  margin-top: 0.35rem;
+  color: #b74442;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.legacy-date-input {
+  display: flex;
+  align-items: stretch;
+}
+
+.legacy-date-input .form-control {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.legacy-date-addon,
+.legacy-date-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  border: 1px solid #59bfae;
+  background: #5cc4b2;
+  color: #fff;
+}
+
+.legacy-date-clear {
+  border-left: 0;
+  font-weight: 800;
+}
+
+.legacy-file-input {
+  max-width: 315px;
+  border-style: dashed;
+  border-color: #7b8ea2 !important;
+  background-color: #fffde3;
+  box-shadow: none !important;
+}
+
+.legacy-photo-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.legacy-photo-actions .btn {
+  min-height: 34px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.legacy-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 72px;
+  margin-top: 1.3rem;
+  padding: 1.35rem 0.25rem 0;
+  border-top: 1px solid #ddd;
+}
+
+.legacy-form-footer .btn {
+  min-width: 68px;
+  min-height: 34px;
+  font-weight: 700;
+}
+
+/* ── Drivers report settings and print ─────────────────────────────────────── */
+.legacy-report-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0.45rem 0.8rem;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.legacy-report-modal {
+  width: min(100%, 1480px);
+  max-height: calc(100vh - 1rem);
+  overflow: hidden;
+  background: #fff;
+  color: #666;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.legacy-report-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.legacy-report-modal-header h5 {
+  margin: 0;
+  color: #111;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.legacy-report-modal-close {
+  color: #c8c8c8;
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.legacy-report-modal-body {
+  max-height: calc(100vh - 100px);
+  overflow: auto;
+  padding: 0.8rem;
+}
+
+.legacy-report-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.8rem;
+  border-top: 1px solid #ddd;
+}
+
+.driver-report-fields-table th,
+.driver-report-fields-table td {
+  height: 29px;
+  border-color: #e4e9ee;
+  font-size: 0.78rem;
+  vertical-align: middle;
+}
+
+.driver-report-fields-table thead th {
+  color: #111;
+  background: #fff;
+  font-weight: 800;
+}
+
+.driver-report-fields-table tbody tr:nth-child(even) td {
+  background: #f1f6fa;
+}
+
+.driver-report-fields-table th:first-child,
+.driver-report-fields-table td:first-child {
+  width: 180px;
+}
+
+.driver-list-report-page {
+  min-height: 100vh;
+  padding: 1.25rem 1.6rem 3rem;
+  background: #fff;
+  color: #333;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.driver-list-report-date {
+  margin-bottom: 1.25rem;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.driver-list-report-page h1 {
+  margin: 0 0 1.8rem;
+  color: #333;
+  text-align: center;
+  font-size: 1.8rem;
+  font-weight: 800;
+}
+
+.driver-report-section {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.driver-report-heading {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: center;
+  min-height: 38px;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid #d9d9d9;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.driver-report-heading strong {
+  text-align: center;
+}
+
+.driver-report-detail-table {
+  width: 100%;
+  margin-top: 1.35rem;
+  border-collapse: collapse;
+}
+
+.driver-report-detail-table th,
+.driver-report-detail-table td {
+  height: 32px;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #d9d9d9;
+  font-size: 0.92rem;
+  vertical-align: middle;
+}
+
+.driver-report-detail-table th {
+  width: 47%;
+  text-align: left;
+  font-weight: 800;
+}
+
+.driver-report-photo {
+  max-width: 280px;
+  max-height: 280px;
+  border: 1px solid #ddd;
+}
+
+.driver-list-report-footer {
+  margin-top: 3.5rem;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.driver-export-report-page {
+  min-height: 100vh;
+  padding: 1.25rem 1rem 3rem;
+  background: #fff;
+  color: #333;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.driver-export-report-page h1 {
+  margin: 0 0 1.2rem;
+  color: #333;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.driver-export-panel {
+  margin-top: 0.8rem;
+  border: 1px solid #d9d9d9;
+  border-radius: 2px;
+  overflow-x: auto;
+}
+
+.driver-export-panel-heading {
+  display: flex;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid #d9d9d9;
+  background: #f7f7f7;
+  font-size: 0.78rem;
+}
+
+.driver-export-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0;
+  min-height: 38px;
+  padding: 0.4rem 0.5rem;
+}
+
+.driver-export-toolbar .btn {
+  border-color: #ccc;
+  border-radius: 2px;
+  color: #333;
+  font-size: 0.75rem;
+}
+
+.driver-export-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.driver-export-table th,
+.driver-export-table td {
+  height: 24px;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid #d9d9d9;
+  text-align: center;
+  font-size: 0.78rem;
+  vertical-align: middle;
+}
+
+.driver-export-table th {
+  color: #2d78bd;
+  font-weight: 800;
+  background: #fff;
+}
+
+.driver-export-filter-row th {
+  background: #fafafa;
+}
+
+.driver-export-filter-row .form-control {
+  height: 24px;
+  min-height: 24px;
+  padding: 0.15rem 0.35rem;
+  border-radius: 2px;
+  font-size: 0.76rem;
+}
+
+.driver-export-number-col {
+  width: 40px;
+}
+
+.driver-export-report-footer {
+  margin-top: 2.2rem;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+@media print {
+  .driver-list-report-page {
+    padding: 0.5rem;
+  }
+
+  .driver-export-toolbar {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .legacy-driver-tabs {
+    margin: 1rem 0 1rem;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .legacy-driver-tabs .nav-link {
+    white-space: nowrap;
+  }
+
+  .legacy-report-modal-backdrop {
+    padding: 0;
+  }
+
+  .legacy-report-modal {
+    min-height: 100vh;
+  }
+
+  .driver-report-fields-table th:first-child,
+  .driver-report-fields-table td:first-child {
+    width: 72px;
+  }
+
+  .driver-report-heading {
+    grid-template-columns: 64px 1fr 24px;
+  }
 }
