@@ -37,6 +37,8 @@ const CRITICAL_ROUTES = [
   { path: '/accounting/categories/create', heading: /new category/i },
   { path: '/brokers', heading: /brokers/i },
   { path: '/brokers/create', heading: /new broker/i },
+  { path: '/brokers/contacts', heading: /brokers contacts/i },
+  { path: '/settings/business', heading: /businesses/i },
   { path: '/settings/cities', heading: /cities/i },
   { path: '/settings/cities/create', heading: /create city/i },
   { path: '/settings/users', heading: /users/i },

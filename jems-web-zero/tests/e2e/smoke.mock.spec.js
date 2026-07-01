@@ -264,9 +264,23 @@ const BROKER_DETAIL = {
   usdot_number: '1234567', safer_operating_status: 'AUTHORIZED',
   created_by: null, updated_by: null, updated_at: '2024-01-01T00:00:00Z',
   contacts: [
-    { id: 1, broker: 1, name: 'John Smith', email: 'john@sunrise.com', phone: '555-0002', team: false, confirmed: true, is_scam: false, details: '', created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' },
+    { id: 1, broker: 1, broker_name: 'Sunrise Freight LLC', name: 'John Smith', email: 'john@sunrise.com', phone: '555-0002', team: false, confirmed: true, is_scam: false, details: '', created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' },
   ],
 }
+
+const BUSINESSES = [
+  {
+    id: 1,
+    name: 'Acme Warehouse',
+    address: '123 Dock St',
+    city: 1,
+    city_display: 'Charlotte, NC',
+    status: 1,
+    rating: 8,
+    can_delete: false,
+    load_count: 1,
+  },
+]
 
 const LOAD_BROKER_CONTACTS = {
   broker: BROKER_DETAIL,
@@ -909,6 +923,18 @@ async function mockApi(page) {
     if (pathname.endsWith('/fleet/trucks/') && method === 'GET') return json(TRUCKS)
     if (/\/fleet\/trucks\/\d+\/$/.test(pathname) && method === 'GET') return json(TRUCK_DETAIL)
     if (pathname.endsWith('/brokers/options/')) return json(BROKERS.map((b) => ({ id: b.id, label: b.name })))
+    if (pathname.endsWith('/brokers/business/search/')) return json([])
+    if (pathname.endsWith('/brokers/business/') && method === 'GET') return json({ count: BUSINESSES.length, results: BUSINESSES, next: null, previous: null })
+    if (pathname.endsWith('/brokers/business/') && method === 'POST') return json({ ...BUSINESSES[0], id: 2, name: 'New Business' }, 201)
+    if (/\/brokers\/business\/\d+\/toggle-status\/$/.test(pathname) && method === 'POST') return json({ ...BUSINESSES[0], status: 0 })
+    if (/\/brokers\/business\/\d+\/$/.test(pathname) && method === 'GET') return json(BUSINESSES[0])
+    if (/\/brokers\/business\/\d+\/$/.test(pathname) && method === 'PATCH') return json(BUSINESSES[0])
+    if (/\/brokers\/business\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
+    if (pathname.endsWith('/brokers/contacts/') && method === 'GET') return json({ count: BROKER_DETAIL.contacts.length, results: BROKER_DETAIL.contacts, next: null, previous: null })
+    if (pathname.endsWith('/brokers/contacts/') && method === 'POST') return json({ ...BROKER_DETAIL.contacts[0], id: 2 }, 201)
+    if (/\/brokers\/contacts\/\d+\/$/.test(pathname) && method === 'GET') return json(BROKER_DETAIL.contacts[0])
+    if (/\/brokers\/contacts\/\d+\/$/.test(pathname) && method === 'PATCH') return json(BROKER_DETAIL.contacts[0])
+    if (/\/brokers\/contacts\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     if (pathname.endsWith('/brokers/status-search/') && method === 'GET') return json(BROKER_STATUS_RESULTS)
     if (pathname.endsWith('/brokers/status-search/create/') && method === 'POST') {
       return json({ ...BROKER_DETAIL, id: 2, mc: 'MC002', name: 'Denied Carrier Inc', dba_name: '', phone: '', status: 0 })
@@ -965,7 +991,6 @@ async function mockApi(page) {
     if (pathname.endsWith('/loads/') && method === 'GET') return json({ results: [], count: 0 })
     if (pathname.endsWith('/loads/cities/search/')) return json([])
     if (pathname.endsWith('/brokers/search/')) return json([])
-    if (pathname.endsWith('/brokers/business/search/')) return json([])
     // Dispatch
     if (pathname.endsWith('/dispatch/dispatchers/')) return json(DISPATCHERS)
     if (pathname.endsWith('/dispatch/work/calendar/')) return json([{
@@ -1629,6 +1654,14 @@ test('broker detail shows Contacts section with contact name', async ({ page }) 
   await expect(page.locator('td > span.badge', { hasText: 'Confirmed' })).toBeVisible()
 })
 
+test('broker contacts grid renders contact rows returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/brokers/contacts')
+  await expect(page.getByText('John Smith')).toBeVisible()
+  await expect(page.getByText('john@sunrise.com')).toBeVisible()
+  await expect(page.getByText('Showing 1-1 of 1 items.')).toBeVisible()
+})
+
 test('new broker form: MC label shows required asterisk', async ({ page }) => {
   await withAuth(page)
   await page.goto('/brokers/create')
@@ -1771,6 +1804,14 @@ test('cities list renders city rows returned by the API', async ({ page }) => {
   await page.goto('/settings/cities')
   await expect(page.getByRole('link', { name: 'Charlotte' })).toBeVisible()
   await expect(page.getByText('28201')).toBeVisible()
+})
+
+test('business grid renders business rows returned by the API', async ({ page }) => {
+  await withAuth(page)
+  await page.goto('/settings/business')
+  await expect(page.getByText('Acme Warehouse')).toBeVisible()
+  await expect(page.getByText('123 Dock St')).toBeVisible()
+  await expect(page.getByText('Showing 1-1 of 1 items.')).toBeVisible()
 })
 
 test('cities list shows Create City button', async ({ page }) => {

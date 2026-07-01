@@ -206,17 +206,31 @@ describe('Navbar — Accounting dropdown role guards', () => {
   });
 });
 
-describe('Navbar — Users link admin guard', () => {
-  it('admin sees Users link in gear dropdown', () => {
+describe('Navbar — gear dropdown legacy parity', () => {
+  it('contains the same gear submenu items as legacy TMS', () => {
     const { container } = renderNavbar('/', ['admin']);
-    const usersLink = Array.from(container.querySelectorAll('.dropdown-item')).find(
-      (el) => el.textContent.trim() === 'Users'
+    const gearToggle = Array.from(
+      container.querySelectorAll('.nav-link.dropdown-toggle')
+    ).find((el) => el.querySelector('.bi-gear'));
+    expect(gearToggle).not.toBeUndefined();
+
+    const gearMenu = gearToggle.closest('.dropdown').querySelector('.dropdown-menu');
+    const items = Array.from(gearMenu.querySelectorAll('.dropdown-item')).map(
+      (el) => el.textContent.trim()
     );
-    expect(usersLink).not.toBeUndefined();
+    expect(items).toEqual([
+      'Drivers',
+      'Trucks',
+      'Trailers',
+      'Brokers',
+      'Broker contacts',
+      'Business',
+      'Cities',
+    ]);
   });
 
-  it('dispatcher does NOT see Users link in gear dropdown', () => {
-    const { container } = renderNavbar('/', ['dispatcher']);
+  it('admin does NOT see Users link in gear dropdown', () => {
+    const { container } = renderNavbar('/', ['admin']);
     const usersLink = Array.from(container.querySelectorAll('.dropdown-item')).find(
       (el) => el.textContent.trim() === 'Users'
     );

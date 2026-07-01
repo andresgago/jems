@@ -143,7 +143,7 @@ export default function Navbar() {
             )}
 
             <li className="nav-item dropdown">
-              <a className={dropdownClass(at('/drivers', '/fleet/trucks', '/fleet/trailers', '/brokers', '/settings/business', '/settings/cities', '/settings/users'))} href="#" data-bs-toggle="dropdown">
+              <a className={dropdownClass(at('/drivers', '/fleet/trucks', '/fleet/trailers', '/brokers', '/settings/business', '/settings/cities'))} href="#" data-bs-toggle="dropdown">
                 <i className="bi bi-gear me-1" />
               </a>
               <ul className="dropdown-menu dropdown-menu-dark">
@@ -154,10 +154,9 @@ export default function Navbar() {
                 <li><hr className="dropdown-divider" /></li>
                 <li><h6 className="dropdown-header">Other Settings</h6></li>
                 <li><Link className="dropdown-item" to="/brokers">Brokers</Link></li>
-                <li><Link className="dropdown-item" to="/brokers/contacts">Brokers Contact</Link></li>
+                <li><Link className="dropdown-item" to="/brokers/contacts">Broker contacts</Link></li>
                 <li><Link className="dropdown-item" to="/settings/business">Business</Link></li>
                 <li><Link className="dropdown-item" to="/settings/cities">Cities</Link></li>
-                {can('admin') && <li><Link className="dropdown-item" to="/settings/users">Users</Link></li>}
               </ul>
             </li>
 

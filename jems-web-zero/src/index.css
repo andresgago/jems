@@ -72,6 +72,134 @@ body {
   opacity: 0.4;
 }
 
+/* ── Legacy-style CRUD grids ── */
+.legacy-grid-page {
+  color: #6b6f75;
+}
+
+.legacy-grid-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 0.65rem 1rem;
+  background: linear-gradient(to bottom, #fff 0%, #f3f3f3 100%);
+  border: 1px solid #e5e5e5;
+  border-bottom: 0;
+}
+
+.legacy-grid-title h5 {
+  margin: 0;
+  color: #3b3f44;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.legacy-grid-title span {
+  color: #666;
+  font-size: 0.78rem;
+}
+
+.legacy-grid-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  background-color: #fff;
+  border: 1px solid #e5e5e5;
+  border-bottom: 0;
+}
+
+.legacy-grid-wrap {
+  overflow-x: auto;
+  background-color: #fff;
+  border: 1px solid #e5e5e5;
+}
+
+.legacy-grid-table {
+  min-width: 980px;
+  color: #6b6f75;
+  table-layout: fixed;
+}
+
+.legacy-grid-table th,
+.legacy-grid-table td {
+  height: 42px;
+  padding: 0.45rem 0.55rem;
+  border-color: #e7edf2;
+  font-size: 0.82rem;
+  vertical-align: middle;
+}
+
+.legacy-grid-table thead th {
+  color: #2f7fbd;
+  background: linear-gradient(to bottom, #fff 0%, #f6f6f6 100%);
+  font-weight: 700;
+  text-align: center;
+}
+
+.legacy-grid-table tbody tr:nth-child(odd) td {
+  background-color: #eef4f9;
+}
+
+.legacy-grid-table tbody tr:nth-child(even) td {
+  background-color: #fff;
+}
+
+.legacy-filter-row th {
+  background: #fafafa !important;
+}
+
+.legacy-filter-row .form-control,
+.legacy-filter-row .form-select {
+  min-height: 28px;
+  font-size: 0.78rem;
+}
+
+.legacy-grid-table .select-col {
+  width: 34px;
+}
+
+.legacy-grid-table .serial-col {
+  width: 42px;
+}
+
+.legacy-grid-table .btn-link {
+  color: #2f7fbd;
+  text-decoration: none;
+}
+
+.legacy-grid-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 34px;
+  padding: 0.35rem 0.65rem;
+  background-color: #fff9df;
+  border: 1px solid #eadfae;
+  border-top: 0;
+  font-size: 0.78rem;
+}
+
+.legacy-grid-footer .btn-xs {
+  --bs-btn-padding-y: 0.1rem;
+  --bs-btn-padding-x: 0.35rem;
+  --bs-btn-font-size: 0.72rem;
+}
+
+.legacy-pagination {
+  display: flex;
+  gap: 0.15rem;
+  padding: 0.65rem 0;
+}
+
+.detail-table th {
+  width: 160px;
+  color: #555;
+  background-color: #f7f7f7;
+}
+
 /* ── Forms (Bootstrap 3 parity) ── */
 .control-label {
   font-weight: 700;

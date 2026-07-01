@@ -24,6 +24,7 @@ import TrailerDetailPage from './pages/fleet/TrailerDetailPage';
 import BrokersPage from './pages/brokers/BrokersPage';
 import BrokerFormPage from './pages/brokers/BrokerFormPage';
 import BrokerDetailPage from './pages/brokers/BrokerDetailPage';
+import BrokerContactsPage from './pages/brokers/BrokerContactsPage';
 import RecordsPage from './pages/accounting/RecordsPage';
 import RecordDetailPage from './pages/accounting/RecordDetailPage';
 import RecordFormPage from './pages/accounting/RecordFormPage';
@@ -40,6 +41,7 @@ import DispatchWorkFormPage from './pages/dispatch/DispatchWorkFormPage';
 import CitiesPage from './pages/settings/CitiesPage';
 import CityDetailPage from './pages/settings/CityDetailPage';
 import CityFormPage from './pages/settings/CityFormPage';
+import BusinessesPage from './pages/settings/BusinessesPage';
 import UsersPage from './pages/settings/UsersPage';
 import UserDetailPage from './pages/settings/UserDetailPage';
 import UserFormPage from './pages/settings/UserFormPage';
@@ -177,6 +179,7 @@ function AppRoutes() {
                 {/* Brokers */}
                 <Route path="brokers" element={<BrokersPage />} />
                 <Route path="brokers/create" element={<BrokerFormPage />} />
+                <Route path="brokers/contacts" element={<BrokerContactsPage />} />
                 <Route path="brokers/:id" element={<BrokerDetailPage />} />
                 <Route path="brokers/:id/edit" element={<BrokerFormPage />} />
                 {/* Dispatch */}
@@ -222,7 +225,7 @@ function AppRoutes() {
                 <Route path="settings/permissions" element={<div><h5>Permission</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/role-assignment" element={<div><h5>Role Assignment</h5><p className="text-muted">Coming soon.</p></div>} />
                 <Route path="settings/rules" element={<div><h5>Rules</h5><p className="text-muted">Coming soon.</p></div>} />
-                <Route path="settings/business" element={<div><h5>Business</h5><p className="text-muted">Coming soon.</p></div>} />
+                <Route path="settings/business" element={<BusinessesPage />} />
                 <Route path="settings/cities" element={<CitiesPage />} />
                 <Route path="settings/cities/create" element={<CityFormPage />} />
                 <Route path="settings/cities/:id" element={<CityDetailPage />} />
