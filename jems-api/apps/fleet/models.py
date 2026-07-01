@@ -402,6 +402,22 @@ class Trailer(models.Model):
         return self.number
 
 
+class TrailerStoredFile(models.Model):
+    trailer = models.ForeignKey(
+        Trailer, on_delete=models.CASCADE, related_name="stored_files"
+    )
+    file = models.FileField(upload_to="trailers/stored/")
+    date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "trailer_stored_files"
+        ordering = ["-date", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.trailer} AI {self.date}"
+
+
 class TrailerMaintenance(models.Model):
     trailer = models.ForeignKey(
         Trailer, on_delete=models.CASCADE, related_name="maintenance_records"

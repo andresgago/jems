@@ -12,6 +12,7 @@ from .models import (
     AccidentPicture,
     Trailer,
     TrailerMaintenance,
+    TrailerStoredFile,
     Truck,
     TruckMaintenance,
     TruckMilesReset,
@@ -225,6 +226,13 @@ def create_trailer(*, created_by: User | None = None, **fields) -> Trailer:
     trailer = Trailer(created_by=created_by, **fields)
     trailer.full_clean()
     trailer.save()
+    add_trailer_maintenance(
+        trailer=trailer,
+        date=datetime.date.today(),
+        miles_alert=1,
+        miles=10000,
+        detail="Automatic Maintenance",
+    )
     return trailer
 
 
@@ -413,6 +421,187 @@ def clear_trailer_file(*, trailer: Trailer, slot: str) -> Trailer:
         setattr(trailer, field, None)
         trailer.save(update_fields=[field, "updated_at"])
     return trailer
+
+
+# Slots that can be archived to TrailerStoredFile (legacy `trailer_file` table).
+# Only annual_inspection is storable — registration/agreement have no
+# expiration and no legacy Store button.
+TRAILER_STORABLE_FILE_SLOTS = {
+    "annual_inspection": ("annual_inspection_file", "annual_inspection_expiration"),
+}
+
+
+def store_trailer_file(*, trailer: Trailer, slot: str) -> TrailerStoredFile:
+    field, date_field = TRAILER_STORABLE_FILE_SLOTS[slot]
+    existing = getattr(trailer, field)
+    expiration = getattr(trailer, date_field)
+    if not existing:
+        from rest_framework.exceptions import ValidationError
+
+        raise ValidationError({"file": "Does not exist"})
+    if expiration is None:
+        from rest_framework.exceptions import ValidationError
+
+        raise ValidationError({"date": "Date cannot be blank."})
+
+    stored = TrailerStoredFile.objects.create(
+        trailer=trailer,
+        file=existing.name,
+        date=expiration,
+    )
+    setattr(trailer, field, None)
+    trailer.save(update_fields=[field, "updated_at"])
+    return stored
+
+
+def delete_trailer_stored_file(*, stored_file: TrailerStoredFile) -> None:
+    file = stored_file.file
+    stored_file.delete()
+    if file:
+        file.delete(save=False)
+
+
+# --- Drop status tracking ---
+# Mirrors legacy Trailer::getWhereIsTrailerToday(): computed live from Load
+# records, no state stored on the trailer itself.
+
+
+def _compute_trailer_drop_status(
+    trailer: Trailer,
+    on_date: datetime.date,
+    current_load,
+    future_load,
+) -> dict:
+    from apps.loads.models import Load  # avoid circular import
+
+    if trailer.status == Trailer.Status.INACTIVE:
+        return {
+            "code": 0,
+            "label": "Inactive",
+            "is_drop": False,
+            "load": None,
+            "drop_detail": "",
+        }
+    if trailer.is_rented:
+        return {
+            "code": 1,
+            "label": "Rented",
+            "is_drop": False,
+            "load": None,
+            "drop_detail": "",
+        }
+
+    def _drop_state(load) -> dict | None:
+        if not load.is_drop:
+            return None
+        if load.drop_place == Load.DropPlace.PICKUP:
+            drop_until = load.pickup_date.date() + datetime.timedelta(
+                days=load.days_in_drop
+            )
+            if on_date <= drop_until:
+                return {
+                    "code": 4,
+                    "label": "Drop in Pick Up",
+                    "is_drop": True,
+                    "load": load,
+                    "drop_detail": f"In pick up until {drop_until:%Y-%m-%d}",
+                }
+        elif load.drop_place == Load.DropPlace.DROPOFF:
+            if on_date == load.dropoff_date.date():
+                return {
+                    "code": 5,
+                    "label": "In Drop Off",
+                    "is_drop": True,
+                    "load": load,
+                    "drop_detail": f"In drop off at {load.dropoff_date:%Y-%m-%d}",
+                }
+        return None
+
+    if current_load is not None:
+        drop_state = _drop_state(current_load)
+        if drop_state:
+            return drop_state
+        return {
+            "code": 3,
+            "label": "Assigned",
+            "is_drop": False,
+            "load": current_load,
+            "drop_detail": "",
+        }
+
+    if future_load is not None:
+        drop_state = _drop_state(future_load)
+        if drop_state:
+            return drop_state
+
+    return {
+        "code": 2,
+        "label": "In Yard",
+        "is_drop": False,
+        "load": None,
+        "drop_detail": "",
+    }
+
+
+def get_trailer_drop_status(
+    trailer: Trailer, on_date: datetime.date | None = None
+) -> dict:
+    from apps.loads.models import Load  # avoid circular import
+
+    on_date = on_date or datetime.date.today()
+    current_load = (
+        Load.objects.filter(
+            trailer=trailer,
+            pickup_date__date__lte=on_date,
+            dropoff_date__date__gte=on_date,
+        )
+        .order_by("-pickup_date")
+        .first()
+    )
+    future_load = None
+    if current_load is None:
+        future_load = (
+            Load.objects.filter(trailer=trailer, pickup_date__date__gte=on_date)
+            .order_by("pickup_date")
+            .first()
+        )
+    return _compute_trailer_drop_status(trailer, on_date, current_load, future_load)
+
+
+def get_trailer_drop_statuses(
+    trailers, on_date: datetime.date | None = None
+) -> dict[int, dict]:
+    from apps.loads.models import Load  # avoid circular import
+
+    on_date = on_date or datetime.date.today()
+    trailers = list(trailers)
+    trailer_ids = [t.pk for t in trailers]
+
+    current_loads: dict[int, object] = {}
+    for load in Load.objects.filter(
+        trailer_id__in=trailer_ids,
+        pickup_date__date__lte=on_date,
+        dropoff_date__date__gte=on_date,
+    ).order_by("trailer_id", "-pickup_date"):
+        if load.trailer_id is not None:
+            current_loads.setdefault(load.trailer_id, load)
+
+    future_loads: dict[int, object] = {}
+    for load in Load.objects.filter(
+        trailer_id__in=trailer_ids, pickup_date__date__gte=on_date
+    ).order_by("trailer_id", "pickup_date"):
+        if load.trailer_id is not None:
+            future_loads.setdefault(load.trailer_id, load)
+
+    return {
+        trailer.pk: _compute_trailer_drop_status(
+            trailer,
+            on_date,
+            current_loads.get(trailer.pk),
+            future_loads.get(trailer.pk),
+        )
+        for trailer in trailers
+    }
 
 
 def create_truck_owner(**fields) -> TruckOwner:

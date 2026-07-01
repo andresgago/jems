@@ -373,9 +373,13 @@ step "Users: display options retrieve and patch"
 resp="$(get "/api/v1/users/settings/display-options/")"
 assert_status "display options retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "display options has truck fields" "$(body "$resp")" "number"
+assert_contains "display options has trailer fields" "$(body "$resp")" '"trailer"'
 resp="$(patch "/api/v1/users/settings/display-options/" '{"driver":"name,phone"}')"
 assert_status "display options patch" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "display options patched" "$(body "$resp")" "name,phone"
+resp="$(patch "/api/v1/users/settings/display-options/" '{"trailer":"number,VIN,year"}')"
+assert_status "display options patch trailer" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "display options trailer patched" "$(body "$resp")" "number,VIN,year"
 
 step "Users: change password"
 resp="$(post "/api/v1/users/${NEW_USER_ID}/change-password/" '{"password":"Tz7@nWq5!kBv","password_confirm":"Tz7@nWq5!kBv"}')"
@@ -822,6 +826,11 @@ step "Fleet: trailer toggle status (deactivate)"
 resp="$(post "/api/v1/fleet/trailers/${TRAILER_ID}/toggle-status/" '{}')"
 assert_status "trailer toggle off" "200" "$(code "$resp")" "$(body "$resp")"
 
+step "Fleet: trailer list includes inactive trailers"
+resp="$(get "/api/v1/fleet/trailers/")"
+assert_status "trailer list after deactivate" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "inactive trailer still listed" "$(body "$resp")" "TRL-001"
+
 step "Fleet: trailer toggle status (reactivate)"
 resp="$(post "/api/v1/fleet/trailers/${TRAILER_ID}/toggle-status/" '{}')"
 assert_status "trailer toggle on" "200" "$(code "$resp")" "$(body "$resp")"
@@ -858,6 +867,32 @@ assert_status "trailer unknown slot" "400" "$(code "$resp")"
 step "Fleet: trailer file clear"
 resp="$(delete "/api/v1/fleet/trailers/${TRAILER_ID}/files/registration/")"
 assert_status "trailer file clear" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Fleet: trailer store annual inspection file"
+resp="$(patch "/api/v1/fleet/trailers/${TRAILER_ID}/" '{"annual_inspection_expiration":"2030-06-01"}')"
+assert_status "trailer set ai expiration" "200" "$(code "$resp")" "$(body "$resp")"
+resp="$(post "/api/v1/fleet/trailers/${TRAILER_ID}/files/annual_inspection/store/" '{}')"
+assert_status "trailer ai store" "201" "$(code "$resp")" "$(body "$resp")"
+TRAILER_STORED_FILE_ID="$(body "$resp" | json_get_num id)"
+resp="$(get "/api/v1/fleet/trailers/${TRAILER_ID}/")"
+assert_status "trailer retrieve after store" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "trailer stored_files non-empty" "$(body "$resp")" '"stored_files":[{'
+
+step "Fleet: trailer delete stored file"
+resp="$(delete "/api/v1/fleet/trailers/${TRAILER_ID}/stored-files/${TRAILER_STORED_FILE_ID}/")"
+assert_status "trailer stored file delete" "204" "$(code "$resp")" "$(body "$resp")"
+resp="$(get "/api/v1/fleet/trailers/${TRAILER_ID}/")"
+assert_contains "trailer stored_files empty after delete" "$(body "$resp")" '"stored_files":[]'
+
+step "Fleet: trailer in-drop report"
+resp="$(get "/api/v1/fleet/trailers/in-drop/")"
+assert_status "trailer in-drop" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Fleet: trailer AVI PDF generation"
+_AVI_STATUS_CT="$(curl -s -o /dev/null -w "%{http_code} %{content_type}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "${API_URL}/api/v1/fleet/trailers/${TRAILER_ID}/avi-pdf/")"
+assert_contains "trailer avi-pdf 200 application/pdf" "${_AVI_STATUS_CT}" "200 application/pdf"
 
 # ── Standalone trailer maintenance endpoint ───────────────────────────────────
 step "Fleet: standalone trailer maintenance create"

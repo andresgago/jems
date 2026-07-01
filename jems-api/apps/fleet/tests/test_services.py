@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 from apps.fleet.models import (
     Trailer,
     TrailerMaintenance,
+    TrailerStoredFile,
     Truck,
     TruckMaintenance,
     TruckOwner,
@@ -20,9 +21,12 @@ from apps.fleet.services import (
     create_trailer,
     create_truck,
     create_truck_owner,
+    delete_trailer_stored_file,
     delete_truck_stored_file,
     delete_trailer_maintenance,
     delete_truck_maintenance,
+    get_trailer_drop_status,
+    get_trailer_drop_statuses,
     get_trailer_miles_since_maintenance,
     get_trailer_miles_alert_message,
     get_trailer_time_alert_date,
@@ -33,6 +37,7 @@ from apps.fleet.services import (
     is_last_truck_maintenance,
     set_trailer_file,
     set_truck_file,
+    store_trailer_file,
     store_truck_file,
     toggle_trailer_status,
     toggle_truck_owner_status,
@@ -46,6 +51,7 @@ from apps.fleet.services import (
 from apps.fleet.tests.factories import (
     TrailerFactory,
     TrailerMaintenanceFactory,
+    TrailerStoredFileFactory,
     TrailerTypeFactory,
     TruckFactory,
     TruckMaintenanceFactory,
@@ -108,6 +114,14 @@ class TestCreateTrailer:
         assert trailer.pk is not None
         assert trailer.status == Trailer.Status.ACTIVE
 
+    def test_creates_automatic_maintenance(self):
+        trailer = create_trailer(number="TRL-AUTO")
+        record = TrailerMaintenance.objects.get(trailer=trailer)
+        assert record.detail == "Automatic Maintenance"
+        assert record.miles_alert == 1
+        assert record.miles == 10000
+        assert record.date == datetime.date.today()
+
     def test_duplicate_number_raises(self):
         TrailerFactory(number="TRL-DUP")
         with pytest.raises(Exception):
@@ -169,6 +183,31 @@ class TestTrailerFileServices:
         trailer = TrailerFactory()
         updated = clear_trailer_file(trailer=trailer, slot="registration")
         assert not updated.registration_file
+
+    def test_store_trailer_file_moves_current_ai_to_history(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        trailer = TrailerFactory(
+            annual_inspection_file=make_pdf_file("ai.pdf"),
+            annual_inspection_expiration=datetime.date(2026, 1, 1),
+        )
+        stored = store_trailer_file(trailer=trailer, slot="annual_inspection")
+        trailer.refresh_from_db()
+        assert not trailer.annual_inspection_file
+        assert stored.file.name.endswith("ai.pdf")
+        assert stored.date == datetime.date(2026, 1, 1)
+
+    def test_store_trailer_file_requires_existing_file(self):
+        trailer = TrailerFactory(annual_inspection_expiration=datetime.date(2026, 1, 1))
+        with pytest.raises(ValidationError):
+            store_trailer_file(trailer=trailer, slot="annual_inspection")
+
+    def test_delete_trailer_stored_file_removes_row(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        stored = TrailerStoredFileFactory()
+        pk = stored.pk
+        delete_trailer_stored_file(stored_file=stored)
+
+        assert not TrailerStoredFile.objects.filter(pk=pk).exists()
 
 
 @pytest.mark.django_db
@@ -699,6 +738,126 @@ class TestIsLastTrailerMaintenance:
         m1 = TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 1, 1))
         TrailerMaintenanceFactory(trailer=trailer, date=datetime.date(2024, 2, 1))
         assert is_last_trailer_maintenance(m1) is False
+
+
+@pytest.mark.django_db
+class TestTrailerDropStatus:
+    def test_inactive_trailer(self):
+        trailer = TrailerFactory(status=Trailer.Status.INACTIVE)
+        result = get_trailer_drop_status(trailer, datetime.date(2024, 6, 1))
+        assert result["code"] == 0
+        assert result["label"] == "Inactive"
+
+    def test_rented_trailer(self):
+        trailer = TrailerFactory(is_rented=True)
+        result = get_trailer_drop_status(trailer, datetime.date(2024, 6, 1))
+        assert result["code"] == 1
+        assert result["label"] == "Rented"
+
+    def test_no_load_is_in_yard(self):
+        trailer = TrailerFactory()
+        result = get_trailer_drop_status(trailer, datetime.date(2024, 6, 1))
+        assert result["code"] == 2
+        assert result["label"] == "In Yard"
+
+    def test_active_load_not_in_drop_is_assigned(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        trailer = TrailerFactory()
+        LoadFactory(
+            trailer=trailer,
+            pickup_date=tz.make_aware(datetime.datetime(2024, 5, 30)),
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 6, 5)),
+            is_drop=False,
+        )
+        result = get_trailer_drop_status(trailer, datetime.date(2024, 6, 1))
+        assert result["code"] == 3
+        assert result["label"] == "Assigned"
+
+    def test_drop_in_pickup_within_window(self):
+        from apps.loads.models import Load
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        trailer = TrailerFactory()
+        LoadFactory(
+            trailer=trailer,
+            pickup_date=tz.make_aware(datetime.datetime(2024, 5, 30)),
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 6, 10)),
+            is_drop=True,
+            drop_place=Load.DropPlace.PICKUP,
+            days_in_drop=5,
+        )
+        result = get_trailer_drop_status(trailer, datetime.date(2024, 6, 1))
+        assert result["code"] == 4
+        assert result["label"] == "Drop in Pick Up"
+
+    def test_drop_in_pickup_expired_is_assigned(self):
+        from apps.loads.models import Load
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        trailer = TrailerFactory()
+        LoadFactory(
+            trailer=trailer,
+            pickup_date=tz.make_aware(datetime.datetime(2024, 5, 20)),
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 6, 10)),
+            is_drop=True,
+            drop_place=Load.DropPlace.PICKUP,
+            days_in_drop=2,
+        )
+        result = get_trailer_drop_status(trailer, datetime.date(2024, 6, 1))
+        assert result["code"] == 3
+        assert result["label"] == "Assigned"
+
+    def test_drop_in_dropoff_on_exact_date(self):
+        from apps.loads.models import Load
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        trailer = TrailerFactory()
+        LoadFactory(
+            trailer=trailer,
+            pickup_date=tz.make_aware(datetime.datetime(2024, 5, 25)),
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 6, 1)),
+            is_drop=True,
+            drop_place=Load.DropPlace.DROPOFF,
+        )
+        result = get_trailer_drop_status(trailer, datetime.date(2024, 6, 1))
+        assert result["code"] == 5
+        assert result["label"] == "In Drop Off"
+
+    def test_past_load_with_lapsed_window_is_in_yard(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        trailer = TrailerFactory()
+        LoadFactory(
+            trailer=trailer,
+            pickup_date=tz.make_aware(datetime.datetime(2024, 5, 1)),
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 5, 10)),
+        )
+        result = get_trailer_drop_status(trailer, datetime.date(2024, 6, 1))
+        assert result["code"] == 2
+        assert result["label"] == "In Yard"
+
+    def test_get_trailer_drop_statuses_batches_multiple_trailers(self):
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        assigned = TrailerFactory()
+        LoadFactory(
+            trailer=assigned,
+            pickup_date=tz.make_aware(datetime.datetime(2024, 5, 30)),
+            dropoff_date=tz.make_aware(datetime.datetime(2024, 6, 5)),
+        )
+        idle = TrailerFactory()
+        statuses = get_trailer_drop_statuses(
+            [assigned, idle], on_date=datetime.date(2024, 6, 1)
+        )
+        assert statuses[assigned.pk]["label"] == "Assigned"
+        assert statuses[idle.pk]["label"] == "In Yard"
 
 
 @pytest.mark.django_db

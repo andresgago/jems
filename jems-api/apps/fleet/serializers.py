@@ -14,6 +14,7 @@ from .models import (
     Make,
     Trailer,
     TrailerMaintenance,
+    TrailerStoredFile,
     TrailerType,
     TireSize,
     TransmissionType,
@@ -450,6 +451,24 @@ class TrailerListSerializer(serializers.ModelSerializer):
     trailer_type_name = serializers.CharField(
         source="trailer_type.name", read_only=True
     )
+    drop_status = serializers.SerializerMethodField()
+    drop_label = serializers.SerializerMethodField()
+
+    def get_drop_status(self, obj: Trailer) -> dict | None:
+        statuses = self.context.get("drop_statuses")
+        if not statuses:
+            return None
+        entry = statuses.get(obj.pk)
+        if entry is None:
+            return None
+        return {"code": entry["code"], "is_drop": entry["is_drop"]}
+
+    def get_drop_label(self, obj: Trailer) -> str | None:
+        statuses = self.context.get("drop_statuses")
+        if not statuses:
+            return None
+        entry = statuses.get(obj.pk)
+        return entry["label"] if entry else None
 
     class Meta:
         model = Trailer
@@ -464,7 +483,16 @@ class TrailerListSerializer(serializers.ModelSerializer):
             "plate_number",
             "annual_inspection_expiration",
             "is_rented",
+            "drop_status",
+            "drop_label",
         ]
+
+
+class TrailerStoredFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TrailerStoredFile
+        fields = ["id", "trailer", "file", "date", "created_at"]
+        read_only_fields = ["id", "trailer", "file", "date", "created_at"]
 
 
 class TrailerSerializer(serializers.ModelSerializer):
@@ -472,9 +500,19 @@ class TrailerSerializer(serializers.ModelSerializer):
         source="trailer_type.name", read_only=True
     )
     plate_state_name = serializers.CharField(source="plate_state.name", read_only=True)
-    owner_name = serializers.CharField(source="owner.name", read_only=True)
+    owner_name = serializers.SerializerMethodField()
     carrier_name = serializers.CharField(source="carrier.name", read_only=True)
+    created_by_name = serializers.SerializerMethodField()
     maintenance_records = TrailerMaintenanceSerializer(many=True, read_only=True)
+    stored_files = TrailerStoredFileSerializer(many=True, read_only=True)
+
+    def get_owner_name(self, obj: Trailer) -> str | None:
+        return obj.owner.full_name if obj.owner_id and obj.owner else None
+
+    def get_created_by_name(self, obj: Trailer) -> str | None:
+        return (
+            obj.created_by.full_name if obj.created_by_id and obj.created_by else None
+        )
 
     class Meta:
         model = Trailer
@@ -506,7 +544,10 @@ class TrailerSerializer(serializers.ModelSerializer):
             "carrier_start_date",
             "carrier_end_date",
             "carrier_end_reason",
+            "created_by",
+            "created_by_name",
             "maintenance_records",
+            "stored_files",
             "created_at",
             "updated_at",
         ]

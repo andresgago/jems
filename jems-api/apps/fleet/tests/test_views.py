@@ -12,6 +12,7 @@ from apps.fleet.models import Trailer, Truck, TruckMaintenance
 from apps.fleet.tests.factories import (
     TrailerFactory,
     TrailerMaintenanceFactory,
+    TrailerStoredFileFactory,
     TrailerTypeFactory,
     TruckFactory,
     TruckMaintenanceFactory,
@@ -257,14 +258,25 @@ class TestTruckFiles:
 
 @pytest.mark.django_db
 class TestTrailerList:
-    def test_lists_active_trailers(self, auth_client):
+    def test_lists_active_and_inactive_trailers_ordered(self, auth_client):
         client, _ = auth_client
-        TrailerFactory.create_batch(2, status=Trailer.Status.ACTIVE)
-        TrailerFactory(status=Trailer.Status.INACTIVE)
+        active = TrailerFactory(status=Trailer.Status.ACTIVE)
+        inactive = TrailerFactory(status=Trailer.Status.INACTIVE)
         response = client.get(reverse("trailer-list"))
         assert response.status_code == status.HTTP_200_OK
-        for trailer in response.data:
-            assert trailer["status"] == Trailer.Status.ACTIVE
+        ids = [trailer["id"] for trailer in response.data]
+        assert active.pk in ids
+        assert inactive.pk in ids
+        assert response.data[0]["status"] == Trailer.Status.ACTIVE
+        assert ids.index(active.pk) < ids.index(inactive.pk)
+
+    def test_includes_drop_label(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        response = client.get(reverse("trailer-list"))
+        assert response.status_code == status.HTTP_200_OK
+        row = next(row for row in response.data if row["id"] == trailer.pk)
+        assert row["drop_label"] == "In Yard"
 
     def test_unauthenticated_blocked(self, api_client):
         response = api_client.get(reverse("trailer-list"))
@@ -304,6 +316,24 @@ class TestTrailerRetrieve:
         assert response.status_code == status.HTTP_200_OK
         for field in ("carrier", "owner", "carrier_start_date", "carrier_end_date"):
             assert field in response.data
+
+    def test_retrieve_includes_stored_files(self, auth_client):
+        client, _ = auth_client
+        stored = TrailerStoredFileFactory()
+        response = client.get(
+            reverse("trailer-detail", kwargs={"pk": stored.trailer.pk})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert "stored_files" in response.data
+        assert len(response.data["stored_files"]) == 1
+
+    def test_retrieve_owner_name_does_not_error(self, auth_client):
+        client, _ = auth_client
+        owner = TruckOwnerFactory(first_name="Express", last_name="Fleet")
+        trailer = TrailerFactory(owner=owner)
+        response = client.get(reverse("trailer-detail", kwargs={"pk": trailer.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["owner_name"] == "Express Fleet"
 
 
 @pytest.mark.django_db
@@ -409,6 +439,119 @@ class TestTrailerFiles:
         client, _ = auth_client
         trailer = TrailerFactory()
         response = client.delete(self._url(trailer, "registration"))
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_store_file_moves_ai_to_history(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        trailer = TrailerFactory(
+            annual_inspection_file=make_pdf_file("ai.pdf"),
+            annual_inspection_expiration=datetime.date(2026, 1, 1),
+        )
+        response = client.post(
+            reverse(
+                "trailer-store-file",
+                kwargs={"pk": trailer.pk, "slot": "annual_inspection"},
+            )
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        trailer.refresh_from_db()
+        assert not trailer.annual_inspection_file
+
+    def test_store_unknown_slot_is_rejected(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory()
+        response = client.post(
+            reverse(
+                "trailer-store-file", kwargs={"pk": trailer.pk, "slot": "registration"}
+            )
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_store_without_existing_file_is_rejected(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory(annual_inspection_expiration=datetime.date(2026, 1, 1))
+        response = client.post(
+            reverse(
+                "trailer-store-file",
+                kwargs={"pk": trailer.pk, "slot": "annual_inspection"},
+            )
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_delete_stored_file(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        stored = TrailerStoredFileFactory()
+        response = client.delete(
+            reverse(
+                "trailer-stored-file",
+                kwargs={"pk": stored.trailer.pk, "file_id": stored.pk},
+            )
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+
+@pytest.mark.django_db
+class TestTrailerInDrop:
+    def test_returns_only_trailers_currently_in_drop(self, auth_client):
+        from apps.loads.models import Load
+        from apps.loads.tests.factories import LoadFactory
+        import django.utils.timezone as tz
+
+        in_drop = TrailerFactory(status=Trailer.Status.ACTIVE, is_rented=False)
+        LoadFactory(
+            trailer=in_drop,
+            pickup_date=tz.make_aware(
+                datetime.datetime.combine(datetime.date.today(), datetime.time.min)
+            ),
+            dropoff_date=tz.make_aware(
+                datetime.datetime.combine(
+                    datetime.date.today() + datetime.timedelta(days=10),
+                    datetime.time.min,
+                )
+            ),
+            is_drop=True,
+            drop_place=Load.DropPlace.PICKUP,
+            days_in_drop=5,
+        )
+        not_in_drop = TrailerFactory(status=Trailer.Status.ACTIVE, is_rented=False)
+        TrailerFactory(status=Trailer.Status.INACTIVE, is_rented=False)
+        TrailerFactory(status=Trailer.Status.ACTIVE, is_rented=True)
+
+        client, _ = auth_client
+        response = client.get(reverse("trailer-in-drop"))
+        assert response.status_code == status.HTTP_200_OK
+        trailer_ids = [row["trailer_id"] for row in response.data]
+        assert in_drop.pk in trailer_ids
+        assert not_in_drop.pk not in trailer_ids
+
+    def test_returns_empty_when_none_in_drop(self, auth_client):
+        TrailerFactory(status=Trailer.Status.ACTIVE, is_rented=False)
+        client, _ = auth_client
+        response = client.get(reverse("trailer-in-drop"))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+
+@pytest.mark.django_db
+class TestTrailerAviPdf:
+    def test_returns_pdf(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory(
+            number="TR-4521",
+            vin="1JJV532D4ML240740",
+            annual_inspection_expiration=datetime.date(2026, 12, 15),
+        )
+        response = client.get(reverse("trailer-avi-pdf", kwargs={"pk": trailer.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
+        assert b"".join(response.streaming_content).startswith(b"%PDF")
+
+    def test_returns_pdf_with_blank_fields(self, auth_client):
+        client, _ = auth_client
+        trailer = TrailerFactory(number="TR-BLANK")
+        response = client.get(reverse("trailer-avi-pdf", kwargs={"pk": trailer.pk}))
         assert response.status_code == status.HTTP_200_OK
 
 

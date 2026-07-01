@@ -9,6 +9,7 @@ from apps.fleet.models import (
     Accident,
     Trailer,
     TrailerMaintenance,
+    TrailerStoredFile,
     TrailerType,
     Truck,
     TruckMaintenance,
@@ -133,6 +134,17 @@ class TruckStoredFileFactory(DjangoModelFactory):
 
     truck = factory.SubFactory(TruckFactory)
     type = TruckStoredFile.Type.AVI
+    file = factory.django.FileField(filename="stored.pdf", data=b"%PDF-1.4 fake")
+    date = factory.Sequence(
+        lambda n: datetime.date(2024, 1, 1) + datetime.timedelta(days=n)
+    )
+
+
+class TrailerStoredFileFactory(DjangoModelFactory):
+    class Meta:
+        model = TrailerStoredFile
+
+    trailer = factory.SubFactory(TrailerFactory)
     file = factory.django.FileField(filename="stored.pdf", data=b"%PDF-1.4 fake")
     date = factory.Sequence(
         lambda n: datetime.date(2024, 1, 1) + datetime.timedelta(days=n)

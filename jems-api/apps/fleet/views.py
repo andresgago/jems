@@ -1,3 +1,4 @@
+import io
 from typing import Any, ClassVar
 
 from django.db.models import Count, Max
@@ -19,6 +20,7 @@ from .models import (
     Make,
     Trailer,
     TrailerMaintenance,
+    TrailerStoredFile,
     TransmissionType,
     Truck,
     TruckMaintenance,
@@ -48,6 +50,7 @@ from .serializers import (
     TrailerMaintenanceCreateUpdateSerializer,
     TrailerMaintenanceSerializer,
     TrailerSerializer,
+    TrailerStoredFileSerializer,
     TrailerTypeSerializer,
     TruckCreateUpdateSerializer,
     TruckFileUploadSerializer,
@@ -289,17 +292,21 @@ class TrailerViewSet(ViewSet):
             Trailer.objects.select_related(
                 "trailer_type", "plate_state", "owner", "carrier"
             )
-            .prefetch_related("maintenance_records")
+            .prefetch_related("maintenance_records", "stored_files")
             .get(pk=pk)
         )
 
     def list(self, request: Request) -> Response:
-        trailers = (
-            Trailer.objects.filter(status=Trailer.Status.ACTIVE)
-            .select_related("trailer_type", "plate_state")
-            .order_by("number")
+        trailers = list(
+            Trailer.objects.select_related("trailer_type", "plate_state").order_by(
+                "-status", "number"
+            )
         )
-        return Response(TrailerListSerializer(trailers, many=True).data)
+        drop_statuses = services.get_trailer_drop_statuses(trailers)
+        serializer = TrailerListSerializer(
+            trailers, many=True, context={"drop_statuses": drop_statuses}
+        )
+        return Response(serializer.data)
 
     def retrieve(self, request: Request, pk: int) -> Response:
         return Response(TrailerSerializer(self._get_trailer_detail(pk)).data)
@@ -344,6 +351,66 @@ class TrailerViewSet(ViewSet):
             for t in trailers
         ]
         return Response(data)
+
+    @action(detail=False, methods=["get"], url_path="in-drop")
+    def in_drop(self, request: Request) -> Response:
+        trailers = list(
+            Trailer.objects.filter(
+                status=Trailer.Status.ACTIVE, is_rented=False
+            ).select_related("trailer_type")
+        )
+        statuses = services.get_trailer_drop_statuses(trailers)
+        data = []
+        for trailer in trailers:
+            entry = statuses.get(trailer.pk)
+            if not entry or not entry["is_drop"]:
+                continue
+            load = entry["load"]
+            data.append(
+                {
+                    "trailer_id": trailer.pk,
+                    "trailer_number": trailer.number,
+                    "trailer_vin": trailer.vin,
+                    "drop_label": entry["label"],
+                    "drop_detail": entry["drop_detail"],
+                    "load_status": load.get_status_display() if load else None,
+                    "load_number": load.number if load else None,
+                    "pickup_date": load.pickup_date if load else None,
+                    "dropoff_date": load.dropoff_date if load else None,
+                    "drop_place": (
+                        load.get_drop_place_display()
+                        if load and load.drop_place is not None
+                        else None
+                    ),
+                    "dispatcher": (
+                        load.dispatcher.full_name
+                        if load and load.dispatcher_id
+                        else None
+                    ),
+                    "driver": (
+                        load.driver.full_name if load and load.driver_id else None
+                    ),
+                    "truck_number": (
+                        load.truck.number if load and load.truck_id else None
+                    ),
+                    "truck_vin": load.truck.vin if load and load.truck_id else None,
+                }
+            )
+        return Response(data)
+
+    @action(detail=True, methods=["get"], url_path="avi-pdf")
+    def avi_pdf(self, request: Request, pk: int) -> Response:
+        from django.http import FileResponse
+
+        from .pdf import generate_trailer_avi_pdf
+
+        trailer = Trailer.objects.get(pk=pk)
+        pdf_bytes = generate_trailer_avi_pdf(trailer)
+        return FileResponse(
+            io.BytesIO(pdf_bytes),
+            content_type="application/pdf",
+            filename=f"Avi_trailer_{trailer.number}.pdf",
+        )
 
     @action(detail=True, methods=["post"], url_path="toggle-status")
     def toggle_status(self, request: Request, pk: int) -> Response:
@@ -403,6 +470,25 @@ class TrailerViewSet(ViewSet):
             )
         services.clear_trailer_file(trailer=trailer, slot=slot)
         return Response(TrailerSerializer(trailer).data)
+
+    @action(detail=True, methods=["post"], url_path=r"files/(?P<slot>[^/.]+)/store")
+    def store_file(self, request: Request, pk: int, slot: str) -> Response:
+        if slot not in services.TRAILER_STORABLE_FILE_SLOTS:
+            return Response(
+                {"detail": f"Unknown slot '{slot}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        trailer = Trailer.objects.get(pk=pk)
+        stored = services.store_trailer_file(trailer=trailer, slot=slot)
+        return Response(
+            TrailerStoredFileSerializer(stored).data, status=status.HTTP_201_CREATED
+        )
+
+    @action(detail=True, methods=["delete"], url_path=r"stored-files/(?P<file_id>\d+)")
+    def delete_stored_file(self, request: Request, pk: int, file_id: int) -> Response:
+        stored_file = TrailerStoredFile.objects.get(pk=file_id, trailer_id=pk)
+        services.delete_trailer_stored_file(stored_file=stored_file)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AccidentViewSet(ViewSet):
