@@ -9,6 +9,7 @@ from .views import (
     InvoiceReportView,
     ShipperReceiverReportView,
     TaxReportView,
+    TruckPartsReportView,
 )
 
 urlpatterns = [
@@ -35,5 +36,10 @@ urlpatterns = [
         "shipper-receiver/",
         ShipperReceiverReportView.as_view(),
         name="report-shipper-receiver",
+    ),
+    path(
+        "truck-parts/",
+        TruckPartsReportView.as_view(),
+        name="report-truck-parts",
     ),
 ]

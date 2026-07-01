@@ -2782,6 +2782,41 @@ step "Driver Invoices Analysis: driver filter accepted"
 resp="$(get "/api/v1/accounting/driver-invoices/analysis/?date_begin=${WEEK_AGO}&date_end=${TODAY}&driver=999999")"
 assert_status "driver-invoices analysis with driver filter" "200" "$(code "$resp")" "$(body "$resp")"
 
+# ── Truck Parts Report ────────────────────────────────────────────────────────
+
+step "Reports: truck-parts summary returns correct structure"
+resp="$(get "/api/v1/reports/truck-parts/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}&date_option=1&report=1")"
+assert_status "truck-parts summary 200" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "truck-parts has sections" "$(body "$resp")" '"sections"'
+assert_contains "truck-parts has grand_total_quantity" "$(body "$resp")" '"grand_total_quantity"'
+assert_contains "truck-parts has grand_total_spent" "$(body "$resp")" '"grand_total_spent"'
+
+step "Reports: truck-parts listing returns correct structure"
+resp="$(get "/api/v1/reports/truck-parts/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}&date_option=1&report=2")"
+assert_status "truck-parts listing 200" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "truck-parts listing has sections" "$(body "$resp")" '"sections"'
+
+step "Reports: truck-parts show-all ignores dates"
+resp="$(get "/api/v1/reports/truck-parts/?date_option=3&report=1")"
+assert_status "truck-parts show-all 200" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "truck-parts show-all has sections" "$(body "$resp")" '"sections"'
+
+step "Reports: truck-parts missing dates with date_option=1 returns 400"
+resp="$(get "/api/v1/reports/truck-parts/?date_option=1")"
+assert_status "truck-parts missing dates 400" "400" "$(code "$resp")" "$(body "$resp")"
+
+step "Reports: truck-parts invalid report type returns 400"
+resp="$(get "/api/v1/reports/truck-parts/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}&report=9")"
+assert_status "truck-parts invalid report 400" "400" "$(code "$resp")" "$(body "$resp")"
+
+step "Reports: truck-parts category_type filter accepted"
+resp="$(get "/api/v1/reports/truck-parts/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}&date_option=1&report=1&category_type=1")"
+assert_status "truck-parts category_type filter 200" "200" "$(code "$resp")" "$(body "$resp")"
+
+step "Reports: truck-parts part_group filter accepted"
+resp="$(get "/api/v1/reports/truck-parts/?date_begin=${REPORT_DATE_BEGIN}&date_end=${REPORT_DATE_END}&date_option=1&report=1&part_group=1&part_group=2")"
+assert_status "truck-parts part_group filter 200" "200" "$(code "$resp")" "$(body "$resp")"
+
 # ── Final summary ─────────────────────────────────────────────────────────────
 # Disable ERR trap — we're done, exit 0 is intentional.
 trap - ERR

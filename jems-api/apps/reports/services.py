@@ -5,10 +5,15 @@ from calendar import monthrange
 import re
 from typing import Any
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import ExtractMonth
 
-from apps.accounting.models import Account, DriverInvoice, Record
+from apps.accounting.models import (
+    Account,
+    Category,
+    DriverInvoice,
+    Record,
+)
 from apps.brokers.models import Broker
 from apps.drivers.models import Driver
 from apps.fleet.models import Card, Trailer, Truck
@@ -1410,3 +1415,241 @@ def get_shipper_receiver_report(year: int, option: int = 0) -> dict[str, Any]:
             "pairs": pairs_monthly,
             "total_deliveries": total_deliveries,
         }
+
+
+# ---------------------------------------------------------------------------
+# Report 8: Truck Parts and Pieces
+# ---------------------------------------------------------------------------
+
+#: Truck part group IDs → which category FK must be non-null
+_PART_GROUP_CONDITIONS: dict[int, Q] = {
+    1: Q(category__engine_type__isnull=False),
+    2: Q(category__cabin_type__isnull=False),
+    3: Q(category__transmission_type__isnull=False),
+}
+
+TRUCK_PART_GROUPS = {
+    1: "Engine Type",
+    2: "Cabin Type",
+    3: "Transmission Type",
+}
+
+
+def _truck_parts_base_qs(
+    date_begin: str,
+    date_end: str,
+    date_option: int,
+    truck_ids: list[int] | None,
+    category_type_ids: list[int] | None,
+    part_group_ids: list[int] | None,
+    category_ids: list[int] | None,
+):
+    """Return a filtered Record queryset for the truck parts report."""
+    qs = Record.objects.select_related(
+        "category",
+        "category__engine_type",
+        "category__cabin_type",
+        "category__transmission_type",
+        "truck",
+    ).filter(truck__isnull=False)
+
+    if date_option != 3:
+        qs = qs.filter(date__range=[date_begin, date_end])
+
+    if truck_ids:
+        qs = qs.filter(truck_id__in=truck_ids)
+
+    if category_ids:
+        qs = qs.filter(category_id__in=category_ids)
+
+    if category_type_ids:
+        qs = qs.filter(category__category_type_id__in=category_type_ids)
+    else:
+        # Mirror legacy: requires category.type > 0
+        qs = qs.filter(category__category_type__isnull=False)
+
+    if part_group_ids:
+        group_q = Q()
+        for gid in part_group_ids:
+            if gid in _PART_GROUP_CONDITIONS:
+                group_q |= _PART_GROUP_CONDITIONS[gid]
+        qs = qs.filter(group_q)
+
+    return qs
+
+
+def _build_details_label(category: Category | None) -> str:
+    if category is None:
+        return ""
+    parts: list[str] = []
+    if category.engine_type_id and category.engine_type:
+        parts.append(f"{category.engine_type.name} [Engine]")
+    if category.cabin_type_id and category.cabin_type:
+        parts.append(f"{category.cabin_type.name} [Cabin]")
+    if category.transmission_type_id and category.transmission_type:
+        parts.append(f"{category.transmission_type.name} [Transmission]")
+    return " | ".join(parts)
+
+
+def _summary_section(
+    qs,
+    truck: Truck | None,
+) -> dict[str, Any]:
+    """Build one summary section (per-truck or all-trucks) for report=1."""
+    # Aggregate quantity and spent per distinct category
+    agg_rows = (
+        qs.values("category_id")
+        .annotate(
+            total_quantity=Sum("quantity"),
+            total_spent=Sum("amount"),
+        )
+        .order_by("category__name")
+    )
+
+    # Load category objects for details
+    cat_ids = [r["category_id"] for r in agg_rows if r["category_id"]]
+    cat_map: dict[int, Category] = {
+        c.pk: c
+        for c in Category.objects.select_related(
+            "engine_type", "cabin_type", "transmission_type"
+        ).filter(pk__in=cat_ids)
+    }
+
+    rows: list[dict] = []
+    section_qty = 0.0
+    section_spent = 0.0
+
+    for no, agg in enumerate(agg_rows, start=1):
+        cat = cat_map.get(agg["category_id"])
+        qty = float(agg["total_quantity"] or 0)
+        spent = -float(agg["total_spent"] or 0)  # amounts are stored as negative
+        avg = spent / qty if qty else 0.0
+        section_qty += qty
+        section_spent += spent
+        rows.append(
+            {
+                "no": no,
+                "category_id": agg["category_id"],
+                "code": cat.code if cat else "",
+                "name": cat.name if cat else "",
+                "quantity": qty,
+                "spent": spent,
+                "average_price": avg,
+                "details": _build_details_label(cat),
+            }
+        )
+
+    return {
+        "truck_id": truck.pk if truck else None,
+        "truck_label": f"{truck.number} - {truck.vin}" if truck else "All",
+        "rows": rows,
+        "total_quantity": section_qty,
+        "total_spent": section_spent,
+        "total_average_price": (section_spent / section_qty) if section_qty else 0.0,
+    }
+
+
+def _listing_section(
+    qs,
+    truck: Truck | None,
+) -> dict[str, Any]:
+    """Build one listing section (per-truck or all-trucks) for report=2."""
+    records = list(qs.order_by("date", "pk"))
+
+    rows: list[dict] = []
+    section_qty = 0.0
+    section_spent = 0.0
+
+    for no, record in enumerate(records, start=1):
+        cat = record.category
+        qty = float(record.quantity)
+        spent = -float(record.amount)  # amounts are stored as negative
+        section_qty += qty
+        section_spent += spent
+        rows.append(
+            {
+                "no": no,
+                "date": str(record.date),
+                "category_id": cat.pk if cat else None,
+                "code": cat.code if cat else "",
+                "name": cat.name if cat else "",
+                "quantity": qty,
+                "amount": spent,
+                "detail": record.detail,
+                "details": _build_details_label(cat),
+            }
+        )
+
+    return {
+        "truck_id": truck.pk if truck else None,
+        "truck_label": f"{truck.number} - {truck.vin}" if truck else "All",
+        "rows": rows,
+        "total_quantity": section_qty,
+        "total_spent": section_spent,
+    }
+
+
+def get_truck_parts_report(
+    date_begin: str,
+    date_end: str,
+    date_option: int = 1,
+    truck_ids: list[int] | None = None,
+    category_type_ids: list[int] | None = None,
+    part_group_ids: list[int] | None = None,
+    category_ids: list[int] | None = None,
+    report: int = 1,
+) -> dict[str, Any]:
+    """
+    Parts and Pieces Used By Trucks report.
+
+    report=1 → Summary (distinct categories, aggregated qty/spent/avg)
+    report=2 → Listing (individual records)
+
+    When truck_ids given → one section per truck.
+    When no truck_ids → one combined section for all trucks.
+    """
+    base_qs = _truck_parts_base_qs(
+        date_begin,
+        date_end,
+        date_option,
+        truck_ids,
+        category_type_ids,
+        part_group_ids,
+        category_ids,
+    )
+
+    sections: list[dict] = []
+    grand_qty = 0.0
+    grand_spent = 0.0
+
+    if truck_ids:
+        trucks = list(Truck.objects.filter(pk__in=truck_ids).order_by("number"))
+        for truck in trucks:
+            truck_qs = base_qs.filter(truck_id=truck.pk)
+            if report == 2:
+                section = _listing_section(truck_qs, truck)
+            else:
+                section = _summary_section(truck_qs, truck)
+            if section["rows"]:
+                sections.append(section)
+                grand_qty += section["total_quantity"]
+                grand_spent += section["total_spent"]
+    else:
+        if report == 2:
+            section = _listing_section(base_qs, None)
+        else:
+            section = _summary_section(base_qs, None)
+        if section["rows"]:
+            sections.append(section)
+            grand_qty = section["total_quantity"]
+            grand_spent = section["total_spent"]
+
+    return {
+        "date_begin": date_begin,
+        "date_end": date_end,
+        "date_option": date_option,
+        "report": report,
+        "sections": sections,
+        "grand_total_quantity": grand_qty,
+        "grand_total_spent": grand_spent,
+    }

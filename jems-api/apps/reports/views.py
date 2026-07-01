@@ -14,6 +14,7 @@ from .services import (
     get_invoice_report,
     get_shipper_receiver_report,
     get_tax_report,
+    get_truck_parts_report,
 )
 
 
@@ -193,4 +194,47 @@ class ShipperReceiverReportView(APIView):
         except ValueError:
             option = 0
         data = get_shipper_receiver_report(year, option=option)
+        return Response(data)
+
+
+class TruckPartsReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        date_begin = request.query_params.get("date_begin", "")
+        date_end = request.query_params.get("date_end", "")
+
+        try:
+            date_option = int(request.query_params.get("date_option", 1))
+        except ValueError:
+            date_option = 1
+
+        # date_option 3 = Show All (ignore dates); otherwise dates are required
+        if date_option != 3 and (not date_begin or not date_end):
+            return Response(
+                {
+                    "detail": "date_begin and date_end are required when date_option is not 3."
+                },
+                status=400,
+            )
+
+        try:
+            report = int(request.query_params.get("report", 1))
+        except ValueError:
+            report = 1
+        if report not in (1, 2):
+            return Response(
+                {"detail": "report must be 1 (Summary) or 2 (Listing)."}, status=400
+            )
+
+        data = get_truck_parts_report(
+            date_begin=date_begin,
+            date_end=date_end,
+            date_option=date_option,
+            truck_ids=_list_param(request, "truck"),
+            category_type_ids=_list_param(request, "category_type"),
+            part_group_ids=_list_param(request, "part_group"),
+            category_ids=_list_param(request, "category"),
+            report=report,
+        )
         return Response(data)

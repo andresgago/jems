@@ -4,8 +4,10 @@ import datetime
 
 import pytest
 
-from apps.accounting.models import Account
+from apps.accounting.models import Account, Category, CategoryType
 from apps.accounting.tests.factories import (
+    CategoryFactory,
+    CategoryTypeFactory,
     DriverInvoiceFactory,
     RecordFactory,
 )
@@ -1654,3 +1656,516 @@ class TestDriverOptions:
         DriverFactory(driver_type=dt, status=Driver.Status.TERMINATED)
         resp = api_client.get(self.url)
         assert resp.json() == []
+
+
+# ---------------------------------------------------------------------------
+# Truck Parts Report
+# ---------------------------------------------------------------------------
+
+
+def _make_truck(number: str = "T001") -> "Truck":
+    from apps.fleet.models import TruckType
+
+    tt, _ = TruckType.objects.get_or_create(name="Flatbed")
+    return Truck.objects.create(number=number, truck_type=tt, status=1)
+
+
+def _make_category_with_type(
+    code: str | None = None,
+    engine_type=None,
+    cabin_type=None,
+    transmission_type=None,
+) -> Category:
+    ct: CategoryType = CategoryTypeFactory()  # type: ignore[assignment]
+    resolved_code = code or f"P{ct.pk:04d}"
+    result: Category = CategoryFactory(  # type: ignore[assignment]
+        code=resolved_code,
+        category_type=ct,
+        engine_type=engine_type,
+        cabin_type=cabin_type,
+        transmission_type=transmission_type,
+    )
+    return result
+
+
+class TestTruckPartsReport:
+    url = "/api/v1/reports/truck-parts/"
+
+    def test_unauthenticated_rejected(self, db, client):
+        resp = client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        assert resp.status_code == 401
+
+    def test_missing_dates_returns_400_when_date_option_is_1(self, api_client):
+        resp = api_client.get(self.url, {"date_option": "1"})
+        assert resp.status_code == 400
+
+    def test_show_all_date_option_does_not_require_dates(self, api_client, db):
+        resp = api_client.get(self.url, {"date_option": "3"})
+        assert resp.status_code == 200
+
+    def test_invalid_report_type_returns_400(self, api_client, db):
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "report": "9"},
+        )
+        assert resp.status_code == 400
+
+    def test_empty_returns_no_sections(self, api_client, db):
+        resp = api_client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["sections"] == []
+        assert data["grand_total_quantity"] == 0.0
+        assert data["grand_total_spent"] == 0.0
+
+    def test_response_has_expected_top_keys(self, api_client, db):
+        resp = api_client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        data = resp.json()
+        for key in (
+            "date_begin",
+            "date_end",
+            "date_option",
+            "report",
+            "sections",
+            "grand_total_quantity",
+            "grand_total_spent",
+        ):
+            assert key in data, f"Missing key: {key}"
+
+    def test_summary_groups_distinct_categories(self, api_client, db):
+        truck = _make_truck("T010")
+        cat = _make_category_with_type("OIL01")
+        # Two records for the same category + truck
+        RecordFactory(
+            truck=truck,
+            category=cat,
+            quantity=2.0,
+            amount=-50.0,
+            date=datetime.date(2024, 3, 1),
+        )
+        RecordFactory(
+            truck=truck,
+            category=cat,
+            quantity=1.0,
+            amount=-25.0,
+            date=datetime.date(2024, 3, 5),
+        )
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "report": "1"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # Combined into one section (all trucks) with one row
+        assert len(data["sections"]) == 1
+        section = data["sections"][0]
+        assert len(section["rows"]) == 1
+        row = section["rows"][0]
+        assert row["quantity"] == pytest.approx(3.0)
+        assert row["spent"] == pytest.approx(75.0)
+        assert row["average_price"] == pytest.approx(25.0)
+
+    def test_listing_shows_individual_records(self, api_client, db):
+        truck = _make_truck("T011")
+        cat = _make_category_with_type("BOLT01")
+        RecordFactory(
+            truck=truck,
+            category=cat,
+            quantity=1.0,
+            amount=-30.0,
+            date=datetime.date(2024, 4, 1),
+            detail="First buy",
+        )
+        RecordFactory(
+            truck=truck,
+            category=cat,
+            quantity=2.0,
+            amount=-60.0,
+            date=datetime.date(2024, 4, 5),
+            detail="Second buy",
+        )
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "report": "2"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["sections"]) == 1
+        rows = data["sections"][0]["rows"]
+        assert len(rows) == 2
+        assert rows[0]["date"] == "2024-04-01"
+        assert rows[0]["detail"] == "First buy"
+        assert rows[1]["date"] == "2024-04-05"
+
+    def test_per_truck_sections_when_truck_filter_given(self, api_client, db):
+        t1 = _make_truck("T020")
+        t2 = _make_truck("T021")
+        cat = _make_category_with_type("FILT01")
+        RecordFactory(
+            truck=t1, category=cat, amount=-10.0, date=datetime.date(2024, 1, 1)
+        )
+        RecordFactory(
+            truck=t2, category=cat, amount=-20.0, date=datetime.date(2024, 1, 2)
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "truck": [t1.pk, t2.pk],
+                "report": "1",
+            },
+        )
+        data = resp.json()
+        assert len(data["sections"]) == 2
+        labels = {s["truck_label"] for s in data["sections"]}
+        assert f"{t1.number} - {t1.vin}" in labels
+
+    def test_truck_filter_excludes_other_trucks(self, api_client, db):
+        t1 = _make_truck("T030")
+        t2 = _make_truck("T031")
+        cat = _make_category_with_type("PIPE01")
+        RecordFactory(
+            truck=t1, category=cat, amount=-15.0, date=datetime.date(2024, 2, 1)
+        )
+        RecordFactory(
+            truck=t2, category=cat, amount=-25.0, date=datetime.date(2024, 2, 2)
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "truck": [t1.pk],
+                "report": "1",
+            },
+        )
+        data = resp.json()
+        assert len(data["sections"]) == 1
+        assert data["sections"][0]["truck_id"] == t1.pk
+
+    def test_date_option_3_ignores_dates(self, api_client, db):
+        truck = _make_truck("T040")
+        cat = _make_category_with_type("WIRE01")
+        # Record outside any normal date range
+        RecordFactory(
+            truck=truck, category=cat, amount=-100.0, date=datetime.date(2020, 1, 1)
+        )
+        resp = api_client.get(self.url, {"date_option": "3"})
+        data = resp.json()
+        assert len(data["sections"]) == 1
+        assert data["sections"][0]["rows"][0]["spent"] == pytest.approx(100.0)
+
+    def test_date_option_1_filters_by_date(self, api_client, db):
+        truck = _make_truck("T041")
+        cat = _make_category_with_type("HOSE01")
+        RecordFactory(
+            truck=truck, category=cat, amount=-50.0, date=datetime.date(2023, 6, 1)
+        )  # outside range
+        RecordFactory(
+            truck=truck, category=cat, amount=-80.0, date=datetime.date(2024, 6, 1)
+        )  # inside range
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "date_option": "1"},
+        )
+        data = resp.json()
+        assert len(data["sections"]) == 1
+        rows = data["sections"][0]["rows"]
+        assert len(rows) == 1
+        assert rows[0]["spent"] == pytest.approx(80.0)
+
+    def test_category_type_filter(self, api_client, db):
+        truck = _make_truck("T050")
+        ct1 = CategoryTypeFactory(name="Parts")
+        ct2 = CategoryTypeFactory(name="Service")
+        cat1 = CategoryFactory(code="P001", category_type=ct1)
+        cat2 = CategoryFactory(code="S001", category_type=ct2)
+        RecordFactory(
+            truck=truck, category=cat1, amount=-10.0, date=datetime.date(2024, 1, 1)
+        )
+        RecordFactory(
+            truck=truck, category=cat2, amount=-20.0, date=datetime.date(2024, 1, 1)
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "category_type": [ct1.pk],
+                "report": "1",
+            },
+        )
+        data = resp.json()
+        rows = data["sections"][0]["rows"]
+        assert len(rows) == 1
+        assert rows[0]["code"] == "P001"
+
+    def test_part_group_filter_engine(self, api_client, db):
+        from apps.fleet.models import EngineType, CabinType
+
+        truck = _make_truck("T060")
+        eng = EngineType.objects.create(name="Detroit")
+        cab = CabinType.objects.create(name="Sleeper")
+        ct = CategoryTypeFactory()
+        cat_engine = CategoryFactory(code="ENG01", category_type=ct, engine_type=eng)
+        cat_cabin = CategoryFactory(code="CAB01", category_type=ct, cabin_type=cab)
+        RecordFactory(
+            truck=truck,
+            category=cat_engine,
+            amount=-10.0,
+            date=datetime.date(2024, 1, 1),
+        )
+        RecordFactory(
+            truck=truck,
+            category=cat_cabin,
+            amount=-20.0,
+            date=datetime.date(2024, 1, 1),
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "part_group": [1],
+                "report": "1",
+            },
+        )
+        data = resp.json()
+        rows = data["sections"][0]["rows"]
+        assert len(rows) == 1
+        assert rows[0]["code"] == "ENG01"
+
+    def test_part_group_filter_multiple_groups_or_condition(self, api_client, db):
+        from apps.fleet.models import EngineType, TransmissionType
+
+        truck = _make_truck("T061")
+        eng = EngineType.objects.create(name="Cummins")
+        trn = TransmissionType.objects.create(name="Eaton")
+        ct = CategoryTypeFactory()
+        cat_eng = CategoryFactory(code="ENG02", category_type=ct, engine_type=eng)
+        cat_trn = CategoryFactory(code="TRN01", category_type=ct, transmission_type=trn)
+        cat_none = CategoryFactory(code="NONE1", category_type=ct)
+        RecordFactory(
+            truck=truck, category=cat_eng, amount=-10.0, date=datetime.date(2024, 1, 1)
+        )
+        RecordFactory(
+            truck=truck, category=cat_trn, amount=-20.0, date=datetime.date(2024, 1, 1)
+        )
+        RecordFactory(
+            truck=truck, category=cat_none, amount=-30.0, date=datetime.date(2024, 1, 1)
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "part_group": [1, 3],
+                "report": "1",
+            },
+        )
+        data = resp.json()
+        rows = data["sections"][0]["rows"]
+        codes = {r["code"] for r in rows}
+        assert "ENG02" in codes
+        assert "TRN01" in codes
+        assert "NONE1" not in codes
+
+    def test_category_filter(self, api_client, db):
+        truck = _make_truck("T070")
+        ct = CategoryTypeFactory()
+        cat1 = CategoryFactory(code="CA001", category_type=ct)
+        cat2 = CategoryFactory(code="CA002", category_type=ct)
+        RecordFactory(
+            truck=truck, category=cat1, amount=-10.0, date=datetime.date(2024, 1, 1)
+        )
+        RecordFactory(
+            truck=truck, category=cat2, amount=-20.0, date=datetime.date(2024, 1, 1)
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "category": [cat1.pk],
+                "report": "1",
+            },
+        )
+        data = resp.json()
+        rows = data["sections"][0]["rows"]
+        assert len(rows) == 1
+        assert rows[0]["code"] == "CA001"
+
+    def test_records_without_truck_excluded(self, api_client, db):
+        ct = CategoryTypeFactory()
+        cat = CategoryFactory(code="NOTK1", category_type=ct)
+        # Record with no truck assigned
+        RecordFactory(
+            truck=None, category=cat, amount=-99.0, date=datetime.date(2024, 1, 1)
+        )
+        resp = api_client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        data = resp.json()
+        assert data["sections"] == []
+
+    def test_records_without_category_type_excluded_by_default(self, api_client, db):
+        truck = _make_truck("T080")
+        # Category with no type (null)
+        cat = Category.objects.create(
+            code="NOTYPE", name="No Type Cat", category_type=None
+        )
+        RecordFactory(
+            truck=truck, category=cat, amount=-50.0, date=datetime.date(2024, 1, 1)
+        )
+        resp = api_client.get(
+            self.url, {"date_begin": "2024-01-01", "date_end": "2024-12-31"}
+        )
+        data = resp.json()
+        assert data["sections"] == []
+
+    def test_summary_spent_is_negated_amount(self, api_client, db):
+        truck = _make_truck("T090")
+        cat = _make_category_with_type("SPEN01")
+        # Amounts are stored negative in the DB (expenses)
+        RecordFactory(
+            truck=truck,
+            category=cat,
+            quantity=1.0,
+            amount=-120.0,
+            date=datetime.date(2024, 1, 1),
+        )
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "report": "1"},
+        )
+        row = resp.json()["sections"][0]["rows"][0]
+        assert row["spent"] == pytest.approx(120.0)
+
+    def test_listing_amount_is_negated(self, api_client, db):
+        truck = _make_truck("T091")
+        cat = _make_category_with_type("SPEN02")
+        RecordFactory(
+            truck=truck,
+            category=cat,
+            quantity=1.0,
+            amount=-75.0,
+            date=datetime.date(2024, 1, 1),
+        )
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "report": "2"},
+        )
+        row = resp.json()["sections"][0]["rows"][0]
+        assert row["amount"] == pytest.approx(75.0)
+
+    def test_details_label_includes_engine_and_transmission(self, api_client, db):
+        from apps.fleet.models import EngineType, TransmissionType
+
+        truck = _make_truck("T100")
+        eng = EngineType.objects.create(name="MAN")
+        trn = TransmissionType.objects.create(name="ZF")
+        ct = CategoryTypeFactory()
+        cat = CategoryFactory(
+            code="DETAIL1", category_type=ct, engine_type=eng, transmission_type=trn
+        )
+        RecordFactory(
+            truck=truck, category=cat, amount=-10.0, date=datetime.date(2024, 1, 1)
+        )
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "report": "1"},
+        )
+        row = resp.json()["sections"][0]["rows"][0]
+        assert "MAN" in row["details"]
+        assert "Engine" in row["details"]
+        assert "ZF" in row["details"]
+        assert "Transmission" in row["details"]
+
+    def test_grand_totals_aggregate_across_sections(self, api_client, db):
+        t1 = _make_truck("T110")
+        t2 = _make_truck("T111")
+        ct = CategoryTypeFactory()
+        cat1 = CategoryFactory(code="GT001", category_type=ct)
+        cat2 = CategoryFactory(code="GT002", category_type=ct)
+        RecordFactory(
+            truck=t1,
+            category=cat1,
+            quantity=2.0,
+            amount=-40.0,
+            date=datetime.date(2024, 1, 1),
+        )
+        RecordFactory(
+            truck=t2,
+            category=cat2,
+            quantity=3.0,
+            amount=-60.0,
+            date=datetime.date(2024, 1, 1),
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "truck": [t1.pk, t2.pk],
+                "report": "1",
+            },
+        )
+        data = resp.json()
+        assert data["grand_total_quantity"] == pytest.approx(5.0)
+        assert data["grand_total_spent"] == pytest.approx(100.0)
+
+    def test_listing_detail_field_included(self, api_client, db):
+        truck = _make_truck("T120")
+        cat = _make_category_with_type("DET01")
+        RecordFactory(
+            truck=truck,
+            category=cat,
+            amount=-10.0,
+            date=datetime.date(2024, 1, 1),
+            detail="Replaced belt",
+        )
+        resp = api_client.get(
+            self.url,
+            {"date_begin": "2024-01-01", "date_end": "2024-12-31", "report": "2"},
+        )
+        row = resp.json()["sections"][0]["rows"][0]
+        assert row["detail"] == "Replaced belt"
+
+    def test_section_totals_per_truck(self, api_client, db):
+        t1 = _make_truck("T130")
+        ct = CategoryTypeFactory()
+        cat = CategoryFactory(code="TOT01", category_type=ct)
+        RecordFactory(
+            truck=t1,
+            category=cat,
+            quantity=4.0,
+            amount=-80.0,
+            date=datetime.date(2024, 1, 1),
+        )
+        RecordFactory(
+            truck=t1,
+            category=cat,
+            quantity=2.0,
+            amount=-40.0,
+            date=datetime.date(2024, 1, 2),
+        )
+        resp = api_client.get(
+            self.url,
+            {
+                "date_begin": "2024-01-01",
+                "date_end": "2024-12-31",
+                "truck": [t1.pk],
+                "report": "1",
+            },
+        )
+        section = resp.json()["sections"][0]
+        assert section["total_quantity"] == pytest.approx(6.0)
+        assert section["total_spent"] == pytest.approx(120.0)
+        assert section["total_average_price"] == pytest.approx(20.0)
