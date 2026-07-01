@@ -1880,11 +1880,106 @@ test('can create, update, and delete an accident via API (real)', async ({ page 
   })
   expect(created.id).toBeTruthy()
   expect(created.tow_aways).toBe(true)
+  // detail response includes resolved name fields
+  expect('driver_name' in created).toBe(true)
+  expect('truck_number' in created).toBe(true)
 
   const updated = await apiPatch(page, token, `/fleet/accidents/${created.id}/`, { address: 'Updated Address' })
   expect(updated.address).toBe('Updated Address')
 
   await apiDelete(page, token, `/fleet/accidents/${created.id}/`)
+})
+
+test('accident list response includes driver_name and picture_count fields (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const accident = await apiPost(page, token, '/fleet/accidents/', {
+    date: '2024-06-01T12:00:00Z',
+    crash_number: `E2E-LIST-${Date.now()}`,
+    address: 'Test address', truck: null, trailer: null, driver: null,
+    tow_aways: false, death_count: 0, fatal_injuries: 0,
+  })
+
+  const listRes = await page.request.get(`${API_BASE}/fleet/accidents/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(listRes.ok()).toBeTruthy()
+  const list = await listRes.json()
+  const row = list.find((a) => a.id === accident.id)
+  expect(row).toBeTruthy()
+  expect('picture_count' in row).toBe(true)
+  expect('driver_name' in row).toBe(true)
+  expect('truck_number' in row).toBe(true)
+
+  await apiDelete(page, token, `/fleet/accidents/${accident.id}/`)
+})
+
+test('accident list date range filter returns only matching records (real)', async ({ page }) => {
+  test.setTimeout(30_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const accident2020 = await apiPost(page, token, '/fleet/accidents/', {
+    date: '2020-01-15T12:00:00Z',
+    crash_number: `E2E-2020-${Date.now()}`,
+    address: 'Test', truck: null, trailer: null, driver: null,
+    tow_aways: false, death_count: 0, fatal_injuries: 0,
+  })
+  const accident2023 = await apiPost(page, token, '/fleet/accidents/', {
+    date: '2023-06-01T12:00:00Z',
+    crash_number: `E2E-2023-${Date.now()}`,
+    address: 'Test', truck: null, trailer: null, driver: null,
+    tow_aways: false, death_count: 0, fatal_injuries: 0,
+  })
+
+  const filteredRes = await page.request.get(
+    `${API_BASE}/fleet/accidents/?date_type=1&date_from=2023-01-01&date_to=2023-12-31`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  expect(filteredRes.ok()).toBeTruthy()
+  const filtered = await filteredRes.json()
+  const ids = filtered.map((a) => a.id)
+  expect(ids).toContain(accident2023.id)
+  expect(ids).not.toContain(accident2020.id)
+
+  await apiDelete(page, token, `/fleet/accidents/${accident2020.id}/`)
+  await apiDelete(page, token, `/fleet/accidents/${accident2023.id}/`)
+})
+
+test('can upload and clear accident document files via API (real)', async ({ page }) => {
+  test.setTimeout(60_000)
+  await loginAsAdmin(page)
+  const token = await getAccessToken(page)
+
+  const accident = await apiPost(page, token, '/fleet/accidents/', {
+    date: '2024-07-01T10:00:00Z',
+    crash_number: `E2E-FILES-${Date.now()}`,
+    address: 'Test', truck: null, trailer: null, driver: null,
+    tow_aways: false, death_count: 0, fatal_injuries: 0,
+  })
+
+  const pdfBuffer = Buffer.from('%PDF-1.4 test', 'utf-8')
+
+  for (const slot of ['police_report', 'post_accident']) {
+    const uploadRes = await page.request.post(
+      `${API_BASE}/fleet/accidents/${accident.id}/files/${slot}/`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        multipart: { file: { name: `${slot}.pdf`, mimeType: 'application/pdf', buffer: pdfBuffer } },
+      }
+    )
+    expect(uploadRes.ok()).toBeTruthy()
+
+    const clearRes = await page.request.delete(
+      `${API_BASE}/fleet/accidents/${accident.id}/files/${slot}/`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    expect(clearRes.status()).toBe(204)
+  }
+
+  await apiDelete(page, token, `/fleet/accidents/${accident.id}/`)
 })
 
 test('can upload and delete an accident picture via API (real)', async ({ page }) => {

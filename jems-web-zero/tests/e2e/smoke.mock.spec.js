@@ -803,8 +803,16 @@ const MILES_RESETS = [
 const ACCIDENTS = [
   {
     id: 1, date: '2024-05-10T14:30:00Z', crash_number: 'CR-001',
-    address: 'I-95 Mile 42', truck: 1, trailer: null, driver: null,
-    tow_aways: true, death_count: 0, fatal_injuries: 0, pictures: [],
+    address: 'I-95 Mile 42',
+    truck: 1, truck_number: '4279',
+    trailer: 2, trailer_number: 'TR-100',
+    driver: 3, driver_name: 'Manuel Reyes',
+    city: 10, city_name: 'Charlotte (NC)',
+    state: 5, state_name: 'North Carolina',
+    tow_aways: true, death_count: 0, fatal_injuries: 0,
+    picture_count: 3,
+    police_report_file: null, post_accident_file: null,
+    pictures: [],
   },
 ]
 
@@ -1026,10 +1034,13 @@ async function mockApi(page) {
     if (/\/fleet\/miles-resets\/\d+\/$/.test(pathname) && method === 'PATCH') return json(MILES_RESETS[0])
     if (/\/fleet\/miles-resets\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     // Accidents
+    if (pathname.endsWith('/fleet/accidents/bulk-delete/') && method === 'POST') return route.fulfill({ status: 204 })
     if (pathname.endsWith('/fleet/accidents/') && method === 'GET') return json(ACCIDENTS)
     if (pathname.endsWith('/fleet/accidents/') && method === 'POST') return json(ACCIDENT_DETAIL)
     if (/\/fleet\/accidents\/\d+\/pictures\/$/.test(pathname) && method === 'POST') return json({ id: 99, file: '/media/acc/new.jpg', description: '' })
     if (/\/fleet\/accidents\/\d+\/pictures\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
+    if (/\/fleet\/accidents\/\d+\/files\/[^/]+\/$/.test(pathname) && method === 'POST') return json(ACCIDENT_DETAIL)
+    if (/\/fleet\/accidents\/\d+\/files\/[^/]+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
     if (/\/fleet\/accidents\/\d+\/$/.test(pathname) && method === 'GET') return json(ACCIDENT_DETAIL)
     if (/\/fleet\/accidents\/\d+\/$/.test(pathname) && method === 'PATCH') return json(ACCIDENT_DETAIL)
     if (/\/fleet\/accidents\/\d+\/$/.test(pathname) && method === 'DELETE') return route.fulfill({ status: 204 })
@@ -3245,23 +3256,49 @@ test('Trucks Miles Reset page: opens create form from toolbar', async ({ page })
 
 // ── Accidents ─────────────────────────────────────────────────────────────────
 
-test('Accidents list: renders a row', async ({ page }) => {
+test('Accidents list: renders a row with crash number', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/accidents')
   await expect(page.getByText('CR-001')).toBeVisible()
-  await expect(page.getByText('I-95 Mile 42')).toBeVisible()
 })
 
-test('Accidents list: shows tow-away Yes badge', async ({ page }) => {
+test('Accidents list: shows driver name column', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/accidents')
-  await expect(page.getByText('Yes')).toBeVisible()
+  await expect(page.getByText('Manuel Reyes')).toBeVisible()
+})
+
+test('Accidents list: shows truck number column', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents')
+  await expect(page.getByText('4279')).toBeVisible()
+})
+
+test('Accidents list: shows city column', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents')
+  await expect(page.getByText('Charlotte (NC)')).toBeVisible()
+})
+
+test('Accidents list: shows picture count badge', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents')
+  // The picture count badge renders as a link with the exact count number
+  await expect(page.getByRole('link', { name: /^3$/ })).toBeVisible()
 })
 
 test('Accidents list: shows New Accident link', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/accidents')
   await expect(page.getByRole('link', { name: /New Accident/i })).toBeVisible()
+})
+
+test('Accidents list: shows date range picker and Search button', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents')
+  await expect(page.getByText('Filter by date type search')).toBeVisible()
+  await expect(page.getByRole('combobox').filter({ hasText: /Show all/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Search/i })).toBeVisible()
 })
 
 test('Accident create form: has Create Accident heading', async ({ page }) => {
@@ -3271,6 +3308,19 @@ test('Accident create form: has Create Accident heading', async ({ page }) => {
   await expect(page.getByText('Accident Info')).toBeVisible()
 })
 
+test('Accident create form: shows State select', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents/create')
+  await expect(page.getByText('State', { exact: true })).toBeVisible()
+})
+
+test('Accident create form: shows legacy document file fields', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents/create')
+  await expect(page.getByText('Police Report')).toBeVisible()
+  await expect(page.getByText('Post Accident')).toBeVisible()
+})
+
 test('Accident detail: shows Accident heading and crash number', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/accidents/1')
@@ -3278,11 +3328,28 @@ test('Accident detail: shows Accident heading and crash number', async ({ page }
   await expect(page.getByText('CR-001')).toBeVisible()
 })
 
+test('Accident detail: shows resolved driver name', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents/1')
+  await expect(page.getByText('Manuel Reyes')).toBeVisible()
+})
+
+test('Accident detail: shows city name', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents/1')
+  await expect(page.getByText('Charlotte (NC)')).toBeVisible()
+})
+
+test('Accident detail: shows Documents section with Police Report', async ({ page }) => {
+  await withAdminAuth(page)
+  await page.goto('/fleet/accidents/1')
+  await expect(page.getByText('Police Report')).toBeVisible()
+  await expect(page.getByText('Post Accident')).toBeVisible()
+})
+
 test('Accident detail: shows Pictures section', async ({ page }) => {
   await withAdminAuth(page)
   await page.goto('/fleet/accidents/1')
-  // "Pictures" matches the card header and also "No pictures uploaded." (case-insensitive);
-  // use exact match on the card header span
   await expect(page.locator('.card-header .fw-semibold', { hasText: 'Pictures' })).toBeVisible()
   await expect(page.getByText('No pictures uploaded.')).toBeVisible()
 })

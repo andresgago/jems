@@ -4,9 +4,14 @@ import { accidentsService } from '../../services/accidents';
 import { trucksService } from '../../services/trucks';
 import { trailersService } from '../../services/trailers';
 import { driversService } from '../../services/drivers';
+import { citiesService } from '../../services/cities';
 
 const FK_FIELDS = ['truck', 'trailer', 'driver', 'city', 'state'];
 const INT_FIELDS = ['death_count', 'fatal_injuries'];
+const FILE_LABELS = {
+  police_report: 'Police Report',
+  post_accident: 'Post Accident',
+};
 
 function buildPayload(form) {
   const out = { ...form };
@@ -22,6 +27,8 @@ const EMPTY = {
   truck: '',
   trailer: '',
   driver: '',
+  city: '',
+  state: '',
   address: '',
   crash_number: '',
   tow_aways: false,
@@ -38,15 +45,31 @@ export default function AccidentFormPage() {
   const [trucks, setTrucks] = useState([]);
   const [trailers, setTrailers] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [states, setStates] = useState([]);
+  const [cities, setCities] = useState([]);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
   const [loadingRecord, setLoadingRecord] = useState(isEdit);
+  const [existingFiles, setExistingFiles] = useState({
+    police_report: null,
+    post_accident: null,
+  });
+  const [files, setFiles] = useState({
+    police_report: null,
+    post_accident: null,
+  });
 
   useEffect(() => {
     trucksService.list().then((r) => setTrucks(r.data)).catch(() => {});
     trailersService.list().then((r) => setTrailers(r.data)).catch(() => {});
     driversService.list().then((r) => setDrivers(r.data)).catch(() => {});
+    citiesService.states().then((r) => setStates(r.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!form.state) { setCities([]); return; }
+    citiesService.list({ state: form.state }).then((r) => setCities(r.data)).catch(() => {});
+  }, [form.state]);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -57,11 +80,17 @@ export default function AccidentFormPage() {
         truck: d.truck ?? '',
         trailer: d.trailer ?? '',
         driver: d.driver ?? '',
+        city: d.city ?? '',
+        state: d.state ?? '',
         address: d.address ?? '',
         crash_number: d.crash_number ?? '',
         tow_aways: Boolean(d.tow_aways),
         death_count: d.death_count ?? 0,
         fatal_injuries: d.fatal_injuries ?? 0,
+      });
+      setExistingFiles({
+        police_report: d.police_report_file ?? null,
+        post_accident: d.post_accident_file ?? null,
       });
       setLoadingRecord(false);
     }).catch(() => setLoadingRecord(false));
@@ -69,7 +98,11 @@ export default function AccidentFormPage() {
 
   const set = (field) => (e) => {
     const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    setForm((prev) => ({ ...prev, [field]: val }));
+    setForm((prev) => {
+      const next = { ...prev, [field]: val };
+      if (field === 'state') next.city = '';
+      return next;
+    });
     setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
@@ -79,13 +112,18 @@ export default function AccidentFormPage() {
     setSaving(true);
     setErrors({});
     try {
+      let accidentId = id;
       if (isEdit) {
         await accidentsService.update(id, payload);
-        navigate(`/fleet/accidents/${id}`);
       } else {
         const res = await accidentsService.create(payload);
-        navigate(`/fleet/accidents/${res.data.id}`);
+        accidentId = res.data.id;
       }
+      const uploads = Object.entries(files)
+        .filter(([, file]) => file)
+        .map(([slot, file]) => accidentsService.uploadFile(accidentId, slot, file));
+      if (uploads.length) await Promise.all(uploads);
+      navigate(`/fleet/accidents/${accidentId}`);
     } catch (err) {
       const data = err?.response?.data;
       if (data && typeof data === 'object') setErrors(data);
@@ -118,7 +156,19 @@ export default function AccidentFormPage() {
           <div className="card-header py-2 bg-light fw-semibold">Accident Info</div>
           <div className="card-body">
             <div className="row g-3">
-              <div className="col-md-4">
+              <div className="col-md-6">
+                <label className="form-label">FMCSA Crash Report Number</label>
+                <input
+                  type="text"
+                  className={`form-control${errors.crash_number ? ' is-invalid' : ''}`}
+                  value={form.crash_number}
+                  onChange={set('crash_number')}
+                  placeholder="Report number…"
+                />
+                {errors.crash_number && <div className="invalid-feedback">{errors.crash_number}</div>}
+              </div>
+
+              <div className="col-md-6">
                 <label className="form-label">Date &amp; Time <span className="text-danger">*</span></label>
                 <input
                   type="datetime-local"
@@ -130,26 +180,11 @@ export default function AccidentFormPage() {
               </div>
 
               <div className="col-md-4">
-                <label className="form-label">Crash Number</label>
-                <input
-                  type="text"
-                  className={`form-control${errors.crash_number ? ' is-invalid' : ''}`}
-                  value={form.crash_number}
-                  onChange={set('crash_number')}
-                  placeholder="FMCSA report number…"
-                />
-                {errors.crash_number && <div className="invalid-feedback">{errors.crash_number}</div>}
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label">Address</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={form.address}
-                  onChange={set('address')}
-                  placeholder="Highway / mile marker…"
-                />
+                <label className="form-label">Driver</label>
+                <select className={`form-select${errors.driver ? ' is-invalid' : ''}`} value={form.driver} onChange={set('driver')}>
+                  <option value="">Select driver…</option>
+                  {drivers.map((d) => <option key={d.id} value={d.id}>{d.first_name} {d.last_name}</option>)}
+                </select>
               </div>
 
               <div className="col-md-4">
@@ -168,13 +203,63 @@ export default function AccidentFormPage() {
                 </select>
               </div>
 
+              <div className="col-12">
+                <label className="form-label">Address</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={form.address}
+                  onChange={set('address')}
+                  placeholder="Highway / mile marker…"
+                />
+              </div>
+
               <div className="col-md-4">
-                <label className="form-label">Driver</label>
-                <select className="form-select" value={form.driver} onChange={set('driver')}>
-                  <option value="">Select driver…</option>
-                  {drivers.map((d) => <option key={d.id} value={d.id}>{d.first_name} {d.last_name}</option>)}
+                <label className="form-label">State</label>
+                <select className="form-select" value={form.state} onChange={set('state')}>
+                  <option value="">Select state…</option>
+                  {states.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.abbreviation})</option>)}
                 </select>
               </div>
+
+              <div className="col-md-8">
+                <label className="form-label">City</label>
+                <select className="form-select" value={form.city} onChange={set('city')} disabled={!form.state}>
+                  <option value="">Select city…</option>
+                  {cities.map((c) => <option key={c.id} value={c.id}>{c.name} {c.zip ? `(${c.zip})` : ''}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card mb-3">
+          <div className="card-header py-2 bg-light fw-semibold">Documents</div>
+          <div className="card-body">
+            <div className="row g-3">
+              {Object.entries(FILE_LABELS).map(([slot, label]) => (
+                <div className="col-md-6" key={slot}>
+                  <label className="form-label">{label}</label>
+                  {existingFiles[slot] && (
+                    <div className="small text-success mb-1">
+                      <i className="bi bi-file-earmark-check me-1" />
+                      Current file uploaded
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    className="form-control"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      setFiles((prev) => ({ ...prev, [slot]: file }));
+                    }}
+                    aria-label={label}
+                  />
+                  {files[slot] && (
+                    <div className="small text-muted mt-1">{files[slot].name}</div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -183,21 +268,19 @@ export default function AccidentFormPage() {
           <div className="card-header py-2 bg-light fw-semibold">FMCSA Reportable Info</div>
           <div className="card-body">
             <div className="row g-3">
-              <div className="col-md-3">
-                <div className="form-check mt-2">
-                  <label className="form-check-label">
-                    <input
-                      type="checkbox"
-                      className="form-check-input"
-                      checked={Boolean(form.tow_aways)}
-                      onChange={set('tow_aways')}
-                    />
-                    {' '}Tow-aways involved
-                  </label>
-                </div>
+              <div className="col-md-4">
+                <label className="form-label">Tow Aways</label>
+                <select
+                  className="form-select"
+                  value={form.tow_aways ? '1' : '0'}
+                  onChange={(e) => setForm((prev) => ({ ...prev, tow_aways: e.target.value === '1' }))}
+                >
+                  <option value="1">Yes</option>
+                  <option value="0">No</option>
+                </select>
               </div>
-              <div className="col-md-3">
-                <label className="form-label">Deaths</label>
+              <div className="col-md-4">
+                <label className="form-label">Death Number</label>
                 <input
                   type="number"
                   className="form-control"
@@ -206,7 +289,7 @@ export default function AccidentFormPage() {
                   min={0}
                 />
               </div>
-              <div className="col-md-3">
+              <div className="col-md-4">
                 <label className="form-label">Fatal Injuries</label>
                 <input
                   type="number"

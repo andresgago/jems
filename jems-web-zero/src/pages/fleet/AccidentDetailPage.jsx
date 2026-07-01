@@ -1,8 +1,105 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SectionCard, Field, YesNo } from '../../components/DetailSection';
-import { accidentsService } from '../../services/accidents';
+import { accidentsService, ACCIDENT_FILE_SLOTS } from '../../services/accidents';
 import { useAccident } from '../../hooks/useAccident';
+import { mediaUrl } from '../../utils/media';
+
+const FILE_LABELS = {
+  police_report: 'Police Report',
+  post_accident: 'Post Accident',
+};
+
+const FILE_FIELDS = {
+  police_report: 'police_report_file',
+  post_accident: 'post_accident_file',
+};
+
+function AccidentFiles({ accident, onRefresh }) {
+  const [uploading, setUploading] = useState({});
+  const refs = useRef({});
+
+  const handleUpload = async (slot, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading((prev) => ({ ...prev, [slot]: true }));
+    try {
+      await accidentsService.uploadFile(accident.id, slot, file);
+      onRefresh();
+    } finally {
+      setUploading((prev) => ({ ...prev, [slot]: false }));
+      if (refs.current[slot]) refs.current[slot].value = '';
+    }
+  };
+
+  const handleClear = async (slot) => {
+    if (!window.confirm(`Remove ${FILE_LABELS[slot]}?`)) return;
+    await accidentsService.clearFile(accident.id, slot);
+    onRefresh();
+  };
+
+  return (
+    <div className="card mb-3">
+      <div className="card-header py-2 bg-light">
+        <span className="fw-semibold"><i className="bi bi-file-earmark-text me-2" />Documents</span>
+      </div>
+      <div className="card-body p-0">
+        <table className="table table-sm mb-0">
+          <thead className="table-light">
+            <tr>
+              <th>Document</th>
+              <th>File</th>
+              <th className="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ACCIDENT_FILE_SLOTS.map((slot) => {
+              const url = mediaUrl(accident[FILE_FIELDS[slot]]);
+              return (
+                <tr key={slot}>
+                  <td className="align-middle fw-semibold">{FILE_LABELS[slot]}</td>
+                  <td className="align-middle">
+                    {url
+                      ? (
+                        <a href={url} target="_blank" rel="noreferrer" className="text-decoration-none small">
+                          <i className="bi bi-file-earmark-arrow-down me-1" />Download
+                        </a>
+                      )
+                      : <span className="text-muted small">Not uploaded</span>}
+                  </td>
+                  <td className="text-center align-middle">
+                    <div className="d-flex gap-1 justify-content-center">
+                      <label className="btn btn-sm btn-outline-secondary py-0" title={url ? 'Replace' : 'Upload'}>
+                        <i className={`bi ${url ? 'bi-arrow-repeat' : 'bi-upload'}`} />
+                        <input
+                          ref={(el) => { refs.current[slot] = el; }}
+                          type="file"
+                          className="d-none"
+                          onChange={(e) => handleUpload(slot, e)}
+                          disabled={uploading[slot]}
+                        />
+                      </label>
+                      {url && (
+                        <button
+                          className="btn btn-sm btn-outline-danger py-0"
+                          title="Remove"
+                          onClick={() => handleClear(slot)}
+                        >
+                          <i className="bi bi-x-lg" />
+                        </button>
+                      )}
+                    </div>
+                    {uploading[slot] && <small className="text-muted d-block mt-1">Uploading…</small>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function PictureGallery({ accident, onRefresh }) {
   const [uploading, setUploading] = useState(false);
@@ -39,7 +136,11 @@ function PictureGallery({ accident, onRefresh }) {
           {pictures.map((p) => (
             <div key={p.id} className="col-6 col-md-3">
               <div className="position-relative">
-                <img src={p.file} alt={p.description || 'Accident picture'} className="img-fluid rounded" />
+                <img
+                  src={mediaUrl(p.file) || p.file}
+                  alt={p.description || 'Accident picture'}
+                  className="img-fluid rounded"
+                />
                 <button
                   className="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 py-0"
                   onClick={() => handleDelete(p.id)}
@@ -101,20 +202,24 @@ export default function AccidentDetailPage() {
         </div>
       </div>
 
-      <SectionCard title="Accident Info">
+      <SectionCard title="Accident Info" icon="bi-exclamation-triangle">
+        <Field label="FMCSA Crash Report #">{accident.crash_number || '—'}</Field>
         <Field label="Date">{dateStr}</Field>
-        <Field label="Crash Number">{accident.crash_number}</Field>
-        <Field label="Address">{accident.address}</Field>
-        <Field label="Truck ID">{accident.truck ?? '—'}</Field>
-        <Field label="Trailer ID">{accident.trailer ?? '—'}</Field>
-        <Field label="Driver ID">{accident.driver ?? '—'}</Field>
+        <Field label="Driver">{accident.driver_name || '—'}</Field>
+        <Field label="Truck">{accident.truck_number || '—'}</Field>
+        <Field label="Trailer">{accident.trailer_number || '—'}</Field>
+        <Field label="Address">{accident.address || '—'}</Field>
+        <Field label="City">{accident.city_name || '—'}</Field>
+        <Field label="State">{accident.state_name || '—'}</Field>
       </SectionCard>
 
-      <SectionCard title="FMCSA Info">
+      <SectionCard title="FMCSA Info" icon="bi-clipboard-data">
         <Field label="Tow-aways"><YesNo value={accident.tow_aways} /></Field>
         <Field label="Deaths">{accident.death_count ?? 0}</Field>
         <Field label="Fatal Injuries">{accident.fatal_injuries ?? 0}</Field>
       </SectionCard>
+
+      <AccidentFiles accident={accident} onRefresh={refresh} />
 
       <PictureGallery accident={accident} onRefresh={refresh} />
     </div>

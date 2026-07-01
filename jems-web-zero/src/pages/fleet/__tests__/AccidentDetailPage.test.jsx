@@ -12,7 +12,14 @@ vi.mock('../../../services/accidents', () => ({
     destroy: vi.fn(),
     addPicture: vi.fn(),
     deletePicture: vi.fn(),
+    uploadFile: vi.fn(),
+    clearFile: vi.fn(),
   },
+  ACCIDENT_FILE_SLOTS: ['police_report', 'post_accident'],
+}))
+
+vi.mock('../../../utils/media', () => ({
+  mediaUrl: (v) => v ? `http://localhost:8000${v}` : null,
 }))
 
 import { useAccident } from '../../../hooks/useAccident'
@@ -23,12 +30,21 @@ const accident = {
   date: '2024-06-15T10:30:00Z',
   crash_number: 'CR-007',
   address: 'I-90 Mile 55',
+  driver: 5,
+  driver_name: 'Maria Lopez',
   truck: 10,
-  trailer: null,
-  driver: null,
+  truck_number: '4279',
+  trailer: 20,
+  trailer_number: 'TR-500',
+  city: 3,
+  city_name: 'Charlotte (NC)',
+  state: 12,
+  state_name: 'North Carolina',
   tow_aways: true,
   death_count: 0,
   fatal_injuries: 2,
+  police_report_file: null,
+  post_accident_file: null,
   pictures: [],
 }
 
@@ -50,15 +66,40 @@ const renderDetail = (id = '7') =>
   )
 
 describe('AccidentDetailPage', () => {
-  it('shows accident heading with id', async () => {
+  it('shows accident heading with id', () => {
     renderDetail()
     expect(screen.getByText(/Accident #7/)).toBeInTheDocument()
   })
 
-  it('shows crash number and address in Accident Info', () => {
+  it('shows FMCSA crash number and address', () => {
     renderDetail()
     expect(screen.getByText('CR-007')).toBeInTheDocument()
     expect(screen.getByText('I-90 Mile 55')).toBeInTheDocument()
+  })
+
+  it('shows resolved driver name', () => {
+    renderDetail()
+    expect(screen.getByText('Maria Lopez')).toBeInTheDocument()
+  })
+
+  it('shows resolved truck number', () => {
+    renderDetail()
+    expect(screen.getByText('4279')).toBeInTheDocument()
+  })
+
+  it('shows resolved trailer number', () => {
+    renderDetail()
+    expect(screen.getByText('TR-500')).toBeInTheDocument()
+  })
+
+  it('shows city name', () => {
+    renderDetail()
+    expect(screen.getByText('Charlotte (NC)')).toBeInTheDocument()
+  })
+
+  it('shows state name', () => {
+    renderDetail()
+    expect(screen.getByText('North Carolina')).toBeInTheDocument()
   })
 
   it('shows tow-aways Yes in FMCSA Info', () => {
@@ -71,9 +112,44 @@ describe('AccidentDetailPage', () => {
     expect(screen.getByText('2')).toBeInTheDocument()
   })
 
-  it('shows Pictures section', () => {
+  it('shows Documents section with Police Report and Post Accident rows', () => {
     renderDetail()
-    expect(screen.getByText('Pictures')).toBeInTheDocument()
+    expect(screen.getByText('Police Report')).toBeInTheDocument()
+    expect(screen.getByText('Post Accident')).toBeInTheDocument()
+  })
+
+  it('shows "Not uploaded" for missing files', () => {
+    renderDetail()
+    const notUploaded = screen.getAllByText('Not uploaded')
+    expect(notUploaded.length).toBe(2)
+  })
+
+  it('shows download link when file present', () => {
+    useAccident.mockReturnValue({
+      accident: { ...accident, police_report_file: '/media/accidents/report.pdf' },
+      loading: false, error: null, refresh: mockRefresh,
+    })
+    renderDetail()
+    const downloadLink = screen.getByRole('link', { name: /Download/i })
+    expect(downloadLink.getAttribute('href')).toContain('/media/accidents/report.pdf')
+  })
+
+  it('calls clearFile on remove file confirm', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    accidentsService.clearFile.mockResolvedValue({})
+    useAccident.mockReturnValue({
+      accident: { ...accident, post_accident_file: '/media/accidents/post.pdf' },
+      loading: false, error: null, refresh: mockRefresh,
+    })
+    renderDetail()
+    const removeBtn = screen.getByTitle('Remove')
+    fireEvent.click(removeBtn)
+    await waitFor(() => expect(accidentsService.clearFile).toHaveBeenCalledWith(7, 'post_accident'))
+    expect(mockRefresh).toHaveBeenCalled()
+  })
+
+  it('shows Pictures section with "No pictures uploaded"', () => {
+    renderDetail()
     expect(screen.getByText('No pictures uploaded.')).toBeInTheDocument()
   })
 
@@ -88,17 +164,13 @@ describe('AccidentDetailPage', () => {
     expect(editLink.getAttribute('href')).toBe('/fleet/accidents/7/edit')
   })
 
-  it('shows pictures when accident has them', () => {
+  it('shows picture gallery when pictures are present', () => {
     useAccident.mockReturnValue({
       accident: {
         ...accident,
-        pictures: [
-          { id: 100, file: '/media/acc/pic1.jpg', description: 'Front view' },
-        ],
+        pictures: [{ id: 100, file: '/media/acc/pic1.jpg', description: 'Front view' }],
       },
-      loading: false,
-      error: null,
-      refresh: mockRefresh,
+      loading: false, error: null, refresh: mockRefresh,
     })
     renderDetail()
     expect(screen.getByAltText('Front view')).toBeInTheDocument()
@@ -113,9 +185,7 @@ describe('AccidentDetailPage', () => {
         ...accident,
         pictures: [{ id: 100, file: '/media/acc/pic1.jpg', description: 'Front view' }],
       },
-      loading: false,
-      error: null,
-      refresh: mockRefresh,
+      loading: false, error: null, refresh: mockRefresh,
     })
     renderDetail()
     fireEvent.click(screen.getByTitle('Remove'))
@@ -126,7 +196,6 @@ describe('AccidentDetailPage', () => {
   it('shows loading spinner when loading', () => {
     useAccident.mockReturnValue({ accident: null, loading: true, error: null, refresh: mockRefresh })
     const { container } = renderDetail()
-    // Bootstrap spinner rendered as <div className="spinner-border"> — no role="status" in our JSX
     expect(container.querySelector('.spinner-border')).toBeInTheDocument()
   })
 
