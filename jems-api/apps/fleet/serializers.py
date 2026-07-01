@@ -21,6 +21,7 @@ from .models import (
     TruckMaintenance,
     TruckMilesReset,
     TruckOwner,
+    TruckStoredFile,
     TruckType,
 )
 
@@ -168,6 +169,11 @@ class TruckMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
 
 class TruckListSerializer(serializers.ModelSerializer):
     truck_type_name = serializers.CharField(source="truck_type.name", read_only=True)
+    carrier_name = serializers.CharField(source="carrier.name", read_only=True)
+    owner_name = serializers.SerializerMethodField()
+
+    def get_owner_name(self, obj: Truck) -> str | None:
+        return obj.owner.full_name if obj.owner_id and obj.owner else None
 
     class Meta:
         model = Truck
@@ -177,19 +183,36 @@ class TruckListSerializer(serializers.ModelSerializer):
             "vin",
             "year",
             "status",
+            "photo",
             "truck_type",
             "truck_type_name",
             "plate",
+            "transponder",
+            "avi_file",
             "avi_expiration",
+            "registration_file",
             "registration_expiration",
             "odometer_current",
             "carrier",
+            "carrier_name",
+            "owner",
+            "owner_name",
         ]
+
+
+class TruckStoredFileSerializer(serializers.ModelSerializer):
+    type_label = serializers.CharField(source="get_type_display", read_only=True)
+
+    class Meta:
+        model = TruckStoredFile
+        fields = ["id", "truck", "type", "type_label", "file", "date", "created_at"]
+        read_only_fields = ["id", "truck", "type_label", "file", "date", "created_at"]
 
 
 class TruckSerializer(serializers.ModelSerializer):
     truck_type_name = serializers.CharField(source="truck_type.name", read_only=True)
     maintenance_records = TruckMaintenanceSerializer(many=True, read_only=True)
+    stored_files = TruckStoredFileSerializer(many=True, read_only=True)
 
     class Meta:
         model = Truck
@@ -209,6 +232,7 @@ class TruckSerializer(serializers.ModelSerializer):
             "transmission_type",
             "tire_size",
             "gross_weight",
+            "odometer_start",
             "odometer_current",
             "avi_file",
             "avi_expiration",
@@ -236,7 +260,10 @@ class TruckSerializer(serializers.ModelSerializer):
             "mac_address",
             "serial_number",
             "eld_company",
+            "eld_id",
+            "factoring_account_id",
             "maintenance_records",
+            "stored_files",
             "created_at",
             "updated_at",
         ]
@@ -268,6 +295,7 @@ class TruckCreateUpdateSerializer(serializers.ModelSerializer):
             "transmission_type",
             "tire_size",
             "gross_weight",
+            "odometer_start",
             "odometer_current",
             "avi_expiration",
             "registration_expiration",
@@ -290,7 +318,32 @@ class TruckCreateUpdateSerializer(serializers.ModelSerializer):
             "mac_address",
             "serial_number",
             "eld_company",
+            "eld_id",
+            "factoring_account_id",
         ]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        instance = self.instance
+
+        is_leased = attrs.get("is_leased", getattr(instance, "is_leased", False))
+        owner = attrs.get("owner", getattr(instance, "owner", None))
+        if is_leased and owner is None:
+            raise serializers.ValidationError({"owner": "Owner cannot be blank."})
+
+        if instance is None:
+            vin = attrs.get("vin", "")
+            if vin and Truck.objects.filter(vin=vin).exists():
+                raise serializers.ValidationError(
+                    {"vin": "Truck with this Vin number already exists."}
+                )
+            transponder = attrs.get("transponder", "")
+            if transponder and Truck.objects.filter(transponder=transponder).exists():
+                raise serializers.ValidationError(
+                    {"transponder": "Truck with this Transponder already exists."}
+                )
+
+        return attrs
 
 
 class TrailerMaintenanceSerializer(serializers.ModelSerializer):

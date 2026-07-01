@@ -16,6 +16,7 @@ from .models import (
     TruckMaintenance,
     TruckMilesReset,
     TruckOwner,
+    TruckStoredFile,
 )
 
 
@@ -23,6 +24,13 @@ def create_truck(*, created_by: User | None = None, **fields) -> Truck:
     truck = Truck(created_by=created_by, **fields)
     truck.full_clean()
     truck.save()
+    add_truck_maintenance(
+        truck=truck,
+        date=datetime.date.today(),
+        miles_alert=1,
+        maintenance_miles=15000,
+        detail="Automatic Maintenance",
+    )
     return truck
 
 
@@ -54,6 +62,15 @@ TRUCK_FILE_SLOTS = {
     "photo": "photo",
 }
 
+TRUCK_STORABLE_FILE_SLOTS = {
+    "avi": ("avi_file", "avi_expiration", TruckStoredFile.Type.AVI),
+    "registration": (
+        "registration_file",
+        "registration_expiration",
+        TruckStoredFile.Type.REGISTRATION,
+    ),
+}
+
 
 def set_truck_file(*, truck: Truck, slot: str, file) -> Truck:
     field = TRUCK_FILE_SLOTS[slot]
@@ -73,6 +90,37 @@ def clear_truck_file(*, truck: Truck, slot: str) -> Truck:
         setattr(truck, field, None)
         truck.save(update_fields=[field, "updated_at"])
     return truck
+
+
+def store_truck_file(*, truck: Truck, slot: str) -> TruckStoredFile:
+    field, date_field, stored_type = TRUCK_STORABLE_FILE_SLOTS[slot]
+    existing = getattr(truck, field)
+    expiration = getattr(truck, date_field)
+    if not existing:
+        from rest_framework.exceptions import ValidationError
+
+        raise ValidationError({"file": "Does not exist"})
+    if expiration is None:
+        from rest_framework.exceptions import ValidationError
+
+        raise ValidationError({"date": "Date cannot be blank."})
+
+    stored = TruckStoredFile.objects.create(
+        truck=truck,
+        type=stored_type,
+        file=existing.name,
+        date=expiration,
+    )
+    setattr(truck, field, None)
+    truck.save(update_fields=[field, "updated_at"])
+    return stored
+
+
+def delete_truck_stored_file(*, stored_file: TruckStoredFile) -> None:
+    file = stored_file.file
+    stored_file.delete()
+    if file:
+        file.delete(save=False)
 
 
 def add_truck_maintenance(*, truck: Truck, **fields) -> TruckMaintenance:

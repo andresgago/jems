@@ -24,6 +24,7 @@ from .models import (
     TruckMaintenance,
     TruckMilesReset,
     TruckOwner,
+    TruckStoredFile,
     TruckType,
     TrailerType,
     TireSize,
@@ -57,6 +58,7 @@ from .serializers import (
     TruckOwnerSerializer,
     TruckPhotoUploadSerializer,
     TruckSerializer,
+    TruckStoredFileSerializer,
     TruckTypeSerializer,
 )
 
@@ -150,11 +152,9 @@ class TruckViewSet(ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request: Request) -> Response:
-        trucks = (
-            Truck.objects.filter(status=Truck.Status.ACTIVE)
-            .select_related("truck_type", "carrier", "owner")
-            .order_by("number")
-        )
+        trucks = Truck.objects.select_related(
+            "truck_type", "carrier", "owner"
+        ).order_by("-status", "number")
         return Response(TruckListSerializer(trucks, many=True).data)
 
     def retrieve(self, request: Request, pk: int) -> Response:
@@ -172,7 +172,7 @@ class TruckViewSet(ViewSet):
                 "carrier",
                 "loss_payee",
             )
-            .prefetch_related("maintenance_records")
+            .prefetch_related("maintenance_records", "stored_files")
             .get(pk=pk)
         )
         return Response(TruckSerializer(truck).data)
@@ -260,6 +260,25 @@ class TruckViewSet(ViewSet):
         truck = Truck.objects.get(pk=pk)
         truck = services.clear_truck_file(truck=truck, slot=slot)
         return Response(TruckSerializer(truck).data)
+
+    @action(detail=True, methods=["post"], url_path=r"files/(?P<slot>[^/.]+)/store")
+    def store_file(self, request: Request, pk: int, slot: str) -> Response:
+        if slot not in services.TRUCK_STORABLE_FILE_SLOTS:
+            return Response(
+                {"error": f"Unknown file slot '{slot}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        truck = Truck.objects.get(pk=pk)
+        stored = services.store_truck_file(truck=truck, slot=slot)
+        return Response(
+            TruckStoredFileSerializer(stored).data, status=status.HTTP_201_CREATED
+        )
+
+    @action(detail=True, methods=["delete"], url_path=r"stored-files/(?P<file_id>\d+)")
+    def delete_stored_file(self, request: Request, pk: int, file_id: int) -> Response:
+        stored_file = TruckStoredFile.objects.get(pk=file_id, truck_id=pk)
+        services.delete_truck_stored_file(stored_file=stored_file)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TrailerViewSet(ViewSet):

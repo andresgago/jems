@@ -9,6 +9,7 @@ from apps.fleet.models import (
     Truck,
     TruckMaintenance,
     TruckOwner,
+    TruckStoredFile,
 )
 from apps.fleet.services import (
     add_trailer_maintenance,
@@ -19,6 +20,7 @@ from apps.fleet.services import (
     create_trailer,
     create_truck,
     create_truck_owner,
+    delete_truck_stored_file,
     delete_trailer_maintenance,
     delete_truck_maintenance,
     get_trailer_miles_since_maintenance,
@@ -31,6 +33,7 @@ from apps.fleet.services import (
     is_last_truck_maintenance,
     set_trailer_file,
     set_truck_file,
+    store_truck_file,
     toggle_trailer_status,
     toggle_truck_owner_status,
     toggle_truck_status,
@@ -47,6 +50,7 @@ from apps.fleet.tests.factories import (
     TruckFactory,
     TruckMaintenanceFactory,
     TruckMilesResetFactory,
+    TruckStoredFileFactory,
     TruckTypeFactory,
 )
 from apps.fleet.tests.test_views import make_pdf_file
@@ -60,6 +64,13 @@ class TestCreateTruck:
         assert truck.pk is not None
         assert truck.number == "T-0001"
         assert truck.status == Truck.Status.ACTIVE
+
+    def test_creates_automatic_maintenance(self):
+        truck = create_truck(number="T-AUTO")
+        record = TruckMaintenance.objects.get(truck=truck)
+        assert record.detail == "Automatic Maintenance"
+        assert record.miles_alert == 1
+        assert record.maintenance_miles == 15000
 
     def test_duplicate_number_raises(self):
         TruckFactory(number="T-DUP")
@@ -265,6 +276,31 @@ class TestTruckFileServices:
         truck = TruckFactory()
         updated = clear_truck_file(truck=truck, slot="agreement")
         assert not updated.agreement_file
+
+    def test_store_truck_file_moves_current_avi_to_history(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        truck = TruckFactory(
+            avi_file=make_pdf_file("avi.pdf"),
+            avi_expiration=datetime.date(2026, 1, 1),
+        )
+        stored = store_truck_file(truck=truck, slot="avi")
+        truck.refresh_from_db()
+        assert not truck.avi_file
+        assert stored.file.name.endswith("avi.pdf")
+        assert stored.date == datetime.date(2026, 1, 1)
+
+    def test_store_truck_file_requires_existing_file(self):
+        truck = TruckFactory(avi_expiration=datetime.date(2026, 1, 1))
+        with pytest.raises(ValidationError):
+            store_truck_file(truck=truck, slot="avi")
+
+    def test_delete_stored_file_removes_row(self, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        stored = TruckStoredFileFactory()
+        pk = stored.pk
+        delete_truck_stored_file(stored_file=stored)
+
+        assert not TruckStoredFile.objects.filter(pk=pk).exists()
 
 
 # ── TruckMaintenance services ─────────────────────────────────────────────────

@@ -604,7 +604,7 @@ assert_status "truck owner toggle on" "200" "$(code "$resp")" "$(body "$resp")"
 
 # ── Truck ─────────────────────────────────────────────────────────────────────
 step "Fleet: truck create"
-resp="$(post "/api/v1/fleet/trucks/" "{\"number\":\"T-001\",\"vin\":\"1HTMKAAR3BH000001\",\"year\":2022,\"truck_type\":${TRUCK_TYPE_ID},\"status\":1}")"
+resp="$(post "/api/v1/fleet/trucks/" "{\"number\":\"T-001\",\"vin\":\"1HTMKAAR3BH000001\",\"year\":2022,\"truck_type\":${TRUCK_TYPE_ID},\"status\":1,\"avi_expiration\":\"2030-01-01\",\"registration_expiration\":\"2030-01-01\",\"odometer_start\":100,\"eld_id\":\"Vehicle:API\",\"factoring_account_id\":\"FA-API\"}")"
 assert_status "truck create" "201" "$(code "$resp")" "$(body "$resp")"
 TRUCK_ID="$(body "$resp" | json_get_num id)"
 
@@ -612,6 +612,10 @@ step "Fleet: truck retrieve"
 resp="$(get "/api/v1/fleet/trucks/${TRUCK_ID}/")"
 assert_status "truck retrieve" "200" "$(code "$resp")" "$(body "$resp")"
 assert_contains "truck number" "$(body "$resp")" "T-001"
+assert_contains "truck has odometer_start" "$(body "$resp")" '"odometer_start"'
+assert_contains "truck has eld_id" "$(body "$resp")" '"eld_id"'
+assert_contains "truck has factoring_account_id" "$(body "$resp")" '"factoring_account_id"'
+assert_contains "truck has stored_files" "$(body "$resp")" '"stored_files"'
 
 step "Fleet: truck list"
 resp="$(get "/api/v1/fleet/trucks/")"
@@ -642,6 +646,7 @@ TRUCK_MAINT_ID="$(body "$resp" | json_get_num id)"
 step "Fleet: truck maintenance list"
 resp="$(get "/api/v1/fleet/trucks/${TRUCK_ID}/maintenance/")"
 assert_status "truck maintenance list" "200" "$(code "$resp")" "$(body "$resp")"
+assert_contains "truck auto maintenance created" "$(body "$resp")" "Automatic Maintenance"
 
 step "Fleet: truck file upload (document slots)"
 _TMP_DOC="$(mktemp /tmp/jems_truck_doc.XXXXXX.pdf)"
@@ -655,6 +660,16 @@ for slot in avi registration agreement leased; do
   assert_contains "truck has ${slot}_file" "$(body "$resp")" "/media/trucks/"
 done
 rm -f "${_TMP_DOC}"
+
+step "Fleet: truck store AVI file"
+resp="$(post "/api/v1/fleet/trucks/${TRUCK_ID}/files/avi/store/" '{}')"
+assert_status "truck avi store" "201" "$(code "$resp")" "$(body "$resp")"
+TRUCK_STORED_FILE_ID="$(body "$resp" | json_get_num id)"
+assert_contains "truck stored file type" "$(body "$resp")" '"type":1'
+
+step "Fleet: truck delete stored file"
+resp="$(delete "/api/v1/fleet/trucks/${TRUCK_ID}/stored-files/${TRUCK_STORED_FILE_ID}/")"
+assert_status "truck stored file delete" "204" "$(code "$resp")" "$(body "$resp")"
 
 step "Fleet: truck photo upload"
 _TMP_PHOTO="$(mktemp /tmp/jems_truck_photo.XXXXXX).png"
@@ -686,7 +701,7 @@ resp="$(curl -s -w "\n%{http_code}" \
 assert_status "truck unknown slot" "400" "$(code "$resp")"
 
 step "Fleet: truck file clear"
-resp="$(delete "/api/v1/fleet/trucks/${TRUCK_ID}/files/avi/")"
+resp="$(delete "/api/v1/fleet/trucks/${TRUCK_ID}/files/registration/")"
 assert_status "truck file clear" "200" "$(code "$resp")" "$(body "$resp")"
 
 step "Fleet: miles reset create"

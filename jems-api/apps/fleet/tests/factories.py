@@ -14,6 +14,7 @@ from apps.fleet.models import (
     TruckMaintenance,
     TruckMilesReset,
     TruckOwner,
+    TruckStoredFile,
     TruckType,
 )
 from apps.users.tests.factories import UserFactory
@@ -123,6 +124,18 @@ class TruckMilesResetFactory(DjangoModelFactory):
     date = factory.Sequence(
         lambda n: datetime.datetime(2024, 1, 1, tzinfo=UTC)
         + datetime.timedelta(days=n * 30)
+    )
+
+
+class TruckStoredFileFactory(DjangoModelFactory):
+    class Meta:
+        model = TruckStoredFile
+
+    truck = factory.SubFactory(TruckFactory)
+    type = TruckStoredFile.Type.AVI
+    file = factory.django.FileField(filename="stored.pdf", data=b"%PDF-1.4 fake")
+    date = factory.Sequence(
+        lambda n: datetime.date(2024, 1, 1) + datetime.timedelta(days=n)
     )
 
 

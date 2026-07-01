@@ -184,6 +184,7 @@ class Truck(models.Model):
         related_name="trucks",
     )
     gross_weight = models.FloatField(default=0)
+    odometer_start = models.FloatField(default=0)
     odometer_current = models.FloatField(default=0)
 
     # Documents
@@ -251,6 +252,8 @@ class Truck(models.Model):
     mac_address = models.CharField(max_length=50, blank=True, default="")
     serial_number = models.CharField(max_length=100, blank=True, default="")
     eld_company = models.CharField(max_length=100, blank=True, default="")
+    eld_id = models.CharField(max_length=100, blank=True, default="")
+    factoring_account_id = models.CharField(max_length=100, blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -267,6 +270,27 @@ class Truck(models.Model):
 
     def __str__(self) -> str:
         return self.number
+
+
+class TruckStoredFile(models.Model):
+    class Type(models.IntegerChoices):
+        AVI = 1, "AVI"
+        REGISTRATION = 2, "Registration"
+
+    truck = models.ForeignKey(
+        Truck, on_delete=models.CASCADE, related_name="stored_files"
+    )
+    type = models.IntegerField(choices=Type.choices)
+    file = models.FileField(upload_to="trucks/stored/")
+    date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "truck_stored_files"
+        ordering = ["-date", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.truck} {self.get_type_display()} {self.date}"
 
 
 class TruckMaintenance(models.Model):

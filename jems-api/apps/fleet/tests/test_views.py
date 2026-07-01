@@ -8,7 +8,7 @@ from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.fleet.models import Trailer, Truck
+from apps.fleet.models import Trailer, Truck, TruckMaintenance
 from apps.fleet.tests.factories import (
     TrailerFactory,
     TrailerMaintenanceFactory,
@@ -16,6 +16,7 @@ from apps.fleet.tests.factories import (
     TruckFactory,
     TruckMaintenanceFactory,
     TruckOwnerFactory,
+    TruckStoredFileFactory,
     TruckTypeFactory,
 )
 from apps.users.tests.factories import UserFactory
@@ -46,14 +47,21 @@ def auth_client(api_client):
 
 @pytest.mark.django_db
 class TestTruckList:
-    def test_lists_active_trucks(self, auth_client):
+    def test_lists_active_and_inactive_trucks(self, auth_client):
         client, _ = auth_client
-        TruckFactory.create_batch(3, status=Truck.Status.ACTIVE)
-        TruckFactory(status=Truck.Status.INACTIVE)
+        owner = TruckOwnerFactory(first_name="Express", last_name="Fleet")
+        active = TruckFactory(status=Truck.Status.ACTIVE)
+        inactive = TruckFactory(status=Truck.Status.INACTIVE, owner=owner)
         response = client.get(reverse("truck-list"))
         assert response.status_code == status.HTTP_200_OK
-        for truck in response.data:
-            assert truck["status"] == Truck.Status.ACTIVE
+        ids = [truck["id"] for truck in response.data]
+        assert active.pk in ids
+        assert inactive.pk in ids
+        assert response.data[0]["status"] == Truck.Status.ACTIVE
+        inactive_row = next(
+            truck for truck in response.data if truck["id"] == inactive.pk
+        )
+        assert inactive_row["owner_name"] == "Express Fleet"
 
     def test_unauthenticated_blocked(self, api_client):
         response = api_client.get(reverse("truck-list"))
@@ -69,12 +77,23 @@ class TestTruckCreate:
         response = client.post(reverse("truck-list"), payload)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["number"] == "TRK-9999"
+        assert TruckMaintenance.objects.filter(
+            truck_id=response.data["id"], detail="Automatic Maintenance"
+        ).exists()
 
     def test_duplicate_number_rejected(self, auth_client):
         client, _ = auth_client
         TruckFactory(number="DUPLICATE")
         response = client.post(reverse("truck-list"), {"number": "DUPLICATE"})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_leased_truck_requires_owner(self, auth_client):
+        client, _ = auth_client
+        response = client.post(
+            reverse("truck-list"), {"number": "LEASED-1", "is_leased": True}
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["owner"][0] == "Owner cannot be blank."
 
 
 @pytest.mark.django_db
@@ -85,6 +104,16 @@ class TestTruckRetrieve:
         response = client.get(reverse("truck-detail", kwargs={"pk": truck.pk}))
         assert response.status_code == status.HTTP_200_OK
         assert "maintenance_records" in response.data
+
+    def test_retrieve_includes_stored_files_and_report_fields(self, auth_client):
+        client, _ = auth_client
+        stored = TruckStoredFileFactory()
+        response = client.get(reverse("truck-detail", kwargs={"pk": stored.truck.pk}))
+        assert response.status_code == status.HTTP_200_OK
+        assert "stored_files" in response.data
+        assert "odometer_start" in response.data
+        assert "eld_id" in response.data
+        assert "factoring_account_id" in response.data
 
 
 @pytest.mark.django_db
@@ -189,6 +218,41 @@ class TestTruckFiles:
         truck = TruckFactory()
         response = client.delete(self._url(truck, "agreement"))
         assert response.status_code == status.HTTP_200_OK
+
+    def test_store_file_moves_avi_to_history(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        truck = TruckFactory(
+            avi_file=make_pdf_file("avi.pdf"),
+            avi_expiration=datetime.date(2026, 1, 1),
+        )
+        response = client.post(
+            reverse("truck-store-file", kwargs={"pk": truck.pk, "slot": "avi"})
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["type"] == 1
+        truck.refresh_from_db()
+        assert not truck.avi_file
+
+    def test_store_unknown_slot_is_rejected(self, auth_client):
+        client, _ = auth_client
+        truck = TruckFactory()
+        response = client.post(
+            reverse("truck-store-file", kwargs={"pk": truck.pk, "slot": "leased"})
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_delete_stored_file(self, auth_client, settings, tmp_path):
+        settings.MEDIA_ROOT = str(tmp_path)
+        client, _ = auth_client
+        stored = TruckStoredFileFactory()
+        response = client.delete(
+            reverse(
+                "truck-stored-file",
+                kwargs={"pk": stored.truck.pk, "file_id": stored.pk},
+            )
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
 @pytest.mark.django_db

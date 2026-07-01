@@ -28,6 +28,8 @@ truck_detail = TruckViewSet.as_view(
 truck_toggle_status = TruckViewSet.as_view({"post": "toggle_status"})
 truck_maintenance = TruckViewSet.as_view({"get": "maintenance", "post": "maintenance"})
 truck_file = TruckViewSet.as_view({"post": "set_file", "delete": "clear_file"})
+truck_store_file = TruckViewSet.as_view({"post": "store_file"})
+truck_stored_file = TruckViewSet.as_view({"delete": "delete_stored_file"})
 
 # Trailers
 trailer_list = TrailerViewSet.as_view({"get": "list", "post": "create"})
@@ -116,6 +118,16 @@ urlpatterns = [
     ),
     path("trucks/<int:pk>/maintenance/", truck_maintenance, name="truck-maintenance"),
     path("trucks/<int:pk>/files/<str:slot>/", truck_file, name="truck-file"),
+    path(
+        "trucks/<int:pk>/files/<str:slot>/store/",
+        truck_store_file,
+        name="truck-store-file",
+    ),
+    path(
+        "trucks/<int:pk>/stored-files/<int:file_id>/",
+        truck_stored_file,
+        name="truck-stored-file",
+    ),
     path("trailers/", trailer_list, name="trailer-list"),
     path("trailers/options/", trailer_options, name="trailer-options"),
     path("trailers/<int:pk>/", trailer_detail, name="trailer-detail"),
